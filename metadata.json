@@ -1,0 +1,6 @@
+{
+  "name": "Blackbook — Digital SAT Adaptive Simulator & Psychometric Analytics Engine",
+  "description": "Offline-first Digital SAT adaptive testing simulator replicating College Board Bluebook with 1-2 MST routing, Desmos graphing calculator, KaTeX math rendering, and 2PL IRT scoring analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
