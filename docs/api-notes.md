@@ -152,7 +152,7 @@ Skill x difficulty, distinct ids, shown as `all / not in live arrays`:
 ## Markup (survey of 144 detail items, one per skill x difficulty x digital/legacy)
 
 - **MathML** (digital only): every `<math>` has an `alttext` attribute (spoken form) and most have `xmlns`. No `display="block"` was seen; all math is inline. Elements include `mrow`, `mi`, `mn`, `mo`, `mfrac`, `msup`, `mtext`, `mspace` and the deprecated `<mfenced>` (192 occurrences). Chrome's native MathML Core does not render `mfenced`, so native MathML is not a safe fallback by itself.
-- **SVG** (digital only, 15 of 144 items, mostly math graphs): inline `<svg>` with `width`, `height`, `viewBox`, `role`, `aria-label` on every one. Some use `<use>` with `xlink:href="#id"`, so ids inside SVGs must be made unique per question when more than one SVG is on screen.
+- **SVG** (digital only, 15 of 144 items, mostly math graphs): inline `<svg>` with `width`, `height`, `viewBox`, `role`, `aria-label` on every one. Graphs are matplotlib output: colors live in `style="fill:...;stroke:..."` on SVG elements and text glyphs are `<path>`s reused through `<use>`, so a sanitizer that strips SVG `style` renders a blank box. Some use `<use>` with `xlink:href="#id"`, so ids inside SVGs must be made unique per question when more than one SVG is on screen.
 - **Legacy images**: 480 `<img class="math-img" role="math">` tags, all `data:image/png;base64`, each with a spoken-math `alt`. No external image URLs anywhere.
 - `<figure>` (19 items), `<table>` (12 items).
 - No `<script>`, `<iframe>`, `on*` handlers or `javascript:` URLs in the sample. The imported file is still untrusted input and gets sanitized.

@@ -38,6 +38,25 @@ describe('createSanitizer', () => {
     expect(sanitize('<p style="position: fixed">x</p>')).toBe('<p>x</p>');
   });
 
+  it('keeps drawing styles on svg elements, the way plotting libraries emit them', () => {
+    const out = sanitize(
+      '<svg viewBox="0 0 10 10"><path style="fill: #ffffff; stroke: #000000; stroke-width: 0.8; clip-path: url(#c1)" d="M0 0"/></svg>',
+    );
+    expect(out).toContain('style="fill: #ffffff; stroke: #000000; stroke-width: 0.8; clip-path: url(#c1)"');
+  });
+
+  it('drops unsafe or layout-changing styles on svg elements', () => {
+    const out = sanitize(
+      '<svg viewBox="0 0 10 10"><path style="fill: url(https://example.com/x); position: fixed; stroke: red; behavior: url(#x)" d="M0 0"/></svg>',
+    );
+    expect(out).toContain('style="stroke: red"');
+    expect(out).not.toMatch(/example\.com|position|behavior/);
+  });
+
+  it('still keeps only text-align on html elements', () => {
+    expect(sanitize('<p style="fill: red; text-align: right">x</p>')).toBe('<p style="text-align: right">x</p>');
+  });
+
   it('keeps formatting the questions rely on', () => {
     const html =
       '<p class="stem_paragraph">A <u>marked</u> <em>word</em> <span class="italic">i</span> ' +
