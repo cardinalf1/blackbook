@@ -69,7 +69,7 @@ export function MySkills({ rows, unattributed, onBack }: MySkillsProps) {
                         {row.lowData && (
                           <div className="mt-1 inline-flex items-center gap-1.5 rounded border border-amber-800/60 bg-amber-950/60 px-2 py-0.5 text-xs text-amber-300">
                             <span>
-                              {`Only ${row.attempts} attempts, too few to trust (need at least ${MIN_TRUSTED_ATTEMPTS})`}
+                              {`Only ${row.attempts} ${row.attempts === 1 ? 'attempt' : 'attempts'}, too few to trust (need at least ${MIN_TRUSTED_ATTEMPTS})`}
                             </span>
                           </div>
                         )}
