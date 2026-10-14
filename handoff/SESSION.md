@@ -2,33 +2,29 @@
 
 Read this first in a new session, after AGENTS.md and CLAUDE.md. Updated by Claude at the end of each session or milestone. No College Board content in this file.
 
-Last updated: 2026-10-14, Phase 1 build session (Claude Opus 5.5).
+Last updated: 2026-10-14, Phase 2 build session (Claude).
 
 ## Where things are
 
-- Phase: **1 (Ingest)**. AGENTS.md still says 1. Do not change it until the user confirms Phase 1 is done.
-- Branch: `claude/phase1-ingest` (from `origin/main`). Not pushed, not merged to `main`.
-- Local repo setup done this session: added `origin` (github.com/cardinalf1/blackbook), checked out `main` tracking `origin/main`, set repo-local git identity to match existing commits.
-- Uncommitted on purpose (user's files): `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `assets/`. This file (`handoff/SESSION.md`) is uncommitted too.
-- `bun run typecheck` and `bun run test` pass (116 tests) at `b3cecc4`.
+- Phase: **2 (Drill mode)**, AGENTS.md says 2. Branch `claude/phase1-ingest` (Phase 1 and 2 work together), not pushed, no PR. User will make the GitHub repo private first and say when to push. Do not push before that.
+- `assets/` was deleted by the user. Working tree clean at `082c869`.
+- `bun run typecheck`, `bun run test` (184 tests) pass. `bun run sync` exits 0 (known malformed item `029650-DC` is a warning). `git ls-files` has no data/fixtures/.env.
+- AGENTS.md has a Parallelism section (I wrote it: no cap on Gemini workers, disjoint files, interfaces first, Claude merges one branch at a time).
 
-## Commits on claude/phase1-ingest (oldest first)
+## Phase 2 built
 
-1. `b02b546` ignore `data/` and `fixtures/`
-2. `f919c71` delete out-of-phase scaffold (exam UI, analytics, stores, scoring, fake seed bank, old scraper). Recoverable from `a1aafda`.
-3. `8092411` strict TS, Vitest, scripts: `typecheck`, `test`, `sync`
-4. `cd75d03` `Question` type (`src/types/sat.ts`) + validator (`src/services/bank/validate.ts`)
-5. `6c17c02` `docs/api-notes.md` (verified API findings)
-6. `cf067fa` jsdom replaces happy-dom (happy-dom broke DOMPurify; user approved)
-7. `ba3f05f` normalizer (`src/services/normalize/`: mathml.ts, html.ts, sanitize.ts)
-8. `af6fb0a` sync core (`src/services/sync/`: raw.ts, toQuestion.ts, http.ts)
-9. `540aa5f` `scripts/sync.ts`
-10. `03b2f5c` storage (`src/services/storage/`), import (`src/services/import/`), `src/services/answers.ts`
-11. `2a4c8e8` UI: `ImportPanel`, `QuestionView`, `QuestionHtml`, `src/utils/renderMath.ts`, App shell
-12. `04a4599` merge `gemini/fixtures` (reviewed)
-13. `77bad72` pipeline test over Gemini's raw fixtures
-14. `029033c` fix: keep SVG drawing styles (graphs were blank boxes)
-15. `b3cecc4` merge `gemini/dev-page` (reviewed): `QuestionBrowser` dev page with filters, `docs/later.md`, `README.md`. typecheck, 116 tests and build pass.
+- Contracts: `src/types/drill.ts`. Services: `src/services/drill/` (facets, select, stats, session, facetCache). Store: `src/stores/drillStore.ts` (Zustand factory, resume). Storage: `AttemptStore` in `src/services/storage/attempt*.ts`, separate IndexedDB `blackbook-user`.
+- SPR grader: exact rationals in `src/services/answers.ts`, rules in `docs/spr-grading.md`, real-bank check `bun run scripts/check-spr.ts`.
+- Import: chunked on the main thread (DOMPurify needs a DOM, so no Web Worker), progress, Cancel via AbortSignal, store rollback on abort.
+- Gemini branches merged (all reviewed): `drill-setup-ui`, `results-ui`, `myskills-ui`, `styling-pass`. Only change in review: MySkills reuses `formatDuration`, singular "attempt".
+- Browser-verified on the full bank: import with progress (max main-thread block 148 ms), cancel while checking and while saving (bank intact), 10 R&W drill with mid-session reload and resume, 10 Math drill, results, review, My skills matches brute-force recount, all 20 stored grades match bank keys.
+
+## Not verified / open
+
+- The `styling-pass` look was not viewed in the real app (screenshots timed out); Gemini rendered synthetic props only.
+- One unexplained import stall at "Checking 3620/3695" after a tool-timed-out script; not reproduced in three later runs.
+- SPR judgement calls (trailing zeros accepted, unlisted roundings rejected, etc.) follow user's defaults, unverified against the real test.
+- Out-of-phase ideas are in `docs/later.md`.
 
 ## Decisions the user made (do not re-ask)
 
