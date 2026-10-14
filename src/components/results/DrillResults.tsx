@@ -10,23 +10,23 @@ export function DrillResults({ summary, onReview, onDone, onMySkills }: DrillRes
   return (
     <div className="space-y-6 text-[#FAFAFA]">
       <section className="space-y-4 rounded-lg border border-[#27272A] bg-[#121215] p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#27272A] pb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#27272A] pb-3 sm:pb-4">
           <div>
-            <h2 className="font-mono text-base font-medium text-zinc-100">Session Results</h2>
+            <h2 className="font-mono text-sm font-medium text-zinc-100">Session Results</h2>
             <p className="mt-0.5 text-xs text-zinc-400">Drill complete</p>
           </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onMySkills}
-              className="rounded-md border border-[#27272A] px-3.5 py-1.5 text-xs font-medium text-zinc-200 transition-colors hover:border-zinc-500 hover:text-zinc-100"
+              className="rounded-md border border-[#27272A] px-3.5 py-1.5 text-xs font-medium text-zinc-200 transition-colors hover:border-zinc-500 hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
             >
               My skills
             </button>
             <button
               type="button"
               onClick={onDone}
-              className="rounded-md bg-zinc-100 px-3.5 py-1.5 text-xs font-medium text-zinc-900 transition-colors hover:bg-zinc-200"
+              className="rounded-md bg-zinc-100 px-4 py-1.5 font-mono text-xs font-semibold text-zinc-950 transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
             >
               Done
             </button>
@@ -134,7 +134,7 @@ export function DrillResults({ summary, onReview, onDone, onMySkills }: DrillRes
             {missedItems.map((item) => (
               <li
                 key={item.questionId}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[#27272A] bg-[#0A0A0C] p-3 text-xs"
+                className="flex flex-col gap-2.5 rounded-md border border-[#27272A] bg-[#0A0A0C] p-3 text-xs sm:flex-row sm:items-center sm:justify-between sm:gap-3"
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-zinc-200">#{item.displayId}</span>
@@ -146,7 +146,7 @@ export function DrillResults({ summary, onReview, onDone, onMySkills }: DrillRes
                 <button
                   type="button"
                   onClick={() => onReview(item.questionId)}
-                  className="rounded-md border border-[#27272A] px-3 py-1 text-xs text-zinc-200 transition-colors hover:border-zinc-500 hover:text-zinc-100"
+                  className="self-start rounded-md border border-[#27272A] px-3 py-1 text-xs text-zinc-200 transition-colors hover:border-zinc-500 hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 sm:self-auto"
                 >
                   Review explanation
                 </button>
@@ -156,18 +156,18 @@ export function DrillResults({ summary, onReview, onDone, onMySkills }: DrillRes
         )}
       </section>
 
-      <div className="flex items-center justify-end gap-3 pt-2">
+      <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
         <button
           type="button"
           onClick={onMySkills}
-          className="rounded-md border border-[#27272A] px-4 py-2 text-xs font-medium text-zinc-200 transition-colors hover:border-zinc-500 hover:text-zinc-100"
+          className="rounded-md border border-[#27272A] px-3.5 py-1.5 text-xs font-medium text-zinc-200 transition-colors hover:border-zinc-500 hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
         >
           My skills
         </button>
         <button
           type="button"
           onClick={onDone}
-          className="rounded-md bg-zinc-100 px-4 py-2 text-xs font-medium text-zinc-900 transition-colors hover:bg-zinc-200"
+          className="rounded-md bg-zinc-100 px-4 py-1.5 font-mono text-xs font-semibold text-zinc-950 transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
         >
           Done
         </button>

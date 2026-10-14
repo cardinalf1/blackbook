@@ -130,7 +130,7 @@ export function DrillSetup({ taxonomy, facets, onStart, onCancel }: DrillSetupPr
               id={sectionSelectId}
               value={section}
               onChange={(e) => handleSectionChange(e.target.value as Section)}
-              className="block w-full rounded-md border border-[#27272A] bg-[#0A0A0C] px-2.5 py-1.5 text-xs text-[#FAFAFA] focus:border-zinc-500 focus:outline-none"
+              className="block w-full rounded-md border border-[#27272A] bg-[#0A0A0C] px-2.5 py-1.5 text-xs text-[#FAFAFA] transition-colors focus:border-zinc-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
             >
               {SECTION_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -146,7 +146,7 @@ export function DrillSetup({ taxonomy, facets, onStart, onCancel }: DrillSetupPr
               id={domainSelectId}
               value={domainCode}
               onChange={(e) => handleDomainChange(e.target.value)}
-              className="block w-full rounded-md border border-[#27272A] bg-[#0A0A0C] px-2.5 py-1.5 text-xs text-[#FAFAFA] focus:border-zinc-500 focus:outline-none"
+              className="block w-full rounded-md border border-[#27272A] bg-[#0A0A0C] px-2.5 py-1.5 text-xs text-[#FAFAFA] transition-colors focus:border-zinc-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
             >
               <option value="all">All domains ({availableDomains.length})</option>
               {availableDomains.map((d) => (
@@ -171,7 +171,7 @@ export function DrillSetup({ taxonomy, facets, onStart, onCancel }: DrillSetupPr
               <button
                 type="button"
                 onClick={() => setSkillCodes([])}
-                className="text-xs text-zinc-400 hover:text-zinc-200"
+                className="rounded px-1.5 py-0.5 text-xs text-zinc-400 transition-colors hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
               >
                 Clear selection ({skillCodes.length})
               </button>
@@ -202,7 +202,7 @@ export function DrillSetup({ taxonomy, facets, onStart, onCancel }: DrillSetupPr
                       type="checkbox"
                       checked={isChecked}
                       onChange={() => handleSkillToggle(s.skillCode)}
-                      className="mt-0.5 rounded border-[#27272A] bg-[#121215] text-zinc-100 accent-zinc-500 focus:ring-0"
+                      className="mt-0.5 h-3.5 w-3.5 rounded border border-[#27272A] bg-[#121215] text-zinc-100 accent-zinc-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
                     />
                     <span className="flex-1 leading-snug">
                       <span className="mr-1.5 font-mono text-[10px] text-zinc-400">
@@ -238,7 +238,7 @@ export function DrillSetup({ taxonomy, facets, onStart, onCancel }: DrillSetupPr
                   type="button"
                   aria-pressed={isSelected}
                   onClick={() => handleDifficultyToggle(diff)}
-                  className={`rounded-md border px-3 py-1.5 font-mono text-xs transition-colors ${
+                  className={`rounded-md border px-2 py-1.5 sm:px-3 font-mono text-xs text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
                     isSelected
                       ? 'border-zinc-400 bg-zinc-800 text-[#FAFAFA]'
                       : 'border-[#27272A] bg-[#0A0A0C] text-zinc-400 hover:border-zinc-500 hover:text-zinc-200'
@@ -262,7 +262,7 @@ export function DrillSetup({ taxonomy, facets, onStart, onCancel }: DrillSetupPr
               value={countInput}
               onChange={(e) => setCountInput(e.target.value)}
               onBlur={() => setCountInput(String(count))}
-              className="block w-full rounded-md border border-[#27272A] bg-[#0A0A0C] px-2.5 py-1.5 font-mono text-xs text-[#FAFAFA] focus:border-zinc-500 focus:outline-none"
+              className="block w-full rounded-md border border-[#27272A] bg-[#0A0A0C] px-2.5 py-1.5 font-mono text-xs text-[#FAFAFA] transition-colors focus:border-zinc-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
             />
           </label>
 
@@ -275,7 +275,7 @@ export function DrillSetup({ taxonomy, facets, onStart, onCancel }: DrillSetupPr
               type="checkbox"
               checked={liveOnly}
               onChange={(e) => setLiveOnly(e.target.checked)}
-              className="rounded border-[#27272A] bg-[#0A0A0C] text-zinc-100 accent-zinc-500 focus:ring-0"
+              className="h-4 w-4 rounded border border-[#27272A] bg-[#0A0A0C] text-zinc-100 accent-zinc-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
             />
             <span>Live set only</span>
           </label>
@@ -303,7 +303,7 @@ export function DrillSetup({ taxonomy, facets, onStart, onCancel }: DrillSetupPr
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-md border border-[#27272A] px-4 py-2 text-xs text-zinc-300 transition-colors hover:border-zinc-500 hover:text-zinc-100"
+            className="rounded-md border border-[#27272A] px-3.5 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-500 hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
           >
             Cancel
           </button>
@@ -311,7 +311,7 @@ export function DrillSetup({ taxonomy, facets, onStart, onCancel }: DrillSetupPr
             type="button"
             disabled={matchCount === 0}
             onClick={handleStart}
-            className="rounded-md bg-zinc-100 px-4 py-2 font-mono text-xs font-semibold text-zinc-950 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md bg-zinc-100 px-4 py-1.5 font-mono text-xs font-semibold text-zinc-950 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
           >
             Start Drill
           </button>

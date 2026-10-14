@@ -38,13 +38,13 @@ export function DrillFlow({ onExit, startAt }: { onExit: () => void; startAt: 's
     if (drillStore.getState().session) setStep({ kind: 'play' });
   };
 
-  if (loadError) return <p className="text-sm text-red-400" role="alert">Could not read the question bank: {loadError}</p>;
-  if (!facets) return <p className="text-sm text-zinc-400">Loading...</p>;
+  if (loadError) return <div className="rounded-lg border border-red-900/50 bg-[#121215] p-5 text-sm text-red-400" role="alert">Could not read the question bank: {loadError}</div>;
+  if (!facets) return <div className="rounded-lg border border-[#27272A] bg-[#121215] p-6 text-center text-sm text-zinc-400">Loading...</div>;
 
   const banner = error && (
-    <p className="text-sm text-red-400" role="alert">
+    <div className="rounded-lg border border-red-900/50 bg-[#121215] p-4 text-sm text-red-400" role="alert">
       {error}
-    </p>
+    </div>
   );
 
   if (step.kind === 'setup') {
@@ -60,7 +60,7 @@ export function DrillFlow({ onExit, startAt }: { onExit: () => void; startAt: 's
     return <SkillsScreen facets={facets} onBack={session?.status === 'finished' ? () => setStep({ kind: 'play' }) : exit} />;
   }
 
-  if (!session) return <p className="text-sm text-zinc-400">No drill is running.</p>;
+  if (!session) return <div className="rounded-lg border border-[#27272A] bg-[#121215] p-6 text-center text-sm text-zinc-400">No drill is running.</div>;
 
   if (step.kind === 'review') {
     return <ReviewScreen questionId={step.questionId} onBack={() => setStep({ kind: 'play' })} />;
@@ -82,7 +82,7 @@ function PlayScreen({ onExit }: { onExit: () => void }) {
 
   const id = session.queueIds[session.index];
   const question = id === undefined ? undefined : questions[id];
-  if (!id || !question) return <p className="text-sm text-red-400">This question is missing from the bank.</p>;
+  if (!id || !question) return <div className="rounded-lg border border-red-900/50 bg-[#121215] p-4 text-sm text-red-400" role="alert">This question is missing from the bank.</div>;
 
   const answered = session.answered[id];
   const last = session.index === session.queueIds.length - 1;
@@ -90,18 +90,22 @@ function PlayScreen({ onExit }: { onExit: () => void }) {
 
   return (
     <section className="space-y-4">
-      <nav className="flex items-center gap-3 text-sm">
-        <button type="button" onClick={onExit} className="text-zinc-400 hover:text-zinc-100">
+      <nav className="flex flex-wrap items-center justify-between gap-3 text-sm">
+        <button
+          type="button"
+          onClick={onExit}
+          className="rounded px-1.5 py-0.5 text-zinc-400 transition-colors hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+        >
           Save and exit
         </button>
-        <span className="ml-auto font-mono text-xs text-zinc-400">
+        <span className="font-mono text-xs text-zinc-400">
           {session.index + 1} / {session.queueIds.length}
         </span>
       </nav>
       {error && (
-        <p className="text-sm text-red-400" role="alert">
+        <div className="rounded-lg border border-red-900/50 bg-[#121215] p-4 text-sm text-red-400" role="alert">
           {error}
-        </p>
+        </div>
       )}
       <QuestionView
         key={id}
@@ -143,7 +147,11 @@ function ReviewScreen({ questionId, onBack }: { questionId: string; onBack: () =
   return (
     <section className="space-y-4">
       <nav className="flex items-center gap-3 text-sm">
-        <button type="button" onClick={onBack} className="text-zinc-400 hover:text-zinc-100">
+        <button
+          type="button"
+          onClick={onBack}
+          className="rounded px-1.5 py-0.5 text-zinc-400 transition-colors hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+        >
           Back to results
         </button>
       </nav>
@@ -174,7 +182,7 @@ function SkillsScreen({ facets, onBack }: { facets: QuestionFacet[]; onBack: () 
       (e: unknown) => setError(e instanceof Error ? e.message : String(e)),
     );
   }, [facets]);
-  if (error) return <p className="text-sm text-red-400" role="alert">Could not read your attempts: {error}</p>;
-  if (!data) return <p className="text-sm text-zinc-400">Loading...</p>;
+  if (error) return <div className="rounded-lg border border-red-900/50 bg-[#121215] p-5 text-sm text-red-400" role="alert">Could not read your attempts: {error}</div>;
+  if (!data) return <div className="rounded-lg border border-[#27272A] bg-[#121215] p-6 text-center text-sm text-zinc-400">Loading...</div>;
   return <MySkills rows={data.rows} unattributed={data.unattributed} onBack={onBack} />;
 }
