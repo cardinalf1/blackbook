@@ -1,5 +1,6 @@
 // bun run dev: starts the local server and the Vite UI together, then opens the app.
 // The access token is new on every start and is only ever in the first-load URL.
+// Set BLACKBOOK_NO_OPEN=1 to skip opening a browser window.
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -33,6 +34,7 @@ run('ui', 'bunx', ['vite']);
 
 setTimeout(() => {
   console.log(`\n[dev] Open Blackbook: ${url}\n[dev] (the link works once per start; after that the page keeps its session)\n`);
+  if (process.env.BLACKBOOK_NO_OPEN === '1') return;
   const opener = process.platform === 'win32' ? ['cmd', ['/c', 'start', '""', `"${url}"`]] : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
   try {
     spawn(opener[0] as string, opener[1] as string[], { stdio: 'ignore', shell: process.platform === 'win32', detached: true }).unref();
