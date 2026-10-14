@@ -32,3 +32,6 @@ One line per idea, grouped by phase (AGENTS.md rule 8).
 - Light theme toggle alongside the default dark theme.
 - Electron desktop wrapper for offline local installation.
 - Telemetry diagnostics and export of attempt logs.
+
+## Polish (any phase)
+- Importing the full bank (about 35 MB) freezes the tab for roughly 15 seconds while it sanitizes on the main thread, so the progress text cannot paint. Move import into a Web Worker or yield between chunks.
