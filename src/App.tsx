@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ImportPanel } from './components/ImportPanel';
+import { QuestionBrowser } from './components/QuestionBrowser';
 import { QuestionView } from './components/QuestionView';
 import { questionStore, type BankMeta } from './services/storage';
 import type { Question } from './types/sat';
 
 const PRACTICE_SIZE = 20;
 
-type View = { kind: 'loading' } | { kind: 'home'; meta: BankMeta | null; count: number } | { kind: 'practice'; questions: Question[]; index: number };
+type View =
+  | { kind: 'loading' }
+  | { kind: 'home'; meta: BankMeta | null; count: number }
+  | { kind: 'practice'; questions: Question[]; index: number }
+  | { kind: 'browse' };
 
 function sample<T>(items: readonly T[], n: number): T[] {
   const a = [...items];
@@ -62,13 +67,22 @@ export default function App() {
                   Synced {new Date(view.meta.fetchedAt).toLocaleString()}, imported {new Date(view.meta.importedAt).toLocaleString()}
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => void startPractice()}
-                className="ml-auto rounded-md bg-zinc-100 px-4 py-1.5 text-sm font-medium text-zinc-900"
-              >
-                Step through {Math.min(PRACTICE_SIZE, view.count)} random questions
-              </button>
+              <div className="ml-auto flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setView({ kind: 'browse' })}
+                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
+                >
+                  Browse questions
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void startPractice()}
+                  className="rounded-md bg-zinc-100 px-4 py-1.5 text-sm font-medium text-zinc-900"
+                >
+                  Step through {Math.min(PRACTICE_SIZE, view.count)} random questions
+                </button>
+              </div>
             </section>
           )}
           <ImportPanel onImported={() => void loadHome()} />
@@ -104,6 +118,17 @@ export default function App() {
           {view.questions[view.index] && (
             <QuestionView key={view.questions[view.index]?.id} question={view.questions[view.index] as Question} />
           )}
+        </section>
+      )}
+
+      {view.kind === 'browse' && (
+        <section className="space-y-4">
+          <nav className="flex items-center gap-3 text-sm">
+            <button type="button" onClick={() => void loadHome()} className="text-zinc-400 hover:text-zinc-100">
+              Back
+            </button>
+          </nav>
+          <QuestionBrowser />
         </section>
       )}
     </main>
