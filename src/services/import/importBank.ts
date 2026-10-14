@@ -4,7 +4,7 @@
 import type { Answer, Question } from '../../types/sat';
 import { validateBank } from '../bank/validate';
 import type { Sanitizer } from '../normalize/sanitize';
-import type { QuestionStore } from '../storage/types';
+import type { WritableQuestionStore } from '../storage/types';
 
 export type ImportStage = 'reading' | 'validating' | 'saving';
 export type ImportProgress = (stage: ImportStage, done: number, total: number) => void;
@@ -50,7 +50,7 @@ function sanitizeQuestion(q: Question, sanitize: Sanitizer): Question {
 export async function importBankText(
   text: string,
   deps: {
-    store: QuestionStore;
+    store: WritableQuestionStore;
     sanitize: Sanitizer;
     onProgress?: ImportProgress;
     now?: () => Date;
@@ -103,6 +103,7 @@ export async function importBankText(
       },
       (done, total) => deps.onProgress?.('saving', done, total),
       deps.signal,
+      skipped,
     );
   } catch (e) {
     if (deps.signal?.aborted) return CANCELLED;

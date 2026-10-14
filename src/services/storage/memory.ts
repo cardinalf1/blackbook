@@ -1,8 +1,8 @@
 import type { Question } from '../../types/sat';
-import { matchesQuery, type BankMeta, type ProgressFn, type QuestionQuery, type QuestionStore } from './types';
+import { matchesQuery, type BankMeta, type ProgressFn, type QuestionQuery, type WritableQuestionStore } from './types';
 
 /** In-memory QuestionStore for tests. Same contract as the IndexedDB store. */
-export class MemoryQuestionStore implements QuestionStore {
+export class MemoryQuestionStore implements WritableQuestionStore {
   private questions = new Map<string, Question>();
   private meta: BankMeta | null = null;
 

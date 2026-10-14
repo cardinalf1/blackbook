@@ -1,0 +1,357 @@
+// Server tests run under Vitest on Node, where SQLite comes from node:sqlite (same engine as
+// bun:sqlite in the app). Synthetic data only.
+
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as fx from '../src/services/__fixtures__/synthetic';
+import { createSanitizer } from '../src/services/normalize/sanitize';
+import { LIMITS } from '../src/services/sync/limits';
+import type { PipelineDeps } from '../src/services/sync/pipeline';
+import type { DownloadProgress } from '../src/types/download';
+import type { Attempt, SessionRecord } from '../src/types/drill';
+import type { Question } from '../src/types/sat';
+import { createHandler } from './app';
+import { DiskBankStore } from './bankStore';
+import { DownloadManager, mergeOutsideScope } from './download';
+import { FsDetailCache } from './files';
+import { createIdleMonitor } from './idle';
+import { SESSION_COOKIE, TOKEN_HEADER } from './security';
+import { transaction } from './sql';
+import type { SqlDb } from './sql';
+import { openSqlite as openRaw } from './sqlNode';
+import { MIGRATIONS, migrate, schemaVersion, SqliteUserStore } from './userDb';
+
+let dir: string;
+let opened: SqlDb[] = [];
+/** Opens a database and remembers it, so Windows can delete the temp folder afterwards. */
+function openSqlite(path: string): SqlDb {
+  const db = openRaw(path);
+  const close = db.close.bind(db);
+  let closed = false;
+  db.close = () => {
+    if (!closed) close();
+    closed = true;
+  };
+  opened.push(db);
+  return db;
+}
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), 'bb-server-'));
+});
+afterEach(async () => {
+  for (const db of opened) db.close();
+  opened = [];
+  await rm(dir, { recursive: true, force: true });
+});
+
+const q = (id: string, over: Partial<Question> = {}): Question => ({ ...(fx.syntheticQuestions[0] as Question), id, ...over });
+
+function attempt(id: string, over: Partial<Attempt> = {}): Attempt {
+  return { id, questionId: 'q1', response: 'A', correct: true, timeMs: 1200, sessionId: 's1', at: 1, ...over };
+}
+
+describe('SQLite user store', () => {
+  it('migrates a new database to the current schema with WAL and foreign keys on', async () => {
+    const db = openSqlite(join(dir, 'user.db'));
+    new SqliteUserStore(db);
+    expect(schemaVersion(db)).toBe(MIGRATIONS.length);
+    expect(db.get<{ journal_mode: string }>('PRAGMA journal_mode')?.journal_mode).toBe('wal');
+    expect(db.get<{ foreign_keys: number }>('PRAGMA foreign_keys')?.foreign_keys).toBe(1);
+    db.close();
+  });
+
+  it('applies new migrations in order and rolls a failing one back', async () => {
+    const db = openSqlite(join(dir, 'm.db'));
+    migrate(db, MIGRATIONS);
+    const v2 = [...MIGRATIONS, 'ALTER TABLE flags ADD COLUMN note TEXT;'];
+    migrate(db, v2);
+    expect(schemaVersion(db)).toBe(2);
+    expect(() => migrate(db, [...v2, 'CREATE TABLE ok (a); CREATE TABLE broken ('])).toThrow();
+    expect(schemaVersion(db)).toBe(2);
+    expect(db.get('SELECT name FROM sqlite_master WHERE name = ?', 'ok')).toBeUndefined();
+    db.close();
+  });
+
+  it('refuses a database written by a newer version', async () => {
+    const db = openSqlite(join(dir, 'n.db'));
+    db.exec('PRAGMA user_version = 99');
+    expect(() => migrate(db)).toThrow(/newer version/);
+    db.close();
+  });
+
+  it('round-trips attempts, flags and sessions and survives reopening', async () => {
+    const path = join(dir, 'u.db');
+    const store = new SqliteUserStore(openSqlite(path));
+    await store.addAttempt(attempt('s1:q1'));
+    await store.addAttempt(attempt('s1:q1', { correct: false })); // same id: updated, not duplicated
+    await store.addAttempt(attempt('s2:q2', { sessionId: 's2', questionId: 'q2' }));
+    await store.setFlag('q9', true);
+    const session = { id: 's1', status: 'active', startedAt: 5, index: 0, queueIds: ['q1'], answered: {}, struck: {}, currentElapsedMs: 0 } as unknown as SessionRecord;
+    await store.saveSession(session);
+
+    const again = new SqliteUserStore(openSqlite(path));
+    expect(await again.listAttempts()).toHaveLength(2);
+    expect((await again.attemptsForSession('s1'))[0]?.correct).toBe(false);
+    expect((await again.listFlags()).map((f) => f.questionId)).toEqual(['q9']);
+    expect((await again.getActiveSession())?.id).toBe('s1');
+    await again.deleteSession('s1');
+    expect(await again.listAttempts()).toHaveLength(2); // deleting a session never deletes answers
+  });
+
+  it('rolls back a transaction that fails part way', async () => {
+    const db = openSqlite(join(dir, 't.db'));
+    new SqliteUserStore(db);
+    expect(() =>
+      transaction(db, () => {
+        db.run("INSERT INTO flags (question_id, at) VALUES ('a', 1)");
+        db.run("INSERT INTO flags (question_id, at) VALUES ('a', 2)"); // primary key clash
+      }),
+    ).toThrow();
+    expect(db.all('SELECT * FROM flags')).toEqual([]);
+    db.close();
+  });
+});
+
+describe('disk bank store', () => {
+  const meta = { fetchedAt: 'f', importedAt: 'i', count: 2, skippedCount: 1 };
+
+  it('starts empty, swaps atomically and persists', async () => {
+    const path = join(dir, 'bank.json');
+    const store = new DiskBankStore(path);
+    expect(await store.getMeta()).toBeNull();
+    expect(await store.count()).toBe(0);
+    await store.replaceAll([q('a'), q('b', { section: 'math' })], meta, undefined, undefined, [{ id: 'x', reason: 'legacy-spr-no-key' }]);
+    expect((await readdir(dir)).filter((f) => f.endsWith('.tmp'))).toEqual([]);
+
+    const reopened = new DiskBankStore(path);
+    expect(await reopened.count()).toBe(2);
+    expect(await reopened.getMeta()).toEqual(meta);
+    expect((await reopened.query({ section: 'math' })).map((x) => x.id)).toEqual(['b']);
+    expect((await reopened.getSkipped())[0]?.id).toBe('x');
+  });
+
+  it('keeps the old bank when the swap is aborted', async () => {
+    const store = new DiskBankStore(join(dir, 'bank.json'));
+    await store.replaceAll([q('old')], meta);
+    const ctl = new AbortController();
+    ctl.abort();
+    await expect(store.replaceAll([q('new')], meta, undefined, ctl.signal)).rejects.toThrow();
+    expect((await new DiskBankStore(join(dir, 'bank.json')).query({})).map((x) => x.id)).toEqual(['old']);
+  });
+});
+
+// ---- A fake source and an app wired to temp folders ----
+
+const template = (fx.rawListRows as Record<string, unknown>[])[0] as Record<string, unknown>;
+function fakeSource(opts: { detail?: (n: number) => Response | 'hang'; count?: number; liveEvery?: number } = {}) {
+  const count = opts.count ?? 4;
+  const rows = (section: 'rw' | 'math') =>
+    Array.from({ length: count }, (_, i) => {
+      const n = (section === 'rw' ? 0 : 500) + i + 1;
+      const hex = n.toString(16).padStart(8, '0');
+      return { ...template, questionId: hex, external_id: `e${hex.slice(1)}-0000-0000-0000-000000000000`, updateDate: 1700000000000 };
+    });
+  const every = opts.liveEvery ?? 2;
+  const liveIds = (rs: Record<string, unknown>[]) => rs.filter((_, i) => i % every === 0).map((r) => r.external_id as string);
+  let n = 0;
+  const fetch: typeof globalThis.fetch = (input, init) => {
+    const url = String(input);
+    const ok = (v: unknown) => Promise.resolve(new Response(JSON.stringify(v), { status: 200 }));
+    if (url.endsWith('/lookup')) return ok({ readingLiveItems: liveIds(rows('rw')), mathLiveItems: liveIds(rows('math')) });
+    const body = JSON.parse(String(init?.body)) as { test?: number };
+    if (url.endsWith('/get-questions')) return ok(rows(body.test === 1 ? 'rw' : 'math'));
+    const r = opts.detail ? opts.detail(++n) : new Response(JSON.stringify(fx.rawDigitalMcq));
+    if (r === 'hang') {
+      return new Promise((_, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))));
+    }
+    return Promise.resolve(r);
+  };
+  return { fetch };
+}
+
+const TOKEN = 'test-token-0123456789';
+const HOST = '127.0.0.1:47821';
+const UI = 'http://localhost:3000';
+
+async function setup(source = fakeSource()) {
+  const bank = new DiskBankStore(join(dir, 'bank.json'));
+  const users = new SqliteUserStore(openSqlite(join(dir, 'user.db')));
+  const downloads = new DownloadManager({
+    bank,
+    cache: new FsDetailCache(join(dir, 'raw')),
+    window: window as unknown as PipelineDeps['window'],
+    fetch: source.fetch,
+    dataFolder: dir,
+    pipeline: { limits: { ...LIMITS, minGapMs: 0, baseDelayMs: 1, maxDelayMs: 5 }, sleep: async () => undefined, yieldNow: async () => undefined },
+  });
+  const handler = createHandler({
+    security: { token: TOKEN, allowedHosts: new Set([HOST]), allowedOrigins: new Set([UI]) },
+    bank,
+    users,
+    downloads,
+    sanitize: createSanitizer(window),
+    dataFolder: dir,
+    streamHeartbeatMs: 20,
+  });
+  const call = (path: string, init: RequestInit & { headers?: Record<string, string> } = {}) =>
+    handler(new Request(`http://${HOST}${path}`, { ...init, headers: { host: HOST, origin: UI, [TOKEN_HEADER]: TOKEN, ...init.headers } }));
+  return { bank, users, downloads, handler, call };
+}
+
+describe('local API security', () => {
+  it('rejects a wrong Host, a foreign Origin and a missing or wrong token', async () => {
+    const { handler } = await setup();
+    const req = (headers: Record<string, string>) => handler(new Request(`http://${HOST}/api/health`, { headers }));
+    expect((await req({ host: HOST, origin: UI, [TOKEN_HEADER]: TOKEN })).status).toBe(200);
+    expect((await req({ host: 'evil.example:47821', [TOKEN_HEADER]: TOKEN })).status).toBe(403);
+    expect((await req({ host: HOST, origin: 'https://evil.example', [TOKEN_HEADER]: TOKEN })).status).toBe(403);
+    expect((await req({ host: HOST, origin: UI })).status).toBe(401);
+    expect((await req({ host: HOST, origin: UI, [TOKEN_HEADER]: 'nope' })).status).toBe(401);
+  });
+
+  it('exchanges the first-load token for an HttpOnly, SameSite=Strict session cookie', async () => {
+    const { handler } = await setup();
+    const bad = await handler(new Request(`http://${HOST}/api/session`, { method: 'POST', headers: { host: HOST, origin: UI }, body: JSON.stringify({ token: 'x' }) }));
+    expect(bad.status).toBe(401);
+    const res = await handler(new Request(`http://${HOST}/api/session`, { method: 'POST', headers: { host: HOST, origin: UI }, body: JSON.stringify({ token: TOKEN }) }));
+    expect(res.status).toBe(204);
+    const cookie = res.headers.get('set-cookie') ?? '';
+    expect(cookie).toContain('HttpOnly');
+    expect(cookie).toContain('SameSite=Strict');
+    const withCookie = await handler(new Request(`http://${HOST}/api/health`, { headers: { host: HOST, origin: UI, cookie: `${SESSION_COOKIE}=${TOKEN}` } }));
+    expect(withCookie.status).toBe(200);
+    const foreign = await handler(new Request(`http://${HOST}/api/session`, { method: 'POST', headers: { host: HOST, origin: 'https://evil.example' }, body: JSON.stringify({ token: TOKEN }) }));
+    expect(foreign.status).toBe(403);
+  });
+});
+
+describe('local API', () => {
+  it('stores attempts, flags and sessions, and rejects malformed input', async () => {
+    const { call } = await setup();
+    expect((await call('/api/attempts', { method: 'POST', body: JSON.stringify(attempt('s1:q1')) })).status).toBe(200);
+    expect((await call('/api/attempts', { method: 'POST', body: JSON.stringify({ id: 'x' }) })).status).toBe(400);
+    expect((await call('/api/attempts', { method: 'POST', body: '{not json' })).status).toBe(400);
+    expect(await (await call('/api/attempts?sessionId=s1')).json()).toHaveLength(1);
+    await call('/api/flags/q7', { method: 'PUT', body: JSON.stringify({ flagged: true }) });
+    expect(await (await call('/api/flags')).json()).toMatchObject([{ questionId: 'q7' }]);
+    const s = { id: 's1', status: 'active', startedAt: 1, index: 0, queueIds: ['q1'], answered: {}, struck: {}, currentElapsedMs: 0, config: {} };
+    expect((await call('/api/sessions/s1', { method: 'PUT', body: JSON.stringify(s) })).status).toBe(200);
+    expect((await call('/api/sessions/s2', { method: 'PUT', body: JSON.stringify(s) })).status).toBe(400);
+    expect(await (await call('/api/sessions/active')).json()).toMatchObject({ id: 's1' });
+  });
+
+  it('imports a bank file atomically and serves it', async () => {
+    const { call } = await setup();
+    expect(await (await call('/api/bank/meta')).json()).toBeNull();
+    const file = JSON.stringify({ schemaVersion: 1, fetchedAt: '2026-10-14T00:00:00.000Z', questions: [q('a'), q('b')], skipped: [] });
+    const r = (await (await call('/api/bank/import', { method: 'POST', body: file })).json()) as { ok: boolean; imported: number };
+    expect(r).toMatchObject({ ok: true, imported: 2 });
+    expect(await (await call('/api/bank/count')).json()).toEqual({ count: 2 });
+    expect(await (await call('/api/bank/questions/a')).json()).toMatchObject({ id: 'a' });
+    expect((await call('/api/bank/questions/zzz')).status).toBe(404);
+    const bad = (await (await call('/api/bank/import', { method: 'POST', body: '{"nope":1}' })).json()) as { ok: boolean };
+    expect(bad.ok).toBe(false);
+    expect(await (await call('/api/bank/count')).json()).toEqual({ count: 2 });
+  });
+
+  it('validates download scope', async () => {
+    const { call } = await setup();
+    expect((await call('/api/download/start', { method: 'POST', body: JSON.stringify({ sections: [], liveOnly: true }) })).status).toBe(400);
+    expect((await call('/api/download/start', { method: 'POST', body: JSON.stringify({ sections: ['art'], liveOnly: true }) })).status).toBe(400);
+  });
+
+  it('streams progress snapshots without waiting for the run to end', async () => {
+    const { call, downloads } = await setup(fakeSource({ detail: () => 'hang' }));
+    const res = await call('/api/download/events');
+    expect(res.headers.get('content-type')).toBe('text/event-stream');
+    const reader = (res.body as ReadableStream<Uint8Array>).getReader();
+    const first = new TextDecoder().decode((await reader.read()).value);
+    expect(first).toMatch(/^data: \{"status":"idle"/);
+    downloads.start({ sections: ['rw'], liveOnly: false });
+    const next = new TextDecoder().decode((await reader.read()).value);
+    expect(next).toContain('"status":"running"');
+    downloads.cancel();
+    await downloads.settled();
+    await reader.cancel();
+  });
+});
+
+describe('download manager', () => {
+  it('downloads, swaps the bank in, and reports skips in plain language', async () => {
+    const { downloads, bank } = await setup(fakeSource());
+    expect(downloads.start({ sections: ['rw', 'math'], liveOnly: false })).toBe(true);
+    expect(downloads.start({ sections: ['rw'], liveOnly: false })).toBe(false); // one at a time
+    await downloads.settled();
+    const p = downloads.snapshot();
+    expect(p.status).toBe('succeeded');
+    expect(p.summary).toMatchObject({ questions: 8, bySection: { rw: 4, math: 4 }, live: 4, skipped: [] });
+    expect(await bank.count()).toBe(8);
+    expect(p.cache.files).toBe(8);
+    await downloads.freeCache();
+    expect(downloads.snapshot().cache).toEqual({ bytes: 0, files: 0 });
+  });
+
+  it('downloads only the live set when asked', async () => {
+    const { downloads, bank } = await setup(fakeSource());
+    downloads.start({ sections: ['rw', 'math'], liveOnly: true });
+    await downloads.settled();
+    expect(await bank.count()).toBe(4);
+    expect((await bank.query({})).every((x) => x.active)).toBe(true);
+  });
+
+  it('cancel and failure both leave the previous bank untouched', async () => {
+    const meta = { fetchedAt: 'f', importedAt: 'i', count: 1, skippedCount: 0 };
+    const hang = await setup(fakeSource({ detail: () => 'hang' }));
+    await hang.bank.replaceAll([q('keep')], meta);
+    hang.downloads.start({ sections: ['rw'], liveOnly: false });
+    await new Promise((r) => setTimeout(r, 20));
+    hang.downloads.cancel();
+    await hang.downloads.settled();
+    expect(hang.downloads.snapshot().status).toBe('cancelled');
+    expect((await hang.bank.query({})).map((x) => x.id)).toEqual(['keep']);
+
+    const blocked = await setup(fakeSource({ count: 10, detail: () => new Response('{}', { status: 403 }) }));
+    await blocked.bank.replaceAll([q('keep')], meta);
+    blocked.downloads.start({ sections: ['rw'], liveOnly: false });
+    await blocked.downloads.settled();
+    const p: DownloadProgress = blocked.downloads.snapshot();
+    expect(p.status).toBe('failed');
+    expect(p.error?.reason).toBe('blocked');
+    expect(p.error?.message).toMatch(/will not retry/);
+    expect((await blocked.bank.query({})).map((x) => x.id)).toEqual(['keep']);
+  });
+
+  it('a narrower refresh keeps questions outside its scope', () => {
+    const existing = [q('rw-old', { section: 'rw' }), q('m-live', { section: 'math', active: true }), q('m-other', { section: 'math', active: false })];
+    const downloaded = [q('m-live', { section: 'math', active: true, stemHtml: '<p>new</p>' })];
+    const merged = mergeOutsideScope(existing, downloaded, { sections: ['math'], liveOnly: true });
+    expect(merged.map((x) => x.id).sort()).toEqual(['m-live', 'm-other', 'rw-old']);
+    expect(merged.find((x) => x.id === 'm-live')?.stemHtml).toBe('<p>new</p>');
+  });
+});
+
+describe('idle shutdown', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('fires after the timeout without requests, never while busy, and only once', () => {
+    vi.useFakeTimers();
+    let busy = false;
+    const onIdle = vi.fn();
+    const idle = createIdleMonitor({ timeoutMs: 60_000, checkEveryMs: 1000, isBusy: () => busy, onIdle, now: () => Date.now() });
+    vi.advanceTimersByTime(30_000);
+    idle.touch();
+    vi.advanceTimersByTime(45_000);
+    expect(onIdle).not.toHaveBeenCalled();
+    busy = true;
+    vi.advanceTimersByTime(120_000);
+    expect(onIdle).not.toHaveBeenCalled();
+    busy = false;
+    vi.advanceTimersByTime(61_000);
+    expect(onIdle).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(600_000);
+    expect(onIdle).toHaveBeenCalledTimes(1);
+    idle.stop();
+  });
+});
