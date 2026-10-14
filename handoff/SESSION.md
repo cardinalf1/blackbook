@@ -2,7 +2,108 @@
 
 Read this first in a new session, after AGENTS.md and CLAUDE.md. Updated by Claude at the end of each session or milestone. No College Board content in this file.
 
-Last updated: 2026-10-14, Phase 2 build session (Claude).
+## Morning report (2026-10-15, Part A, unattended run)
+
+**Part A is done through step 5 and committed** on `claude/phase1-ingest` (the last commit adds this report). Nothing pushed. Phase 3 not started.
+`bun run typecheck` is clean, `bun run test` passes (25 files, 253 tests), `bun run sync` exits 0, and `git ls-files` shows no data/, fixtures/ or .env files.
+
+### Done (all verified unless marked)
+1. `AGENTS.md`:
+   - Distribution section: a local app, no hosting, no Supabase or login.
+   - Rule 2 exception for the consent line.
+   - Stack updated, and phases updated (Packaging is now phase 6).
+   - Parallelism: the 3-writer cap and your review sentence.
+2. Shared pipeline in `src/services/sync/pipeline.ts`:
+   - `limits.ts` keeps the current values: 2 in flight, 250 ms gap.
+   - Events, cancel, a 30 s stall watchdog, and stop rules: 3 refusals (403/429) in a row, 5 network failures in a row, or 10 failed questions in a row.
+   - `scripts/sync.ts` is now a thin wrapper.
+   - Old and new sync produce an identical bank: 3,695 questions, 0 differences, same skipped list.
+   - Live-set questions are fetched first.
+3. Local server in `server/`:
+   - Bun on 127.0.0.1:47821, with Host and Origin checks and a per-launch token.
+   - Progress stream, cancel, free cache, and idle shutdown (off in dev, covered by a test).
+   - Checked against the real server with curl: wrong Host gives 403, a foreign Origin 403, a missing or wrong token 401.
+4. Storage:
+   - User data in `bun:sqlite`: WAL mode, foreign keys on, every write in a transaction.
+   - Schema version in `PRAGMA user_version`, with numbered migrations.
+   - The bank is one JSON file, swapped in by an atomic rename. Raw downloads go in a cache folder.
+   - The HTTP adapters pass the same contract tests as the in-memory ones.
+   - The IndexedDB adapters and the `idb` package are deleted.
+5. `bun run dev` starts the server and the UI. The home screen has:
+   - Download button and section picker (live set first by default).
+   - Consent dialog with your approved wording; counts and time match the chosen scope.
+   - Progress panel, Refresh, and file import as the fallback (the server now handles the import).
+
+   Your follow-up items:
+   - **Item 2, never lose an answer.** The result shows at once, but the answer stays in memory until the server confirms the save.
+     - Meanwhile Next reads "Saving..." and is disabled, and "Save and exit" is refused.
+     - A red banner offers Retry.
+     - Covered by a unit test, plus a real browser test with the server killed mid-drill: after Retry, 3 attempts were saved, once each.
+   - **Item 4, token handling.** The token is read once, exchanged for an HttpOnly, SameSite=Strict session cookie, and stripped from the address bar with `history.replaceState`. History length stayed 1, and page scripts cannot see the cookie.
+   - **Item 5, stream buffering.** The Vite proxy does not buffer the progress stream: the first snapshot arrives at once and the 10 s pings arrive on time, the same as connecting directly.
+6. Gemini, Medium effort:
+   - Two writers ran in parallel: `gemini/empty-bank-ui` (DownloadStart) and `gemini/download-modals` (DownloadConsent, DownloadProgressPanel, formatBytes).
+   - Both stayed in their files and were merged after review.
+   - The consent text matches the approved wording word for word, and the source name appears nowhere else.
+   - I changed nothing in their code.
+
+### Real download test (browser, empty data/app)
+- **Download:** Math live set.
+  - I cancelled at 170 of 927. No bank was written, the cache was kept, and requests stopped.
+  - Retry resumed with 170 cached and finished in 2:47: 927 questions, 0 skipped.
+  - The result is identical to the terminal sync's Math live set (927 of 927, same content).
+- **Free cache** removed the raw folder.
+- **Drill:** a 10-question drill, the results screen and My skills all worked. My skills showed 10 attempts, matching the database.
+- **File import** of the full terminal bank: 3,695 imported, 72 skipped.
+
+### Bugs found and fixed during the run
+- **Live-set filter used the wrong id.** The filter and live-first order used `questionId` instead of the detail id, and my first test faked the same wrong id. Both fixed.
+- **Some tests never ran.** Vitest only ran `*.test.ts` files, so Gemini's Phase 2 `DrillSetup.test.tsx` never ran. I fixed the pattern, and that test passes.
+- **Server-down message.** When the server was down, the Vite proxy's 502 showed as "Request failed (502)". It now shows the plain "local program is not responding" message.
+- **Stale banner.** A "could not save your session" banner stayed after the server came back. It now clears on the next good save.
+- **Vite didn't start.** It inherited the dev script's stdin; child processes now get no stdin.
+- **Port 3000 busy.** Two stale Vite processes from Phase 2 were holding the port. I stopped them.
+
+### Decisions I made
+- **Session cookie as well as the in-memory token.** Memory alone would lock the page out on every reload, and Vite reloads on code changes.
+  - The cookie is HttpOnly, SameSite=Strict and limited to /api. It ends when the browser closes and is useless after a restart, because the token changes.
+  - Easy to revert to memory-only.
+- **SQLite in tests.** Vitest runs on Node, so tests use Node's built-in `node:sqlite` (the same engine); the app uses `bun:sqlite`. No new dependency: small local type declarations in `server/bun.d.ts` instead of adding `@types/bun`.
+- **No foreign keys between tables, on purpose.** Deleting a session must never delete answers. The foreign-keys pragma is on for future tables.
+- **Refresh never shrinks the bank.** A narrower Refresh, for example live set only, keeps the questions outside its scope.
+- **Time estimates include preparing questions.** The consent estimate includes the measured normalize step (about 0.09 s per question). It shows about 12 minutes for both live sets and 5 for Math live, not the 9 and 16 minutes I quoted earlier. The real Math live run took under 3 minutes.
+- **Dev-script controls.** `bun run dev` keeps the UI up if the server dies:
+  - `k` and Enter stops the server; `s` and Enter restarts it with the same token. Your kill-mid-drill test needs this.
+  - `BLACKBOOK_NO_OPEN=1` skips opening a browser.
+- **Read-only bank interface.** `QuestionStore` is split into a read-only `QuestionStore` and a `WritableQuestionStore`; only the server and tests can replace the bank.
+- **Consent on every run.** Retry after a failed or cancelled download shows the consent dialog again.
+
+### Not verified / could not see
+- **Fine visual detail.** Screenshots from the automation browser are downscaled to 640x400. I checked the layout and all text, but not spacing, colours or focus rings on the new screens.
+- **A full download in the app.** I only ran Math live, not both sections with everything. The full run is covered by the identical-output check against the terminal sync.
+- **Idle shutdown** is only unit-tested, since it is off in dev.
+- **Real refusals.** The source never sent a real 429 or 403; those paths are tested with a fake source only.
+- **Restarts in the packaged app (Part B).** The token changes on restart, so an unsaved answer in an open page could not be saved. Noted for Part B.
+
+### How to test from an empty state
+1. Stop anything still running from earlier. Then delete the app data folder:
+   - Bash: `rm -rf data/app`
+   - PowerShell: `Remove-Item -Recurse -Force data\app`
+
+   This keeps `data/question_bank.json` and `data/raw` from the terminal sync.
+2. Run `bun install`, which removes the dropped `idb` package. Then run `bun run dev`.
+   - It opens `http://localhost:3000/?token=...`. If no browser opens, copy the link from the terminal.
+   - The token disappears from the address bar after the page loads.
+3. Download one section:
+   - Untick Reading and Writing and keep "Live set only".
+   - Press **Download questions**, tick "I understand." and press **Download**.
+   - Math live is about 930 requests and took under 3 minutes here.
+   - Try **Cancel** part way, then **Retry**: it resumes and shows "cached N".
+4. When it says Download complete, press **Done**. Then press **Start a drill**, pick Math, press **Start Drill**, and answer two questions.
+5. Kill the server mid-drill: in the `bun run dev` terminal type `k` and press Enter.
+   - Answer the next question. You should see the result, a red "not saved yet" banner with Retry, and a Next button that shows "Saving..." and does nothing.
+   - Type `s` and Enter in the terminal, press **Retry**, then **Next**.
+6. Finish the drill, open **My skills**, and check that the attempt counts match what you answered.
 
 ## Where things are
 
