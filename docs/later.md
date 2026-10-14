@@ -34,4 +34,6 @@ One line per idea, grouped by phase (AGENTS.md rule 8).
 - Telemetry diagnostics and export of attempt logs.
 
 ## Polish (any phase)
-- Importing the full bank (about 35 MB) freezes the tab for roughly 15 seconds while it sanitizes on the main thread, so the progress text cannot paint. Move import into a Web Worker or yield between chunks.
+- Skill names in the bank can carry trailing spaces; normalize them at sync.
+- Show real progress while the facets load for the setup screen (reads the whole bank, about 1 to 2 seconds).
+- Drill sessions that lose all unanswered questions to a bank replacement resume as empty; offer to discard.
