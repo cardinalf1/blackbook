@@ -33,7 +33,10 @@ const OUT_FILE = join(DATA_DIR, 'question_bank.json');
 const REPORT_FILE = join(DATA_DIR, 'sync-report.txt');
 
 /** Reasons that reflect a deliberate policy rather than a problem with the data or the code. */
-const EXPECTED_SKIPS: ReadonlySet<SkipReason> = new Set(['legacy-spr-no-key', 'legacy-mcq-no-key', 'mcq-key-conflicts-rationale']);
+const EXPECTED_SKIPS: ReadonlySet<string> = new Set(['known-malformed', 'legacy-spr-no-key', 'legacy-mcq-no-key', 'mcq-key-conflicts-rationale']);
+
+/** Items the source publishes malformed (verified by hand). Skipped with a warning, not a failure. */
+const KNOWN_MALFORMED: ReadonlySet<string> = new Set(['029650-DC']); // legacy SPR, detail has no prompt
 
 interface CachedDetail {
   updatedAt: number;
@@ -228,7 +231,12 @@ async function main(): Promise<number> {
       else if (r.question.source === 'legacy') legacyStructured++;
     } else {
       skipped.push({ id, reason: r.detail ? `${r.reason}: ${r.detail}` : r.reason });
-      count(skipCounts, r.reason);
+      if (r.reason === 'detail-shape' && KNOWN_MALFORMED.has(id)) {
+        console.warn(`  warning: ${id} is a known malformed source item, skipped (${r.detail ?? 'detail-shape'})`);
+        count(skipCounts, 'known-malformed');
+      } else {
+        count(skipCounts, r.reason);
+      }
     }
     progress('  normalized', i + 1, work.length, '');
   }
@@ -284,7 +292,7 @@ async function main(): Promise<number> {
   await writeAtomic(REPORT_FILE, `${lines.join('\n')}\n\nExtracted-answer sample\n\n${sampleLines.join('\n\n')}\n`);
   console.log(`\nReport saved to ${REPORT_FILE}`);
 
-  const unexpected = [...skipCounts.keys()].filter((k) => !EXPECTED_SKIPS.has(k as SkipReason));
+  const unexpected = [...skipCounts.keys()].filter((k) => !EXPECTED_SKIPS.has(k));
   if (fetchFailures.length > 0) return 1;
   if (unexpected.length > 0) {
     console.error(`\nUnexpected skip reasons: ${unexpected.join(', ')}. Check ${REPORT_FILE} and data/question_bank.json "skipped".`);
