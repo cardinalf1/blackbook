@@ -28,7 +28,8 @@ export function DrillFlow({ onExit, startAt }: { onExit: () => void; startAt: 's
   }, []);
 
   const exit = useCallback(() => {
-    drillStore.getState().close();
+    // Refuses while an answer is not saved yet; the screen then shows the Retry banner.
+    if (!drillStore.getState().close()) return;
     onExit();
   }, [onExit]);
 
@@ -78,6 +79,9 @@ function PlayScreen({ onExit }: { onExit: () => void }) {
   const questions = useDrill((s) => s.questions);
   const flags = useDrill((s) => s.flags);
   const error = useDrill((s) => s.error);
+  const unsaved = useDrill((s) => s.unsaved);
+  const saveError = useDrill((s) => s.saveError);
+  const [retrying, setRetrying] = useState(false);
   if (!session) return null;
 
   const id = session.queueIds[session.index];
@@ -102,7 +106,23 @@ function PlayScreen({ onExit }: { onExit: () => void }) {
           {session.index + 1} / {session.queueIds.length}
         </span>
       </nav>
-      {error && (
+      {saveError && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-red-900/50 bg-[#121215] p-4 text-sm text-red-400" role="alert">
+          <span className="min-w-0 flex-1">{saveError}</span>
+          <button
+            type="button"
+            disabled={retrying}
+            onClick={() => {
+              setRetrying(true);
+              void actions.retrySave().finally(() => setRetrying(false));
+            }}
+            className="rounded-md bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-900 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+          >
+            {retrying ? 'Retrying...' : 'Retry'}
+          </button>
+        </div>
+      )}
+      {error && !saveError && (
         <div className="rounded-lg border border-red-900/50 bg-[#121215] p-4 text-sm text-red-400" role="alert">
           {error}
         </div>
@@ -120,7 +140,8 @@ function PlayScreen({ onExit }: { onExit: () => void }) {
           onElapsed: (ms) => void actions.saveElapsed(ms),
           onSubmit: (response, timeMs) => void actions.submit(response, timeMs),
           onNext: () => void actions.next(),
-          nextLabel: last ? 'Finish' : 'Next',
+          nextLabel: unsaved ? 'Saving...' : last ? 'Finish' : 'Next',
+          nextDisabled: unsaved !== null,
         }}
       />
     </section>

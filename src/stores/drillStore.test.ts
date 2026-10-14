@@ -146,4 +146,47 @@ describe('drill store', () => {
     expect(store.getState().session).toBeNull();
     expect(store.getState().error).not.toBeNull();
   });
+
+  it('never loses an answer: holds it, blocks Next and exit, and saves it on Retry', async () => {
+    const { attempts, bank, facets } = await setup();
+    let down = false;
+    const flaky = Object.create(attempts) as MemoryAttemptStore;
+    flaky.addAttempt = async (a) => {
+      if (down) throw new Error('local program not responding');
+      return attempts.addAttempt(a);
+    };
+    const store = createDrillStore({ attempts: flaky, bank, now: () => 1000, newId: () => 'sess-x', rng: () => 0.5 });
+    await store.getState().start(config, facets);
+    const firstId = store.getState().session?.queueIds[0] as string;
+
+    down = true; // the server dies mid-drill
+    await store.getState().submit('A', 1500);
+    expect(store.getState().session?.answered[firstId]).toBeDefined(); // feedback still shows
+    expect(store.getState().unsaved?.questionId).toBe(firstId);
+    expect(store.getState().saveError).toMatch(/not saved yet/);
+    expect(await attempts.listAttempts()).toEqual([]);
+
+    await store.getState().next(); // blocked: the next question must not appear
+    expect(store.getState().session?.index).toBe(0);
+    expect(store.getState().close()).toBe(false); // cannot leave and drop the answer
+    expect(store.getState().session).not.toBeNull();
+
+    down = false; // the server is back
+    await store.getState().retrySave();
+    expect(store.getState().unsaved).toBeNull();
+    expect(store.getState().saveError).toBeNull();
+    expect(await attempts.listAttempts()).toMatchObject([{ questionId: firstId, timeMs: 1500 }]);
+    await store.getState().next();
+    expect(store.getState().session?.index).toBe(1);
+    expect(await attempts.listAttempts()).toHaveLength(1);
+  });
+
+  it('a successful submit saves before Next is possible', async () => {
+    const { attempts, mk, facets } = await setup();
+    const store = mk();
+    await store.getState().start(config, facets);
+    await store.getState().submit('A', 700);
+    expect(store.getState().unsaved).toBeNull();
+    expect(await attempts.listAttempts()).toHaveLength(1);
+  });
 });

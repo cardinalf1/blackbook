@@ -23,6 +23,8 @@ export interface DrillControls {
   /** Shown after answering. Omit when only reviewing. */
   onNext?: () => void;
   nextLabel?: string;
+  /** True while the answer is still being saved: the next question must not appear yet. */
+  nextDisabled?: boolean;
 }
 
 interface Props {
@@ -179,7 +181,8 @@ export function QuestionView({ question, onAnswered, drill }: Props) {
               <button
                 type="button"
                 onClick={drill.onNext}
-                className="ml-auto rounded-md border border-zinc-300 px-4 py-1.5 text-sm font-medium text-zinc-100 hover:bg-zinc-800"
+                disabled={drill.nextDisabled === true}
+                className="ml-auto rounded-md border border-zinc-300 px-4 py-1.5 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:opacity-50"
               >
                 {drill.nextLabel ?? 'Next'}
               </button>

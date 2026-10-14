@@ -16,7 +16,7 @@ import {
 import { attemptStore, questionStore } from '../services/storage';
 import type { AttemptStore } from '../services/storage/attemptTypes';
 import type { QuestionStore } from '../services/storage/types';
-import type { DrillConfig, QuestionFacet, SessionRecord } from '../types/drill';
+import type { Attempt, DrillConfig, QuestionFacet, SessionRecord } from '../types/drill';
 import type { ChoiceLetter, Question } from '../types/sat';
 
 export interface DrillState {
@@ -28,6 +28,13 @@ export interface DrillState {
   /** A saved unfinished session found at startup, waiting for Resume or Discard. */
   resumable: SessionRecord | null;
   error: string | null;
+  /**
+   * An answer that is graded and shown but not yet on disk. It stays here, and the next question
+   * stays blocked, until the local program confirms the save.
+   */
+  unsaved: Attempt | null;
+  /** Why the last save of `unsaved` failed, shown with a Retry button. */
+  saveError: string | null;
 }
 
 export interface DrillActions {
@@ -38,13 +45,16 @@ export interface DrillActions {
   discardResumable(): Promise<void>;
   /** `timeMs` is the total focus time on this question, including time before a reload. */
   submit(response: string, timeMs: number): Promise<void>;
+  /** Tries again to save the answer in `unsaved`. */
+  retrySave(): Promise<void>;
+  /** Moves on, but only once the current answer is saved. */
   next(): Promise<void>;
   strike(letter: ChoiceLetter): Promise<void>;
   toggleFlag(questionId: string): Promise<void>;
   /** Persists focus time so far on the current question. */
   saveElapsed(elapsedMs: number): Promise<void>;
-  /** Leaves the finished or abandoned session screen. */
-  close(): void;
+  /** Leaves the session screen. Refuses (returns false) while an answer is not saved yet. */
+  close(): boolean;
 }
 
 export type DrillStore = DrillState & DrillActions;
@@ -57,7 +67,7 @@ export interface DrillDeps {
   rng?: Rng;
 }
 
-const EMPTY: DrillState = { session: null, questions: {}, flags: {}, resumable: null, error: null };
+const EMPTY: DrillState = { session: null, questions: {}, flags: {}, resumable: null, error: null, unsaved: null, saveError: null };
 
 function msg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -83,6 +93,21 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
   }
 
   return createStore<DrillStore>()((set, get) => {
+    /** Saves the held answer, then the session. Keeps the answer on any failure. */
+    const flush = async () => {
+      const { unsaved } = get();
+      if (!unsaved) return;
+      try {
+        await deps.attempts.addAttempt(unsaved);
+      } catch (e) {
+        set({ saveError: `Your answer is not saved yet: ${msg(e)}` });
+        return;
+      }
+      set({ unsaved: null, saveError: null });
+      const { session } = get();
+      if (session) await persist(session);
+    };
+
     const persist = async (session: SessionRecord) => {
       set({ session });
       try {
@@ -150,18 +175,19 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
         if (id === null || !q) return;
         const result = submitAnswer(session, id, response, isCorrect(q.answer, response), timeMs, now());
         if (!result.attempt) return;
-        try {
-          await deps.attempts.addAttempt(result.attempt);
-        } catch (e) {
-          set({ error: `Could not save your answer: ${msg(e)}` });
-          return;
-        }
-        await persist(result.session);
+        // Show the result right away, but hold the answer in memory until it is on disk.
+        set({ session: result.session, unsaved: result.attempt, saveError: null });
+        await flush();
+      },
+
+      async retrySave() {
+        await flush();
       },
 
       async next() {
-        const { session } = get();
-        if (!session) return;
+        if (get().unsaved) await flush();
+        const { session, unsaved } = get();
+        if (!session || unsaved) return;
         const after = advance(session);
         if (after !== session) await persist(after);
       },
@@ -195,7 +221,12 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
       },
 
       close() {
-        set({ session: null, questions: {} });
+        if (get().unsaved) {
+          set({ saveError: get().saveError ?? 'Your last answer is not saved yet. Press Retry before leaving.' });
+          return false;
+        }
+        set({ session: null, questions: {}, saveError: null });
+        return true;
       },
     };
   });
