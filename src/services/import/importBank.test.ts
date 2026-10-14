@@ -97,4 +97,72 @@ describe('importBankText', () => {
     expect(!r.ok && r.error).toContain('previous bank was kept');
     expect(await store.count()).toBe(1);
   });
+
+  describe('cancelling and yielding', () => {
+    const many = (n: number) => Array.from({ length: n }, (_, i) => q(`n${i}`));
+
+    it('yields to the browser between slices instead of running in one block', async () => {
+      const store = new MemoryQuestionStore();
+      let pauses = 0;
+      let t = 0;
+      // Every clock read advances time past the slice budget, so each question ends a slice.
+      const r = await importBankText(file(many(10)), {
+        store,
+        sanitize,
+        clock: () => (t += 100),
+        yieldToBrowser: async () => {
+          pauses++;
+        },
+      });
+      expect(r.ok).toBe(true);
+      expect(pauses).toBeGreaterThanOrEqual(10);
+    });
+
+    it('cancelling while checking leaves the previous bank intact', async () => {
+      const store = new MemoryQuestionStore();
+      await importBankText(file([q('keep')]), { store, sanitize });
+      const controller = new AbortController();
+      const r = await importBankText(file(many(50)), {
+        store,
+        sanitize,
+        signal: controller.signal,
+        clock: (() => {
+          let t = 0;
+          return () => (t += 100);
+        })(),
+        onProgress: (stage, done) => {
+          if (stage === 'validating' && done >= 5) controller.abort();
+        },
+      });
+      expect(r).toMatchObject({ ok: false, cancelled: true });
+      expect(await store.count()).toBe(1);
+      expect((await store.get('keep'))?.id).toBe('keep');
+    });
+
+    it('cancelling while saving leaves the previous bank intact', async () => {
+      const store = new MemoryQuestionStore();
+      await importBankText(file([q('keep')]), { store, sanitize });
+      const controller = new AbortController();
+      const r = await importBankText(file(many(20)), {
+        store,
+        sanitize,
+        signal: controller.signal,
+        onProgress: (stage, done) => {
+          if (stage === 'saving' && done >= 3) controller.abort();
+        },
+      });
+      expect(r).toMatchObject({ ok: false, cancelled: true });
+      expect(await store.count()).toBe(1);
+      expect((await store.getMeta())?.count).toBe(1);
+    });
+
+    it('an already-aborted signal imports nothing', async () => {
+      const store = new MemoryQuestionStore();
+      const controller = new AbortController();
+      controller.abort();
+      const r = await importBankText(file(many(3)), { store, sanitize, signal: controller.signal });
+      expect(r).toMatchObject({ ok: false, cancelled: true });
+      expect(await store.count()).toBe(0);
+    });
+  });
 });

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
+import { DrillFlow } from './components/drill/DrillFlow';
 import { ImportPanel } from './components/ImportPanel';
 import { QuestionBrowser } from './components/QuestionBrowser';
 import { QuestionView } from './components/QuestionView';
 import { questionStore, type BankMeta } from './services/storage';
+import { drillStore, useDrill } from './stores/drillStore';
 import type { Question } from './types/sat';
 
 const PRACTICE_SIZE = 20;
@@ -11,7 +13,8 @@ type View =
   | { kind: 'loading' }
   | { kind: 'home'; meta: BankMeta | null; count: number }
   | { kind: 'practice'; questions: Question[]; index: number }
-  | { kind: 'browse' };
+  | { kind: 'browse' }
+  | { kind: 'drill'; startAt: 'setup' | 'play' | 'skills' };
 
 function sample<T>(items: readonly T[], n: number): T[] {
   const a = [...items];
@@ -25,10 +28,13 @@ function sample<T>(items: readonly T[], n: number): T[] {
 export default function App() {
   const [view, setView] = useState<View>({ kind: 'loading' });
   const [error, setError] = useState<string | null>(null);
+  const resumable = useDrill((s) => s.resumable);
 
   const loadHome = useCallback(async () => {
     try {
-      const [meta, count] = await Promise.all([questionStore.getMeta(), questionStore.count()]);
+      const [meta, count] = await Promise.all([questionStore.getMeta(), questionStore.count(), drillStore.getState().init()]).then(
+        ([m, c]) => [m, c] as const,
+      );
       setView({ kind: 'home', meta, count });
     } catch (e) {
       setError(`Could not open browser storage: ${e instanceof Error ? e.message : String(e)}`);
@@ -67,7 +73,21 @@ export default function App() {
                   Synced {new Date(view.meta.fetchedAt).toLocaleString()}, imported {new Date(view.meta.importedAt).toLocaleString()}
                 </div>
               </div>
-              <div className="ml-auto flex items-center gap-3">
+              <div className="ml-auto flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setView({ kind: 'drill', startAt: 'setup' })}
+                  className="rounded-md bg-zinc-100 px-4 py-1.5 text-sm font-medium text-zinc-900"
+                >
+                  Start a drill
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setView({ kind: 'drill', startAt: 'skills' })}
+                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
+                >
+                  My skills
+                </button>
                 <button
                   type="button"
                   onClick={() => setView({ kind: 'browse' })}
@@ -78,9 +98,37 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => void startPractice()}
-                  className="rounded-md bg-zinc-100 px-4 py-1.5 text-sm font-medium text-zinc-900"
+                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
                 >
                   Step through {Math.min(PRACTICE_SIZE, view.count)} random questions
+                </button>
+              </div>
+            </section>
+          )}
+          {resumable && view.count > 0 && (
+            <section className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-900/50 bg-amber-950/30 p-4 text-sm text-amber-200">
+              <span>
+                You have an unfinished drill ({Object.keys(resumable.answered).length} of {resumable.queueIds.length} answered).
+              </span>
+              <div className="ml-auto flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void drillStore
+                      .getState()
+                      .resume()
+                      .then(() => setView({ kind: 'drill', startAt: 'play' }));
+                  }}
+                  className="rounded-md bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-900"
+                >
+                  Resume
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void drillStore.getState().discardResumable()}
+                  className="rounded-md border border-[#27272A] px-3 py-1 text-xs text-zinc-200 hover:border-zinc-500"
+                >
+                  Discard
                 </button>
               </div>
             </section>
@@ -120,6 +168,8 @@ export default function App() {
           )}
         </section>
       )}
+
+      {view.kind === 'drill' && <DrillFlow startAt={view.startAt} onExit={() => void loadHome()} />}
 
       {view.kind === 'browse' && (
         <section className="space-y-4">

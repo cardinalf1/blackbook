@@ -17,7 +17,19 @@ export interface InvalidEntry {
 
 export type ImportResult =
   | { ok: true; imported: number; skippedBySync: number; invalid: InvalidEntry[] }
-  | { ok: false; error: string; invalid: InvalidEntry[] };
+  | { ok: false; error: string; invalid: InvalidEntry[]; cancelled?: true };
+
+/** How long the import may run before it hands the thread back to the browser. */
+const SLICE_MS = 25;
+
+const yieldToBrowser = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+const CANCELLED: ImportResult = {
+  ok: false,
+  error: 'Import cancelled. The previous bank was kept.',
+  invalid: [],
+  cancelled: true,
+};
 
 function sanitizeAnswer(a: Answer, sanitize: Sanitizer): Answer {
   if (a.kind === 'spr') return a;
@@ -37,9 +49,23 @@ function sanitizeQuestion(q: Question, sanitize: Sanitizer): Question {
 
 export async function importBankText(
   text: string,
-  deps: { store: QuestionStore; sanitize: Sanitizer; onProgress?: ImportProgress; now?: () => Date },
+  deps: {
+    store: QuestionStore;
+    sanitize: Sanitizer;
+    onProgress?: ImportProgress;
+    now?: () => Date;
+    /** Abort to cancel. Nothing is replaced unless the whole import succeeds. */
+    signal?: AbortSignal;
+    /** Replaced in tests. Default waits one macrotask so the page can paint and handle clicks. */
+    yieldToBrowser?: () => Promise<void>;
+    clock?: () => number;
+  },
 ): Promise<ImportResult> {
+  const pause = deps.yieldToBrowser ?? yieldToBrowser;
+  const clock = deps.clock ?? (() => performance.now());
   deps.onProgress?.('reading', 0, 1);
+  await pause(); // let the "Reading" state paint before the synchronous parse
+  if (deps.signal?.aborted) return CANCELLED;
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -55,9 +81,15 @@ export async function importBankText(
   }
 
   const clean: Question[] = [];
+  let sliceStart = clock();
   for (const [i, q] of questions.entries()) {
     clean.push(sanitizeQuestion(q, deps.sanitize));
-    if ((i + 1) % 200 === 0 || i + 1 === questions.length) deps.onProgress?.('validating', i + 1, questions.length);
+    if (clock() - sliceStart >= SLICE_MS || i + 1 === questions.length) {
+      deps.onProgress?.('validating', i + 1, questions.length);
+      await pause();
+      if (deps.signal?.aborted) return CANCELLED;
+      sliceStart = clock();
+    }
   }
 
   try {
@@ -70,8 +102,10 @@ export async function importBankText(
         skippedCount: skipped.length,
       },
       (done, total) => deps.onProgress?.('saving', done, total),
+      deps.signal,
     );
   } catch (e) {
+    if (deps.signal?.aborted) return CANCELLED;
     return {
       ok: false,
       error: `Saving failed, the previous bank was kept: ${e instanceof Error ? e.message : String(e)}`,

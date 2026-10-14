@@ -6,9 +6,10 @@ export class MemoryQuestionStore implements QuestionStore {
   private questions = new Map<string, Question>();
   private meta: BankMeta | null = null;
 
-  async replaceAll(questions: readonly Question[], meta: BankMeta, onProgress?: ProgressFn): Promise<void> {
+  async replaceAll(questions: readonly Question[], meta: BankMeta, onProgress?: ProgressFn, signal?: AbortSignal): Promise<void> {
     const next = new Map<string, Question>();
     questions.forEach((q, i) => {
+      signal?.throwIfAborted();
       next.set(q.id, structuredClone(q));
       onProgress?.(i + 1, questions.length);
     });

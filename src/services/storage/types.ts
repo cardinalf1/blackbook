@@ -21,8 +21,11 @@ export type ProgressFn = (done: number, total: number) => void;
 
 /** The only way UI and services reach stored questions (AGENTS.md rule 6). */
 export interface QuestionStore {
-  /** Replaces the whole bank atomically: on failure the previous bank stays. */
-  replaceAll(questions: readonly Question[], meta: BankMeta, onProgress?: ProgressFn): Promise<void>;
+  /**
+   * Replaces the whole bank atomically: on failure or abort the previous bank stays.
+   * Aborting rejects with the signal's reason.
+   */
+  replaceAll(questions: readonly Question[], meta: BankMeta, onProgress?: ProgressFn, signal?: AbortSignal): Promise<void>;
   count(): Promise<number>;
   get(id: string): Promise<Question | undefined>;
   query(q: QuestionQuery): Promise<Question[]>;

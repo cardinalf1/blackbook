@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { importBankText, type ImportResult, type ImportStage } from '../services/import/importBank';
 import { createSanitizer } from '../services/normalize/sanitize';
 import { questionStore } from '../services/storage';
@@ -11,8 +11,11 @@ export function ImportPanel({ onImported }: { onImported: () => void }) {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ stage: ImportStage; done: number; total: number } | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const onFile = async (file: File) => {
+    const controller = new AbortController();
+    abortRef.current = controller;
     setBusy(true);
     setResult(null);
     try {
@@ -20,6 +23,7 @@ export function ImportPanel({ onImported }: { onImported: () => void }) {
       const r = await importBankText(text, {
         store: questionStore,
         sanitize,
+        signal: controller.signal,
         onProgress: (stage, done, total) => setProgress({ stage, done, total }),
       });
       setResult(r);
@@ -27,6 +31,7 @@ export function ImportPanel({ onImported }: { onImported: () => void }) {
     } catch (e) {
       setResult({ ok: false, error: `Could not read the file: ${e instanceof Error ? e.message : String(e)}`, invalid: [] });
     } finally {
+      abortRef.current = null;
       setBusy(false);
       setProgress(null);
     }
@@ -58,8 +63,17 @@ export function ImportPanel({ onImported }: { onImported: () => void }) {
 
       {progress && (
         <div className="space-y-1" role="status">
-          <div className="text-xs text-zinc-400">
-            {STAGE_LABEL[progress.stage]} {progress.total > 1 && `${progress.done} / ${progress.total}`}
+          <div className="flex items-center justify-between gap-3 text-xs text-zinc-400">
+            <span>
+              {STAGE_LABEL[progress.stage]} {progress.total > 1 && `${progress.done} / ${progress.total}`}
+            </span>
+            <button
+              type="button"
+              onClick={() => abortRef.current?.abort()}
+              className="rounded-md border border-[#27272A] px-2.5 py-1 text-zinc-200 hover:border-zinc-500"
+            >
+              Cancel
+            </button>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded bg-zinc-800">
             <div className="h-full bg-zinc-200 transition-all" style={{ width: `${pct}%` }} />
@@ -74,7 +88,7 @@ export function ImportPanel({ onImported }: { onImported: () => void }) {
         </p>
       )}
       {result?.ok === false && (
-        <p className="text-sm text-red-400" role="alert">
+        <p className={`text-sm ${result.cancelled ? 'text-zinc-300' : 'text-red-400'}`} role="alert">
           {result.error}
         </p>
       )}

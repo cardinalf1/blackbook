@@ -41,18 +41,30 @@ export class IndexedDbQuestionStore implements QuestionStore {
     return this.db;
   }
 
-  async replaceAll(questions: readonly Question[], meta: BankMeta, onProgress?: ProgressFn): Promise<void> {
+  async replaceAll(questions: readonly Question[], meta: BankMeta, onProgress?: ProgressFn, signal?: AbortSignal): Promise<void> {
     const db = await this.open();
     // One transaction: if anything fails, IndexedDB rolls back and the old bank remains.
     const tx = db.transaction(['questions', 'meta'], 'readwrite');
     const qs = tx.objectStore('questions');
-    await qs.clear();
-    for (let i = 0; i < questions.length; i++) {
-      await qs.put(questions[i] as Question);
-      if ((i + 1) % PROGRESS_EVERY === 0 || i + 1 === questions.length) onProgress?.(i + 1, questions.length);
+    try {
+      await qs.clear();
+      for (let i = 0; i < questions.length; i++) {
+        if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+        await qs.put(questions[i] as Question);
+        if ((i + 1) % PROGRESS_EVERY === 0 || i + 1 === questions.length) onProgress?.(i + 1, questions.length);
+      }
+      await tx.objectStore('meta').put({ ...meta, key: META_KEY });
+      await tx.done;
+    } catch (e) {
+      // Roll back explicitly so a cancelled import leaves the previous bank untouched.
+      try {
+        tx.abort();
+      } catch {
+        // already finished or aborted
+      }
+      await tx.done.catch(() => undefined);
+      throw e;
     }
-    await tx.objectStore('meta').put({ ...meta, key: META_KEY });
-    await tx.done;
   }
 
   async count(): Promise<number> {
