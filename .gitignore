@@ -6,3 +6,7 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# College Board content and raw samples stay local (AGENTS.md rule 1)
+data/
+fixtures/
