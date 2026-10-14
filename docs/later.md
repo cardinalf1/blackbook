@@ -37,3 +37,6 @@ One line per idea, grouped by phase (AGENTS.md rule 8).
 - Skill names in the bank can carry trailing spaces; normalize them at sync.
 - Show real progress while the facets load for the setup screen (reads the whole bank, about 1 to 2 seconds).
 - Drill sessions that lose all unanswered questions to a bank replacement resume as empty; offer to discard.
+- The setup screen and question browser load the whole bank over the local API (about 35 MB); add a facets endpoint if it feels slow.
+- Data folder actions: open the folder, export progress as JSON, reset progress, delete the bank (Part B, with packaging).
+- Show the time a refresh will take using the cache, not only the fresh-download estimate.

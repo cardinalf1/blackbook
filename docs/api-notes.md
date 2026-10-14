@@ -166,11 +166,27 @@ Skill x difficulty, distinct ids, shown as `all / not in live arrays`:
 
 ## CORS
 
-`OPTIONS` and `POST` from an arbitrary origin return `Access-Control-Allow-Origin: *` with `Content-Type` allowed. A browser page on any domain can call the list and detail endpoints directly. This is what the site's own SPA does.
+`OPTIONS` and `POST` from an arbitrary origin return `Access-Control-Allow-Origin: *` with `Content-Type` allowed. Verified from real browser pages on `http://localhost:3000` and `https://example.org` (2026-10-14). No `Access-Control-Expose-Headers`, so browser code cannot read `Retry-After`. Not relevant any more: downloads run in the local Bun process, not the browser.
 
 ## Rate limits
 
 About 150 sequential requests at 1 request per 1.5 s: all 200, no throttling headers (`x-ratelimit-*`, `retry-after`) seen, no 429. The limit is unknown, not absent. A full SAT sync is about 3770 detail requests.
+
+## Speed and concurrency (measured 2026-10-14, 85 requests in total)
+
+- The source's own web app fetches the lookup once, the list once per search, and **one detail at a time** when a user opens a question. It never has several detail requests in flight.
+- Two runs of 40 random detail requests, 3 minutes apart, 250 ms minimum gap per worker:
+
+  | In flight | Median | p95 | Rate | Throttling signals |
+  |---|---|---|---|---|
+  | 1 | 519 ms | 741 ms | 1.9 per second | none |
+  | 2 | 518 ms | 708 ms | 3.9 per second | none |
+
+  Latency was flat. 3 and 4 in flight were not tested because they exceed the site's own pattern. The app keeps 2 (`src/services/sync/limits.ts`).
+- No free wins: list rows carry no content fields; the detail endpoint rejects several ids (array or comma-joined both return the `NoSuchKey` error); neither endpoint compresses its response even when asked (`Accept-Encoding: gzip, br`). Details are about 7 to 9 KB.
+- A missing detail returns **HTTP 200** with an error body (`{"$fault":"client", ..., "Code":"NoSuchKey"}`). Status codes alone do not catch bad details; the shape guard does.
+- The site also has `POST /pdf-download-v2`, a server-side PDF export job it polls. Not usable as data.
+- Normalizing a full bank takes about 0.09 s per question (338 s for 3,767 in one run), so a full first download is roughly 16 minutes of requests plus 6 minutes of preparing.
 
 ## Not yet verified
 
