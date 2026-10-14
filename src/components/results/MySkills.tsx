@@ -5,12 +5,12 @@ export function MySkills({ rows, unattributed, onBack }: MySkillsProps) {
   return (
     <div className="space-y-6 text-[#FAFAFA]">
       <section className="rounded-lg border border-[#27272A] bg-[#121215] p-5">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={onBack}
-              className="rounded-md border border-[#27272A] px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-zinc-500 hover:text-zinc-100"
+              className="rounded-md border border-[#27272A] px-3.5 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-500 hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
             >
               Back
             </button>
@@ -56,7 +56,7 @@ export function MySkills({ rows, unattributed, onBack }: MySkillsProps) {
                   return (
                     <tr
                       key={row.skillCode}
-                      className="border-b border-[#27272A] text-xs transition-colors hover:bg-zinc-800/40 text-zinc-300"
+                      className="border-b border-[#27272A] text-xs text-zinc-300 transition-colors hover:bg-zinc-800/40"
                     >
                       <td className="px-3 py-2.5 font-mono text-zinc-200">
                         {row.section === 'rw' ? 'RW' : 'Math'}
