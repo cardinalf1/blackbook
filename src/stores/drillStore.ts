@@ -69,6 +69,8 @@ export interface DrillDeps {
 
 const EMPTY: DrillState = { session: null, questions: {}, flags: {}, resumable: null, error: null, unsaved: null, saveError: null };
 
+const SAVE_SESSION_ERROR = 'Could not save your session: ';
+
 function msg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
@@ -112,8 +114,9 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
       set({ session });
       try {
         await deps.attempts.saveSession(session);
+        if (get().error?.startsWith(SAVE_SESSION_ERROR)) set({ error: null });
       } catch (e) {
-        set({ error: `Could not save your session: ${msg(e)}` });
+        set({ error: `${SAVE_SESSION_ERROR}${msg(e)}` });
       }
     };
 

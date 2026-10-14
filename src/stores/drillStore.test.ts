@@ -189,4 +189,22 @@ describe('drill store', () => {
     expect(store.getState().unsaved).toBeNull();
     expect(await attempts.listAttempts()).toHaveLength(1);
   });
+
+  it('clears a stale session-save error once a later save succeeds', async () => {
+    const { attempts, bank, facets } = await setup();
+    let down = false;
+    const flaky = Object.create(attempts) as MemoryAttemptStore;
+    flaky.saveSession = async (sess) => {
+      if (down) throw new Error('local program not responding');
+      return attempts.saveSession(sess);
+    };
+    const store = createDrillStore({ attempts: flaky, bank, now: () => 1000, newId: () => 'sess-y', rng: () => 0.5 });
+    await store.getState().start(config, facets);
+    down = true;
+    await store.getState().saveElapsed(3000);
+    expect(store.getState().error).toMatch(/Could not save your session/);
+    down = false;
+    await store.getState().saveElapsed(4000);
+    expect(store.getState().error).toBeNull();
+  });
 });

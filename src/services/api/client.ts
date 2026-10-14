@@ -51,6 +51,10 @@ export function createApiClient(opts: { fetch: typeof fetch; baseUrl?: string; t
         throw new ApiError(res.ok ? res.status : null, res.ok ? 'The local program sent an unreadable reply.' : SERVER_DOWN);
       }
       if (!res.ok) {
+        // 502/503/504 without our own error body come from something in between (the dev proxy)
+        // when the local program is not running.
+        const ours = typeof body === 'object' && body !== null && 'error' in body;
+        if (!ours && (res.status === 502 || res.status === 503 || res.status === 504)) throw new ApiError(null, SERVER_DOWN);
         const message = typeof body === 'object' && body !== null && 'error' in body ? String((body as { error: unknown }).error) : `Request failed (${res.status}).`;
         throw new ApiError(res.status, message);
       }

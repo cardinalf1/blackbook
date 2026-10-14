@@ -33,7 +33,7 @@ function startServer(): void {
     console.log('[dev] The server is already running.');
     return;
   }
-  const child = spawn('bun', ['server/main.ts', '--dev'], { stdio: 'inherit', env: { ...process.env, BLACKBOOK_TOKEN: token }, shell: isWin });
+  const child = spawn('bun', ['server/main.ts', '--dev'], { stdio: ['ignore', 'inherit', 'inherit'], env: { ...process.env, BLACKBOOK_TOKEN: token }, shell: isWin });
   child.on('exit', (code) => {
     if (stopping) return;
     console.log(`[dev] Server stopped (${code ?? 'signal'}). Type s + Enter to start it again, or Ctrl+C to quit.`);
@@ -52,7 +52,8 @@ function stopServer(): void {
 }
 
 startServer();
-ui = spawn('bunx', ['vite'], { stdio: 'inherit', shell: isWin });
+// The children get no stdin: this script reads it for the k/s commands.
+ui = spawn('bunx', ['vite'], { stdio: ['ignore', 'inherit', 'inherit'], shell: isWin });
 ui.on('exit', (code) => {
   console.log(`[dev] UI exited (${code ?? 'signal'}). Stopping everything.`);
   shutdown(code ?? 0);

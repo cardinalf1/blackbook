@@ -129,6 +129,8 @@ describe('api client errors', () => {
     await expect(down.request('/api/health')).rejects.toMatchObject({ status: null, message: SERVER_DOWN });
     const proxyError = createApiClient({ fetch: async () => new Response('<html>proxy error</html>', { status: 500 }) });
     await expect(proxyError.request('/api/health')).rejects.toMatchObject({ status: null });
+    const badGateway = createApiClient({ fetch: async () => new Response('', { status: 502 }) });
+    await expect(badGateway.request('/api/health')).rejects.toMatchObject({ status: null, message: SERVER_DOWN });
     const refused = createApiClient({ fetch: async () => new Response(JSON.stringify({ error: 'Nope.' }), { status: 409 }) });
     const err = await refused.request('/x').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
