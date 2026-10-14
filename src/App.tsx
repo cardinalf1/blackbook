@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
+import { DownloadController } from './components/download/DownloadController';
 import { DrillFlow } from './components/drill/DrillFlow';
 import { ImportPanel } from './components/ImportPanel';
 import { QuestionBrowser } from './components/QuestionBrowser';
 import { QuestionView } from './components/QuestionView';
+import { DOWNLOAD_ENABLED } from './config';
+import { api, ApiError, initApiAuth } from './services/api/client';
 import { questionStore, type BankMeta } from './services/storage';
 import { drillStore, useDrill } from './stores/drillStore';
 import type { Question } from './types/sat';
 
 const PRACTICE_SIZE = 20;
+/** Tells the local program a Blackbook page is still open, so it does not shut down when idle. */
+const HEARTBEAT_MS = 60_000;
 
 type View =
   | { kind: 'loading' }
@@ -31,19 +36,32 @@ export default function App() {
   const resumable = useDrill((s) => s.resumable);
 
   const loadHome = useCallback(async () => {
+    setError(null);
     try {
+      await initApiAuth();
       const [meta, count] = await Promise.all([questionStore.getMeta(), questionStore.count(), drillStore.getState().init()]).then(
         ([m, c]) => [m, c] as const,
       );
       setView({ kind: 'home', meta, count });
     } catch (e) {
-      setError(`Could not open browser storage: ${e instanceof Error ? e.message : String(e)}`);
+      if (e instanceof ApiError && e.status === 401) {
+        setError('This page has no access to Blackbook. Open Blackbook again from the link its launcher printed.');
+      } else {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     }
   }, []);
+
+  const reloadHome = useCallback(() => void loadHome(), [loadHome]);
 
   useEffect(() => {
     void loadHome();
   }, [loadHome]);
+
+  useEffect(() => {
+    const t = window.setInterval(() => void api.request('/api/health').catch(() => undefined), HEARTBEAT_MS);
+    return () => window.clearInterval(t);
+  }, []);
 
   const startPractice = async () => {
     const all = await questionStore.query({});
@@ -58,9 +76,16 @@ export default function App() {
       </header>
 
       {error && (
-        <p className="text-sm text-red-400" role="alert">
-          {error}
-        </p>
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-red-900/50 bg-[#121215] p-4 text-sm text-red-400" role="alert">
+          <span className="min-w-0 flex-1">{error}</span>
+          <button
+            type="button"
+            onClick={() => void loadHome()}
+            className="rounded-md bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+          >
+            Retry
+          </button>
+        </div>
       )}
 
       {view.kind === 'home' && (
@@ -133,7 +158,19 @@ export default function App() {
               </div>
             </section>
           )}
-          <ImportPanel onImported={() => void loadHome()} />
+          {DOWNLOAD_ENABLED ? (
+            <>
+              <DownloadController
+                hasBank={view.count > 0}
+                questionCount={view.count}
+                importSlot={<ImportPanel onImported={reloadHome} />}
+                onBankChanged={reloadHome}
+              />
+              {view.count > 0 && <ImportPanel onImported={reloadHome} />}
+            </>
+          ) : (
+            <ImportPanel onImported={reloadHome} />
+          )}
         </>
       )}
 
