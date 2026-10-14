@@ -1,8 +1,111 @@
+import { useCallback, useEffect, useState } from 'react';
+import { ImportPanel } from './components/ImportPanel';
+import { QuestionView } from './components/QuestionView';
+import { questionStore, type BankMeta } from './services/storage';
+import type { Question } from './types/sat';
+
+const PRACTICE_SIZE = 20;
+
+type View = { kind: 'loading' } | { kind: 'home'; meta: BankMeta | null; count: number } | { kind: 'practice'; questions: Question[]; index: number };
+
+function sample<T>(items: readonly T[], n: number): T[] {
+  const a = [...items];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j] as T, a[i] as T];
+  }
+  return a.slice(0, n);
+}
+
 export default function App() {
+  const [view, setView] = useState<View>({ kind: 'loading' });
+  const [error, setError] = useState<string | null>(null);
+
+  const loadHome = useCallback(async () => {
+    try {
+      const [meta, count] = await Promise.all([questionStore.getMeta(), questionStore.count()]);
+      setView({ kind: 'home', meta, count });
+    } catch (e) {
+      setError(`Could not open browser storage: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadHome();
+  }, [loadHome]);
+
+  const startPractice = async () => {
+    const all = await questionStore.query({});
+    setView({ kind: 'practice', questions: sample(all, PRACTICE_SIZE), index: 0 });
+  };
+
   return (
-    <main className="min-h-screen p-8">
-      <h1 className="font-mono text-lg">Blackbook</h1>
-      <p className="mt-2 text-sm text-zinc-400">Question import is not built yet.</p>
+    <main className="mx-auto max-w-6xl space-y-6 p-6">
+      <header className="flex items-baseline justify-between">
+        <h1 className="font-mono text-lg">Blackbook</h1>
+        <p className="text-xs text-zinc-500">Independent practice tool. Not affiliated with any testing organization.</p>
+      </header>
+
+      {error && (
+        <p className="text-sm text-red-400" role="alert">
+          {error}
+        </p>
+      )}
+
+      {view.kind === 'home' && (
+        <>
+          {view.count > 0 && view.meta && (
+            <section className="flex flex-wrap items-center gap-4 rounded-lg border border-[#27272A] bg-[#121215] p-5">
+              <div className="text-sm">
+                <div>{view.count} questions loaded</div>
+                <div className="text-xs text-zinc-500">
+                  Synced {new Date(view.meta.fetchedAt).toLocaleString()}, imported {new Date(view.meta.importedAt).toLocaleString()}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void startPractice()}
+                className="ml-auto rounded-md bg-zinc-100 px-4 py-1.5 text-sm font-medium text-zinc-900"
+              >
+                Step through {Math.min(PRACTICE_SIZE, view.count)} random questions
+              </button>
+            </section>
+          )}
+          <ImportPanel onImported={() => void loadHome()} />
+        </>
+      )}
+
+      {view.kind === 'practice' && (
+        <section className="space-y-4">
+          <nav className="flex items-center gap-3 text-sm">
+            <button type="button" onClick={() => void loadHome()} className="text-zinc-400 hover:text-zinc-100">
+              Back
+            </button>
+            <span className="ml-auto font-mono text-xs text-zinc-400">
+              {view.index + 1} / {view.questions.length}
+            </span>
+            <button
+              type="button"
+              disabled={view.index === 0}
+              onClick={() => setView({ ...view, index: view.index - 1 })}
+              className="rounded-md border border-[#27272A] px-3 py-1 disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              disabled={view.index === view.questions.length - 1}
+              onClick={() => setView({ ...view, index: view.index + 1 })}
+              className="rounded-md border border-[#27272A] px-3 py-1 disabled:opacity-40"
+            >
+              Next
+            </button>
+          </nav>
+          {view.questions[view.index] && (
+            <QuestionView key={view.questions[view.index]?.id} question={view.questions[view.index] as Question} />
+          )}
+        </section>
+      )}
     </main>
   );
 }
