@@ -62,6 +62,7 @@ describe('DrillSetup', () => {
       difficulties: [],
       count: 9, // capped at 9
       liveOnly: true,
+      askConfidence: false,
     });
 
     const cancelBtn = Array.from(container.querySelectorAll('button')).find((b) =>
@@ -71,6 +72,53 @@ describe('DrillSetup', () => {
       cancelBtn?.click();
     });
     expect(onCancel).toHaveBeenCalledTimes(1);
+
+    root.unmount();
+  });
+
+  it('toggles askConfidence in the onStart config', async () => {
+    const onStart = vi.fn();
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <DrillSetup
+          taxonomy={taxonomy}
+          facets={facets}
+          onStart={onStart}
+          onCancel={vi.fn()}
+        />,
+      );
+    });
+
+    const confidenceCheckbox = Array.from(
+      container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+    ).find((input) => {
+      const label = input.closest('label');
+      return label?.textContent?.includes('Ask how sure I am after each answer');
+    });
+
+    expect(confidenceCheckbox).toBeDefined();
+    expect(confidenceCheckbox?.checked).toBe(false);
+
+    await act(async () => {
+      confidenceCheckbox?.click();
+    });
+
+    expect(confidenceCheckbox?.checked).toBe(true);
+
+    const startBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Start Drill'),
+    );
+    await act(async () => {
+      startBtn?.click();
+    });
+
+    expect(onStart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        askConfidence: true,
+      }),
+    );
 
     root.unmount();
   });
@@ -148,6 +196,7 @@ describe('DrillSetup', () => {
         section: 'rw',
         domainCode: 'all',
         skillCodes: [],
+        askConfidence: false,
       }),
     );
 
