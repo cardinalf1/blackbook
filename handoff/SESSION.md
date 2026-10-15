@@ -2,6 +2,20 @@
 
 Read this first in a new session, after AGENTS.md and CLAUDE.md. Updated by Claude at the end of each session or milestone. No College Board content in this file.
 
+## Morning report: Phase 4 (2026-10-16, unattended)
+
+**Done and committed** on `claude/phase4-full-test`, tag `phase4-done`. Nothing pushed. Phase 5 not started. Full report, decisions and what I could not verify are at the top of `handoff/RUN-REPORT.md`.
+
+- **Practice test** (home): a full test (Reading and Writing, break, Math) or one section, with an easier or harder Module 2 chosen after Module 1, a break with an absolute-deadline countdown, and a final report with an **estimated score range** (never one number).
+- **Persistence:** the test is a container session whose `test` field holds the state; each module is a normal exam session linked by `exam.testId`. `testStore.reconcile` is idempotent and brings a test up to date after any reload.
+- **Numbers:** routing threshold, weights, difficulty mixes, the score conversion and the 10-minute break are assumptions, all in `src/config/scoringConfig.ts` and `docs/scoring-spec.md`.
+- **Check:** `bun scripts/test-estimate.ts` recomputes the estimate and routing from stored data.
+- **Plan that was followed:** engines and types first (routing, estimate, assembly, flow, preflight), then the store and persistence, then list labels, then the screens (Gemini for four of them, TestFlow by me), then a browser run with shortened clocks.
+
+**To test it:** see "Exact steps" in the Phase 4 report.
+
+---
+
 ## Morning report: Phase 3 (2026-10-15, unattended)
 
 **Done and committed** on `claude/phase3-exam-shell`, tag `phase3-done`. Nothing pushed. Phase 4 not started. Details, decisions and what I could not verify are in `handoff/RUN-REPORT.md` (summary at the top, Phase 3 section at the end).

@@ -1,3 +1,71 @@
+# Morning report: Phase 4 (full practice test, 2026-10-16, unattended)
+
+## Status
+
+**Phase 4 is done** on branch `claude/phase4-full-test`, tag `phase4-done`. Nothing is pushed. Phase 5 is not started. Final gates: typecheck clean, 60 test files and 503 tests passing, `bun run sync` exit 0, and no `data/`, `fixtures/` or `.env` files tracked.
+
+Gemini wrote four of the screens (setup, module-ready, break, report); I reviewed every line and merged them one at a time. Everything touching timers, state, persistence, routing and the estimate is mine.
+
+## What you can do now
+
+On the home page, **Practice test** offers a full test (Reading and Writing, 10-minute break, Math), Reading and Writing only, or Math only. Module 1 of each section is built up front; after Module 1 the app routes to an easier or harder Module 2 and builds it from questions not already used. The final page shows an **estimated score range** per section (and a total for a full test), labeled as an approximation, with the routing result and the usual accuracy tables. An unfinished test appears under **In progress** (as "Full test", with "Module N of 4" or "On the break"); a finished one under **Past drills**. Both resume and reopen from there.
+
+## Definition of done
+
+| Item | Status |
+|---|---|
+| Routing after Module 1 and easier/harder Module 2 | Met. Both directions are unit tested and the easier route was seen in the browser. The harder route was not seen in the browser (my dev run answered nearly nothing) |
+| Assembly with preflight, no repeated questions across modules | Met (tests). The setup screen shows shortfalls and the "include seen" choice; a thin pool refuses to start |
+| Full-test state machine, persisted, resumable | Met. Reloading mid-module, right after a submit and mid-break were all tested; mid-break and after-submit also in the browser |
+| Break screen, absolute deadline, ends at zero by itself or early | Met, in the browser with a 20 second dev break. Reloading mid-break showed the right time left |
+| In progress and Past drills labels | Met. In progress seen in the browser; the Past drills row is covered by tests only |
+| Pause marks the test | Met. A pause in Math Module 2 showed on the report |
+| Estimate range with its label | Met. Never a single number; the range widens with unanswered questions |
+| `scripts/test-estimate.ts` cross-check | Met. Run on the dev run's data: attempts match answers, routing and estimate recompute equal, "Cross-check passed" |
+| Telemetry events documented, `docs/scoring-spec.md`, `docs/exam-spec.md` updated | Met |
+| Task 1 (earlier): Math order official by default | Met. The old order stays behind `MATH_ORDER = 'spec'` |
+
+## Decisions I made
+
+- **Persistence without a schema change:** the test is a "container" session (mode `exam`, no questions of its own) whose `test` field holds the state. Each module is an ordinary exam session linked by `exam.testId`. A single idempotent `reconcile` reads the container and its modules and applies whatever transition is missing, so closing the browser at any moment is safe. The server validator accepts a container and still rejects anything inconsistent.
+- **Module sessions are hidden from the lists;** only the container shows, as one "Full test" row.
+- **Assumed numbers** (all in `src/config/scoringConfig.ts`, marked assumed, listed in `docs/scoring-spec.md`): band weights, the 0.5 weighted routing threshold, the easier and harder difficulty mixes, the 600 ceiling on the easier route, the 400 floor on the harder route, the linear conversion, the range widths, and the 10-minute break. Each stored estimate and routing decision keeps the config version it was computed with.
+- **`scoreBand` is real data:** I checked it over the bank: integers 1 to 7 that nest inside Easy (1 to 3), Medium (4 to 5), Hard (6 to 7). The weights use it; their values are assumptions.
+- **A Start button before each module** so its clock does not run while you read the previous result. No per-module results are shown mid-test; everything is on the final report.
+- **Leaving a started module** keeps its clock running, like a single module.
+- A discarded test marks the test and its open module abandoned. Nothing is deleted.
+
+## What I could not verify
+
+- **Full-length runs.** The browser run used a 40 second module limit and a 20 second break (dev-only localStorage keys `blackbook.dev.examSeconds` and `blackbook.dev.breakSeconds`). Real 32 and 35 minute modules and a real 10 minute break were not run. The clocks use absolute deadlines and the tests use a fake clock, but a full-length run is on you.
+- **The harder-route path in the browser**, and any estimate with realistic answers. The dev run left most questions unanswered, so the estimate there was 200 to 380 and 200 to 370. The scoring unit tests cover both routes and realistic mixes.
+- **Visual quality.** I read the text of every screen and looked at none of them properly; I did not review spacing or contrast. The dev screen says "1 minutes" because 40 seconds rounds up; the real 32 and 35 do not.
+- **The real routing rule and conversion.** They are not public. The estimate is a transparent approximation, good for comparing your own tests with each other, not for predicting test day.
+- **Windows-only run.** Nothing was tried on Mac.
+
+## Known rough edges
+
+- The estimate card shows "midpoint about N" next to the range; with very few answers the midpoint sits at the bottom of the range (200 to 380, midpoint about 200).
+- The setup screen's description hard-codes the real module lengths (27 and 22 questions, 32 and 35 minutes) even when a dev override is set.
+- Line endings: some files are LF in the working tree; git warns about CRLF on commit. Nothing is broken.
+
+## Quota or tool problems
+
+None. Two Gemini tasks ran in separate worktrees without trouble. A few shell edits failed from quoting and were redone with files.
+
+## Exact steps to test it yourself
+
+1. `bun run dev`, open the printed link. Click **Practice test**, leave "Full test" selected and press Start test.
+2. Press Start module for Reading and Writing Module 1 and answer some questions. Reload the page. Home shows "Full test · Module 1 of 4". Resume, then Start module, and the clock keeps its saved time.
+3. Submit Module 1 on the review page. You land on a ready screen for Module 2, with a note saying whether you were routed to the easier or harder one. Start it and submit.
+4. The break appears with a countdown. Reload mid-break, Resume, and confirm the time left is right. Either press End break and continue, or let it reach zero.
+5. Do the Math modules. In one, press Pause, pick a reason, and Resume.
+6. Read the final page: estimate range with its label, the pause note, the routing line per section, the tables, and the questions with explanations. Check that **Past drills** lists it as "Full test" (I only checked this in tests).
+7. Fast version: in the browser console, run `localStorage.setItem('blackbook.dev.examSeconds','40'); localStorage.setItem('blackbook.dev.breakSeconds','20')`, reload, and run the whole test in about 5 minutes. Remove both keys afterwards.
+8. Run `bun scripts/test-estimate.ts` and look for "Cross-check passed".
+
+---
+
 # Run report: Phases 2c, 2d and 3 (unattended run, 2026-10-15)
 
 ## Summary
