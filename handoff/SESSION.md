@@ -2,6 +2,21 @@
 
 Read this first in a new session, after AGENTS.md and CLAUDE.md. Updated by Claude at the end of each session or milestone. No College Board content in this file.
 
+## Phase 2c plan (unattended run, 2026-10-15)
+
+Branch `claude/phase2c-telemetry` from 2b537b8. Gate fix first: `bun run sync` stopped as "stalled" while reading 3,767 cached files from a cold disk; local reads now count as progress (9ace59b).
+
+1. **Interfaces (me).** `src/types/session.ts`: the version 2 session record (mode, status in progress / finished / abandoned, per-question progress with draft answer, change count, active and first-visit time, strikes, flag, confidence), the event record, and the props for every new screen. `docs/telemetry.md` with every event and payload. Commit, then start Gemini.
+2. **Gemini, 2 writers in worktrees, Medium effort:**
+   - `gemini/drill-play`: `DrillPlay.tsx` (question, Back, Next, Finish, confidence control, Retry banner), `FinishConfirm.tsx`, the confidence toggle in `DrillSetup.tsx`, and their tests.
+   - `gemini/drill-report`: `DrillReport.tsx`, `PastDrills.tsx`, `DataPage.tsx` and their tests.
+3. **Storage (me).** Migration 2: sessions table with the new statuses, mode and finish time; attempts gain status (draft or final), mode, change count, first-visit time and confidence; an append-only `events` table indexed by session and question. Migrations can be TypeScript functions, so old session JSON is upgraded in place, and `upgradeSession` is tested. One request saves a session and its attempts in one transaction. New routes: list sessions, append, list and delete events, export, storage stats.
+4. **Telemetry logger (me).** `src/services/telemetry/logger.ts`: `log()` only pushes to memory. A flush every 2 s and on hide or close (keepalive, chunked under 60 KB), a bounded queue (5,000 events) kept in localStorage when the server is down, a dropped counter on `window.__blackbookTelemetry` and in the console, and ids generated in the browser so a resend never duplicates.
+5. **Derived metrics (me).** `src/services/telemetry/metrics.ts`, pure, with tests on synthetic streams (rapid switching, tab hidden mid-question, reload and resume).
+6. **Drill store rewrite (me).** Deferred feedback, selection = answer, Back, Next, Finish, draft upserts on every change through one serialized save queue (a failed save blocks navigation and shows Retry), finalize on Next and Finish, score at Finish, Discard marks the session abandoned, and telemetry from every action.
+7. **Wiring (me).** Merge the Gemini branches one at a time; DrillFlow, Past drills, the Data page and My skills (only final attempts in finished drill sessions count).
+8. **Verification.** `scripts/telemetry-check.ts` prints the derived metrics for the last session and cross-checks them against the stored attempts, plus the event log size per 20-question drill and the extrapolation to 1,000. A browser run: a 20-question drill, a mid-drill reload and resume, the server killed mid-drill, export, and delete telemetry.
+
 ## Morning report (2026-10-15, Part A, unattended run)
 
 **Part A is done through step 5 and committed** on `claude/phase1-ingest` (the last commit adds this report). Nothing pushed. Phase 3 not started.

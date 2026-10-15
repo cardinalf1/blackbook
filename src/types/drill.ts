@@ -16,6 +16,8 @@ export interface DrillConfig {
   count: number;
   /** Only questions listed in the bank's live set. */
   liveOnly: boolean;
+  /** Ask guess / unsure / sure after each answer. Off when missing. */
+  askConfidence?: boolean;
 }
 
 /** The slice of a question the setup screen needs to count and list options. No content. */
