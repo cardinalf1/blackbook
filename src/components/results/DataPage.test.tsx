@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { BackupStore } from '../../types/backup';
 import type { TelemetryStats } from '../../types/session';
 import { DataPage } from './DataPage';
 
@@ -21,6 +22,39 @@ describe('DataPage', () => {
     eventBytes: 2048, // formatBytes(2048) -> "2 KB"
   };
 
+  const createMockBackupStore = (overrides: Partial<BackupStore> = {}): BackupStore => ({
+    list: vi.fn().mockResolvedValue({
+      backups: [
+        {
+          name: 'blackbook-2026-10-16.json',
+          at: 1776345600000,
+          sizeBytes: 4096,
+          kind: 'daily',
+        },
+        {
+          name: 'blackbook-safety-2026-10-15.json',
+          at: 1776259200000,
+          sizeBytes: 8192,
+          kind: 'before_restore',
+        },
+      ],
+      lastBackupAt: 1776345600000,
+    }),
+    restoreSnapshot: vi.fn().mockResolvedValue({
+      sessions: 3,
+      attempts: 12,
+      events: 45,
+      mistakeTags: 2,
+    }),
+    restoreExport: vi.fn().mockResolvedValue({
+      sessions: 1,
+      attempts: 4,
+      events: 10,
+      mistakeTags: 0,
+    }),
+    ...overrides,
+  });
+
   it('renders stats with formatted bytes and copy sentence', async () => {
     const onBack = vi.fn();
     const root = createRoot(container);
@@ -34,6 +68,7 @@ describe('DataPage', () => {
           onDeleteTelemetry={vi.fn().mockResolvedValue(undefined)}
           onDeleteAll={vi.fn().mockResolvedValue(undefined)}
           onBack={onBack}
+          backupStore={createMockBackupStore()}
         />,
       );
     });
@@ -73,6 +108,7 @@ describe('DataPage', () => {
           onDeleteTelemetry={vi.fn().mockResolvedValue(undefined)}
           onDeleteAll={vi.fn().mockResolvedValue(undefined)}
           onBack={vi.fn()}
+          backupStore={createMockBackupStore()}
         />,
       );
     });
@@ -96,6 +132,7 @@ describe('DataPage', () => {
           onDeleteTelemetry={vi.fn().mockResolvedValue(undefined)}
           onDeleteAll={vi.fn().mockResolvedValue(undefined)}
           onBack={vi.fn()}
+          backupStore={createMockBackupStore()}
         />,
       );
     });
@@ -120,6 +157,7 @@ describe('DataPage', () => {
           onDeleteTelemetry={onDeleteTelemetry}
           onDeleteAll={vi.fn().mockResolvedValue(undefined)}
           onBack={vi.fn()}
+          backupStore={createMockBackupStore()}
         />,
       );
     });
@@ -201,6 +239,7 @@ describe('DataPage', () => {
           onDeleteTelemetry={onDeleteTelemetry}
           onDeleteAll={vi.fn().mockResolvedValue(undefined)}
           onBack={vi.fn()}
+          backupStore={createMockBackupStore()}
         />,
       );
     });
@@ -241,6 +280,7 @@ describe('DataPage', () => {
           onDeleteTelemetry={vi.fn().mockResolvedValue(undefined)}
           onDeleteAll={vi.fn().mockResolvedValue(undefined)}
           onBack={vi.fn()}
+          backupStore={createMockBackupStore()}
         />,
       );
     });
@@ -286,6 +326,7 @@ describe('DataPage', () => {
           onDeleteTelemetry={vi.fn().mockResolvedValue(undefined)}
           onDeleteAll={onDeleteAll}
           onBack={vi.fn()}
+          backupStore={createMockBackupStore()}
         />,
       );
     });
@@ -312,6 +353,530 @@ describe('DataPage', () => {
     });
 
     expect(onDeleteAll).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  /* -------------------------------------------------------------------------
+   * Backup and restore tests
+   * ------------------------------------------------------------------------- */
+
+  it('renders snapshot list, kind labels, sizes, date, Last backup time, and plain note', async () => {
+    const mockStore = createMockBackupStore();
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <DataPage
+          stats={mockStats}
+          statsError={null}
+          onExport={vi.fn().mockResolvedValue(undefined)}
+          onDeleteTelemetry={vi.fn().mockResolvedValue(undefined)}
+          onDeleteAll={vi.fn().mockResolvedValue(undefined)}
+          onBack={vi.fn()}
+          backupStore={mockStore}
+        />,
+      );
+    });
+
+    expect(mockStore.list).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('Backups and restore');
+    expect(container.textContent).toContain(
+      `Last backup: ${new Date(1776345600000).toLocaleString()}`,
+    );
+    expect(container.textContent).toContain(
+      'Backups hold your progress only, never the question bank; the app keeps the last 7 daily snapshots.',
+    );
+
+    // First snapshot
+    expect(container.textContent).toContain('blackbook-2026-10-16.json');
+    expect(container.textContent).toContain('Daily');
+    expect(container.textContent).toContain('4 KB');
+
+    // Second snapshot
+    expect(container.textContent).toContain('blackbook-safety-2026-10-15.json');
+    expect(container.textContent).toContain('Safety copy before a restore');
+    expect(container.textContent).toContain('8 KB');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('renders "No backup yet" when there are no snapshots', async () => {
+    const mockStore = createMockBackupStore({
+      list: vi.fn().mockResolvedValue({ backups: [], lastBackupAt: null }),
+    });
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <DataPage
+          stats={mockStats}
+          statsError={null}
+          onExport={vi.fn().mockResolvedValue(undefined)}
+          onDeleteTelemetry={vi.fn().mockResolvedValue(undefined)}
+          onDeleteAll={vi.fn().mockResolvedValue(undefined)}
+          onBack={vi.fn()}
+          backupStore={mockStore}
+        />,
+      );
+    });
+
+    expect(container.textContent).toContain('No backup yet');
+    expect(container.textContent).toContain('No snapshots saved yet.');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('confirm text: shows exact confirmation message for snapshot restore and file restore', async () => {
+    const mockStore = createMockBackupStore();
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <DataPage
+          stats={mockStats}
+          statsError={null}
+          onExport={vi.fn().mockResolvedValue(undefined)}
+          onDeleteTelemetry={vi.fn().mockResolvedValue(undefined)}
+          onDeleteAll={vi.fn().mockResolvedValue(undefined)}
+          onBack={vi.fn()}
+          backupStore={mockStore}
+        />,
+      );
+    });
+
+    // 1. Snapshot confirmation
+    const snapshotRestoreBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Restore',
+    );
+    expect(snapshotRestoreBtn).toBeDefined();
+
+    await act(async () => {
+      snapshotRestoreBtn?.click();
+    });
+
+    const snapshotDialog = container.querySelector('[role="alertdialog"]');
+    expect(snapshotDialog).not.toBeNull();
+    expect(snapshotDialog?.textContent).toContain(
+      'This replaces your current progress with the backup. A safety copy of your current progress is saved first.',
+    );
+    const cancelBtn = Array.from(snapshotDialog?.querySelectorAll('button') ?? []).find(
+      (b) => b.textContent?.trim() === 'Cancel',
+    );
+    const confirmRestoreBtn = Array.from(snapshotDialog?.querySelectorAll('button') ?? []).find(
+      (b) => b.textContent?.trim() === 'Restore',
+    );
+    expect(cancelBtn).toBeDefined();
+    expect(confirmRestoreBtn).toBeDefined();
+
+    // Close snapshot confirmation
+    await act(async () => {
+      cancelBtn?.click();
+    });
+    expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+
+    // 2. File restore confirmation
+    const fileInput = container.querySelector(
+      'input[type="file"][aria-label="Restore from an export file"]',
+    ) as HTMLInputElement;
+    expect(fileInput).not.toBeNull();
+
+    const testFile = new File(['{"sessions": []}'], 'blackbook-export.json', {
+      type: 'application/json',
+    });
+
+    await act(async () => {
+      Object.defineProperty(fileInput, 'files', {
+        value: [testFile],
+        writable: true,
+        configurable: true,
+      });
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const fileDialog = container.querySelector('[role="alertdialog"]');
+    expect(fileDialog).not.toBeNull();
+    expect(fileDialog?.textContent).toContain(
+      'This replaces your current progress with the backup. A safety copy of your current progress is saved first.',
+    );
+    expect(
+      Array.from(fileDialog?.querySelectorAll('button') ?? []).some(
+        (b) => b.textContent?.trim() === 'Cancel',
+      ),
+    ).toBe(true);
+    expect(
+      Array.from(fileDialog?.querySelectorAll('button') ?? []).some(
+        (b) => b.textContent?.trim() === 'Restore',
+      ),
+    ).toBe(true);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('cancel does nothing: closing confirmation leaves store untouched', async () => {
+    const mockStore = createMockBackupStore();
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <DataPage
+          stats={mockStats}
+          statsError={null}
+          onExport={vi.fn().mockResolvedValue(undefined)}
+          onDeleteTelemetry={vi.fn().mockResolvedValue(undefined)}
+          onDeleteAll={vi.fn().mockResolvedValue(undefined)}
+          onBack={vi.fn()}
+          backupStore={mockStore}
+        />,
+      );
+    });
+
+    // 1. Snapshot cancel
+    const snapshotRestoreBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Restore',
+    );
+    await act(async () => {
+      snapshotRestoreBtn?.click();
+    });
+
+    const snapshotDialog = container.querySelector('[role="alertdialog"]');
+    const snapshotCancel = Array.from(snapshotDialog?.querySelectorAll('button') ?? []).find(
+      (b) => b.textContent?.trim() === 'Cancel',
+    );
+    await act(async () => {
+      snapshotCancel?.click();
+    });
+
+    expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(mockStore.restoreSnapshot).not.toHaveBeenCalled();
+
+    // 2. File cancel
+    const fileInput = container.querySelector(
+      'input[type="file"][aria-label="Restore from an export file"]',
+    ) as HTMLInputElement;
+    const testFile = new File(['{"sessions": []}'], 'export.json', { type: 'application/json' });
+
+    await act(async () => {
+      Object.defineProperty(fileInput, 'files', {
+        value: [testFile],
+        writable: true,
+        configurable: true,
+      });
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const fileDialog = container.querySelector('[role="alertdialog"]');
+    const fileCancel = Array.from(fileDialog?.querySelectorAll('button') ?? []).find(
+      (b) => b.textContent?.trim() === 'Cancel',
+    );
+    await act(async () => {
+      fileCancel?.click();
+    });
+
+    expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(mockStore.restoreExport).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('restore calls the store once and shows result counts for snapshot', async () => {
+    const mockStore = createMockBackupStore({
+      restoreSnapshot: vi.fn().mockResolvedValue({
+        sessions: 5,
+        attempts: 18,
+        events: 90,
+        mistakeTags: 3,
+      }),
+    });
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <DataPage
+          stats={mockStats}
+          statsError={null}
+          onExport={vi.fn().mockResolvedValue(undefined)}
+          onDeleteTelemetry={vi.fn().mockResolvedValue(undefined)}
+          onDeleteAll={vi.fn().mockResolvedValue(undefined)}
+          onBack={vi.fn()}
+          backupStore={mockStore}
+        />,
+      );
+    });
+
+    const restoreBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Restore',
+    );
+    await act(async () => {
+      restoreBtn?.click();
+    });
+
+    const dialog = container.querySelector('[role="alertdialog"]');
+    const confirmBtn = Array.from(dialog?.querySelectorAll('button') ?? []).find(
+      (b) => b.textContent?.trim() === 'Restore',
+    );
+
+    await act(async () => {
+      confirmBtn?.click();
+    });
+
+    expect(mockStore.restoreSnapshot).toHaveBeenCalledTimes(1);
+    expect(mockStore.restoreSnapshot).toHaveBeenCalledWith('blackbook-2026-10-16.json');
+
+    // Confirm dialog closed
+    expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+
+    // Result counts displayed
+    expect(container.textContent).toContain('5 sessions');
+    expect(container.textContent).toContain('18 attempts');
+    expect(container.textContent).toContain('90 events');
+    expect(container.textContent).toContain('3 mistake tags');
+
+    // backupStore.list was called to refresh snapshots
+    expect(mockStore.list).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('restore calls the store once and shows result counts for file restore', async () => {
+    const mockStore = createMockBackupStore({
+      restoreExport: vi.fn().mockResolvedValue({
+        sessions: 2,
+        attempts: 6,
+        events: 20,
+        mistakeTags: 1,
+      }),
+    });
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <DataPage
+          stats={mockStats}
+          statsError={null}
+          onExport={vi.fn().mockResolvedValue(undefined)}
+          onDeleteTelemetry={vi.fn().mockResolvedValue(undefined)}
+          onDeleteAll={vi.fn().mockResolvedValue(undefined)}
+          onBack={vi.fn()}
+          backupStore={mockStore}
+        />,
+      );
+    });
+
+    const fileInput = container.querySelector(
+      'input[type="file"][aria-label="Restore from an export file"]',
+    ) as HTMLInputElement;
+    const testFile = new File(['{"app":"blackbook","sessions":[]}'], 'my-backup.json', {
+      type: 'application/json',
+    });
+
+    await act(async () => {
+      Object.defineProperty(fileInput, 'files', {
+        value: [testFile],
+        writable: true,
+        configurable: true,
+      });
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const dialog = container.querySelector('[role="alertdialog"]');
+    const confirmBtn = Array.from(dialog?.querySelectorAll('button') ?? []).find(
+      (b) => b.textContent?.trim() === 'Restore',
+    );
+
+    await act(async () => {
+      confirmBtn?.click();
+    });
+
+    expect(mockStore.restoreExport).toHaveBeenCalledTimes(1);
+    expect(mockStore.restoreExport).toHaveBeenCalledWith({
+      app: 'blackbook',
+      sessions: [],
+    });
+
+    expect(container.textContent).toContain('2 sessions');
+    expect(container.textContent).toContain('6 attempts');
+    expect(container.textContent).toContain('20 events');
+    expect(container.textContent).toContain('1 mistake tags');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('bad JSON shows an error and does not call restoreExport', async () => {
+    const mockStore = createMockBackupStore();
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <DataPage
+          stats={mockStats}
+          statsError={null}
+          onExport={vi.fn().mockResolvedValue(undefined)}
+          onDeleteTelemetry={vi.fn().mockResolvedValue(undefined)}
+          onDeleteAll={vi.fn().mockResolvedValue(undefined)}
+          onBack={vi.fn()}
+          backupStore={mockStore}
+        />,
+      );
+    });
+
+    const fileInput = container.querySelector(
+      'input[type="file"][aria-label="Restore from an export file"]',
+    ) as HTMLInputElement;
+    const badFile = new File(['{ this is not valid json : 123'], 'bad.json', {
+      type: 'application/json',
+    });
+
+    await act(async () => {
+      Object.defineProperty(fileInput, 'files', {
+        value: [badFile],
+        writable: true,
+        configurable: true,
+      });
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const dialog = container.querySelector('[role="alertdialog"]');
+    const confirmBtn = Array.from(dialog?.querySelectorAll('button') ?? []).find(
+      (b) => b.textContent?.trim() === 'Restore',
+    );
+
+    await act(async () => {
+      confirmBtn?.click();
+    });
+
+    expect(mockStore.restoreExport).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Invalid JSON');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('plain error message displayed when store rejects restore', async () => {
+    const mockStore = createMockBackupStore({
+      restoreSnapshot: vi.fn().mockRejectedValue(new Error('damaged or not a Blackbook file')),
+    });
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <DataPage
+          stats={mockStats}
+          statsError={null}
+          onExport={vi.fn().mockResolvedValue(undefined)}
+          onDeleteTelemetry={vi.fn().mockResolvedValue(undefined)}
+          onDeleteAll={vi.fn().mockResolvedValue(undefined)}
+          onBack={vi.fn()}
+          backupStore={mockStore}
+        />,
+      );
+    });
+
+    const restoreBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Restore',
+    );
+    await act(async () => {
+      restoreBtn?.click();
+    });
+
+    const dialog = container.querySelector('[role="alertdialog"]');
+    const confirmBtn = Array.from(dialog?.querySelectorAll('button') ?? []).find(
+      (b) => b.textContent?.trim() === 'Restore',
+    );
+
+    await act(async () => {
+      confirmBtn?.click();
+    });
+
+    expect(mockStore.restoreSnapshot).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('damaged or not a Blackbook file');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('disables buttons while busy during restore', async () => {
+    let resolveRestore!: (res: {
+      sessions: number;
+      attempts: number;
+      events: number;
+      mistakeTags: number;
+    }) => void;
+    const restorePromise = new Promise<{
+      sessions: number;
+      attempts: number;
+      events: number;
+      mistakeTags: number;
+    }>((resolve) => {
+      resolveRestore = resolve;
+    });
+
+    const mockStore = createMockBackupStore({
+      restoreSnapshot: vi.fn().mockReturnValue(restorePromise),
+    });
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <DataPage
+          stats={mockStats}
+          statsError={null}
+          onExport={vi.fn().mockResolvedValue(undefined)}
+          onDeleteTelemetry={vi.fn().mockResolvedValue(undefined)}
+          onDeleteAll={vi.fn().mockResolvedValue(undefined)}
+          onBack={vi.fn()}
+          backupStore={mockStore}
+        />,
+      );
+    });
+
+    const restoreBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Restore',
+    );
+    await act(async () => {
+      restoreBtn?.click();
+    });
+
+    const dialog = container.querySelector('[role="alertdialog"]');
+    const confirmBtn = Array.from(dialog?.querySelectorAll('button') ?? []).find(
+      (b) => b.textContent?.trim() === 'Restore',
+    );
+
+    // Trigger restore (which stays pending)
+    let clickPromise: Promise<void>;
+    act(() => {
+      clickPromise = Promise.resolve(confirmBtn?.click());
+    });
+
+    // While busy:
+    expect(container.textContent).toContain('Working...');
+    const allButtons = Array.from(container.querySelectorAll('button'));
+    expect(allButtons.every((b) => b.disabled)).toBe(true);
+
+    // Complete restore
+    await act(async () => {
+      resolveRestore({ sessions: 1, attempts: 2, events: 3, mistakeTags: 4 });
+      await clickPromise;
+    });
+
+    expect(container.textContent).not.toContain('Working...');
+    expect(container.textContent).toContain('1 sessions');
 
     await act(async () => {
       root.unmount();
