@@ -48,8 +48,13 @@ export function startTelemetry(): void {
   telemetry.start();
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') telemetry.flushOnHide();
+    else telemetry.visible();
   });
   window.addEventListener('pagehide', () => telemetry.flushOnHide());
+  // Back from the back-forward cache.
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted) telemetry.visible();
+  });
   // For checking from the dev console: window.__blackbookTelemetry.stats()
   (window as unknown as { __blackbookTelemetry: { stats: EventLogger['stats'] } }).__blackbookTelemetry = { stats: () => telemetry.stats() };
   console.info('[blackbook telemetry] started; dropped events: 0. Check with __blackbookTelemetry.stats()');

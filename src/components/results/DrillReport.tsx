@@ -255,7 +255,7 @@ export function DrillReport({
               const isOpen = openIds.has(item.questionId);
               const difficultyLabel = DIFFICULTY_LABELS[item.difficulty] ?? item.difficulty;
               const hasDiffFirstVisit =
-                item.firstVisitMs !== null && item.firstVisitMs !== item.activeMs;
+                item.firstVisitMs !== null && formatDuration(item.firstVisitMs) !== formatDuration(item.activeMs);
 
               return (
                 <div

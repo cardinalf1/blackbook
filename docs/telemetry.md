@@ -95,7 +95,8 @@ Pointer movement does not count as input and is not recorded.
 - `log()` only appends to an in-memory queue. It never waits on the network.
 - The queue is sent in batches every 2 seconds, and when the page is hidden or closed, using `keepalive` requests (each under 60 KB).
 - When the server does not answer, events stay queued and are retried with backoff. When the page is hidden while events are still unsent, they are also copied to `localStorage` and sent on the next load.
-- The queue holds at most 5,000 events. Past that the oldest are dropped and counted. The counter is on `window.__blackbookTelemetry` and is printed to the browser console whenever it changes.
+- Once the page has started hiding, every further event is copied to `localStorage` and sent at once, because other page-hide handlers (the question screen's "question hidden") run after the logger's own.
+- The queue holds at most 5,000 events. Past that the oldest are dropped and counted. `window.__blackbookTelemetry.stats()` in the browser console shows the counter (with queued, sent and failed flushes); a drop is also printed to the console, at most once a second.
 - This is separate from saving answers. Answer saves stay strict: a failed save shows a Retry banner and blocks navigation.
 
 ## Derived metrics
@@ -105,3 +106,13 @@ Pointer movement does not count as input and is not recorded.
 - **Wall time:** from `question_shown` to the matching `question_hidden` (or, if the page closed without one, the session's next event), all visits added up.
 - **Active time:** wall time minus time with the tab hidden. This is the same definition the attempt's `timeMs` uses.
 - **Idle time:** the part of active time inside idle periods (from the last input to `idle_end`).
+
+## Measured cost (Phase 2c, dev build, Chrome)
+
+- `log()`: about 1.4 microseconds per call (20,000 calls in the browser).
+- Serializing one full batch (76 KB) for sending: about 0.07 ms.
+- Click on a choice to the next painted frame, with the event logged and the answer saved: median 10.0 ms, worst 11.3 ms over 30 clicks, which is the next animation frame.
+
+## Size
+
+A 20-question drill with changes, flags, an outage and a reload logged 147 events, about 31 KB (1.6 KB per question). At that rate 1,000 questions take about 1.5 MB in the event log, plus index pages.

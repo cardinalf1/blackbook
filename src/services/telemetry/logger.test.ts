@@ -111,6 +111,23 @@ describe('event logger', () => {
     expect(h.stored).toHaveLength(2);
   });
 
+  it('events logged after the page started hiding are kept and sent at once', async () => {
+    const h = harness();
+    h.log.log('tab_hidden', ctx, {});
+    h.log.flushOnHide(); // the logger's own handler runs first
+    await Promise.resolve();
+    // Another pagehide handler logs afterwards: it must not wait for a timer that will never fire.
+    h.log.log('question_hidden', ctx, { index: 0, visitActiveMs: 4000, reason: 'unload' });
+    expect(h.saved.events?.map((e) => e.type)).toEqual(['question_hidden']);
+    expect(h.calls.filter((c) => c.keepalive)).toHaveLength(2);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(h.stored.map((e) => e.type)).toEqual(['tab_hidden', 'question_hidden']);
+    h.log.visible();
+    h.log.log('tab_visible', ctx, {});
+    expect(h.calls.filter((c) => c.keepalive)).toHaveLength(2); // normal batching again
+  });
+
   it('a reload during an outage loses nothing: the next page sends what the last one kept', async () => {
     const first = harness();
     first.setUp(false);

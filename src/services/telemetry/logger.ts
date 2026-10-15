@@ -32,8 +32,14 @@ export interface EventLogger {
   log<T extends EventType>(type: T, ctx: EventContext, payload: EventPayloads[T]): void;
   /** Sends everything queued, in batches. Resolves when the queue is empty or a send failed. */
   flush(): Promise<void>;
-  /** For pagehide and a hidden tab: keeps unsent events locally and sends one keepalive batch. */
+  /**
+   * For pagehide and a hidden tab: keeps unsent events locally and sends one keepalive batch.
+   * Until visible() is called, every later log() does the same at once, because other page-hide
+   * handlers may log after this one has run (their events would otherwise die with the page).
+   */
   flushOnHide(): void;
+  /** The page is visible again: back to normal batching. */
+  visible(): void;
   /** Loads events left from an earlier page and begins flushing. */
   start(): void;
   stop(): void;
@@ -79,6 +85,7 @@ export function createEventLogger(deps: LoggerDeps): EventLogger {
   let backoffMs = flushEveryMs;
   let persisted = false;
   let stopped = false;
+  let hiding = false;
   const st: LoggerStats = { queued: 0, sent: 0, dropped: 0, failedFlushes: 0, lastError: null };
 
   const schedule = (ms: number) => {
@@ -167,12 +174,19 @@ export function createEventLogger(deps: LoggerDeps): EventLogger {
           payload,
         },
       ]);
-      schedule(flushEveryMs);
+      if (hiding) this.flushOnHide();
+      else schedule(flushEveryMs);
     },
 
     flush,
 
+    visible() {
+      hiding = false;
+      if (queue.length > 0) schedule(flushEveryMs);
+    },
+
     flushOnHide() {
+      hiding = true;
       if (queue.length === 0) return;
       try {
         deps.persistence?.save(queue);

@@ -304,6 +304,24 @@ describe('drill store: never losing an answer', () => {
     expect(await store.getState().go('next', 1, 600)).toBe(true);
   });
 
+  it('a "flag for later" that fails is retried by Retry', async () => {
+    const { attempts, mk, facets } = await setup();
+    const store = mk();
+    await store.getState().start(config, facets);
+    const id = curId(store);
+    const realSetFlag = attempts.setFlag.bind(attempts);
+    attempts.setFlag = async () => {
+      throw new Error('down');
+    };
+    store.getState().toggleFlag();
+    await settled();
+    expect(store.getState().error).toMatch(/flag for later/);
+    attempts.setFlag = realSetFlag;
+    await store.getState().retrySave();
+    expect(store.getState().error).toBeNull();
+    expect((await attempts.listFlags()).map((f) => f.questionId)).toEqual([id]);
+  });
+
   it('a Finish that cannot be saved leaves the drill open, and Retry finishes it', async () => {
     const { attempts, mk, facets } = await setup();
     const store = mk();

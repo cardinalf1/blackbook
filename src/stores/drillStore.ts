@@ -125,6 +125,8 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
   let typingQuestion: string | null = null;
   /** A finish whose save failed, retried by retrySave. */
   let pendingFinishMs: number | null = null;
+  /** "Flag for later" writes that failed, retried by retrySave and by the next flag change. */
+  const pendingFlags = new Map<string, boolean>();
 
   // ---- save queue ----
   let dirtyAttempts = new Map<string, StoredAttempt>();
@@ -250,6 +252,21 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
       pendingFinishMs = null;
       dirtyAttempts = new Map();
       dirtySession = false;
+    };
+
+    const FLAG_ERROR = 'Could not save the flag for later: ';
+    /** Sends every pending "flag for later" change; keeps the ones that fail. */
+    const sendFlags = async () => {
+      for (const [id, flagged] of [...pendingFlags]) {
+        try {
+          await deps.attempts.setFlag(id, flagged);
+          if (pendingFlags.get(id) === flagged) pendingFlags.delete(id);
+        } catch (e) {
+          set({ error: `${FLAG_ERROR}${msg(e)}` });
+          return;
+        }
+      }
+      if (get().error?.startsWith(FLAG_ERROR)) set({ error: null });
     };
 
     const finishNow = async (activeMs: number): Promise<boolean> => {
@@ -412,7 +429,8 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
         if (flagged) flags[id] = true;
         else delete flags[id];
         set({ flags });
-        deps.attempts.setFlag(id, flagged).catch((e: unknown) => set({ error: `Could not save the flag for later: ${msg(e)}` }));
+        pendingFlags.set(id, flagged);
+        void sendFlags();
       },
 
       rate(rating) {
@@ -473,6 +491,7 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
 
       async retrySave() {
         set({ saveError: null, saving: true });
+        if (pendingFlags.size > 0) await sendFlags();
         if (dirtySession) pump();
         await settle();
         if (get().saveError === null && pendingFinishMs !== null) await finishNow(pendingFinishMs);

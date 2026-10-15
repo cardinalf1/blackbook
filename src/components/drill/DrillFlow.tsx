@@ -117,7 +117,18 @@ function PlayScreen({ onExit, onFinished }: { onExit: () => void; onFinished: (s
 
   return (
     <div className="space-y-3">
-      {error && <Notice error>{error}</Notice>}
+      {error && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-red-900/50 bg-[#121215] p-4 text-sm text-red-400" role="alert">
+          <span className="min-w-0 flex-1">{error}</span>
+          <button
+            type="button"
+            onClick={() => void drillStore.getState().retrySave()}
+            className="rounded-md bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {/* Keyed by question: a new visit starts a new focus timer. */}
       <PlayQuestion key={`${session.id}:${id}`} session={session} question={question} onExit={onExit} />
     </div>

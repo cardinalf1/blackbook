@@ -40,3 +40,6 @@ One line per idea, grouped by phase (AGENTS.md rule 8).
 - The setup screen and question browser load the whole bank over the local API (about 35 MB); add a facets endpoint if it feels slow.
 - Data folder actions: open the folder, export progress as JSON, reset progress, delete the bank (Part B, with packaging).
 - Show the time a refresh will take using the cache, not only the fresh-download estimate.
+- Drill report: close (and stop timing) an open explanation when a filter hides its row.
+- Data page: show where the data folder is and offer to open it.
+- Telemetry: a dev-only switch to turn the logger off, for A/B latency checks.
