@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadRows } from '../../services/browse/rows';
+import { loadPoolHealth, type PoolHealthView } from '../../services/retry/load';
 import { moduleDurationMs } from '../../services/test/devOverrides';
 import { breakRemainingMs, currentSlot, currentStep, routeOf } from '../../services/test/flow';
 import { preflightTest } from '../../services/test/preflight';
@@ -88,11 +89,14 @@ export function TestFlow({ startAt, testId, onExit, onMySkills }: Props) {
 function SetupStep({ busy, error, onCancel }: { busy: boolean; error: string | null; onCancel: () => void }) {
   const [kind, setKind] = useState<TestKind>('full');
   const [includeSeen, setIncludeSeen] = useState(false);
+  const [allowRepeats, setAllowRepeats] = useState(false);
+  const [poolHealth, setPoolHealth] = useState<PoolHealthView | null>(null);
   const [rows, setRows] = useState<BrowseRow[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     loadRows().then(setRows, (e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)));
+    loadPoolHealth().then(setPoolHealth, () => undefined);
   }, []);
 
   // Checked again only when the format changes, so "Start" shows what will really be built.
@@ -108,9 +112,12 @@ function SetupStep({ busy, error, onCancel }: { busy: boolean; error: string | n
       preflight={preflight}
       includeSeen={includeSeen}
       onIncludeSeenChange={setIncludeSeen}
+      allowRepeats={allowRepeats}
+      onAllowRepeatsChange={setAllowRepeats}
+      poolHealth={poolHealth}
       busy={busy}
       error={loadError ?? error}
-      onStart={() => void testStore.getState().start(kind, includeSeen)}
+      onStart={() => void testStore.getState().start(kind, includeSeen, allowRepeats)}
       onCancel={onCancel}
     />
   );

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { applyFilters, pickRandom } from '../../services/browse/filter';
 import { loadRows } from '../../services/browse/rows';
+import { tierOf } from '../../services/eligibility/eligibility';
+import { loadPoolHealth } from '../../services/retry/load';
 import { drillStore, useDrill } from '../../stores/drillStore';
 import { DEFAULT_BROWSE_FILTERS, type BrowseRow, type BrowseViewState } from '../../types/browse';
 import { PlayScreen, ReportScreen } from '../drill/DrillFlow';
@@ -23,6 +25,7 @@ export function BrowseScreen({ onBack, onMySkills }: { onBack: () => void; onMyS
   const [error, setError] = useState<string | null>(null);
   const [state, setState] = useState<BrowseViewState>(savedState);
   const [mode, setMode] = useState<Mode>({ kind: 'list' });
+  const [warning, setWarning] = useState(false);
   const storeError = useDrill((s) => s.error);
   const restoreScroll = useRef(true);
 
@@ -52,6 +55,23 @@ export function BrowseScreen({ onBack, onMySkills }: { onBack: () => void; onMyS
 
   const open = async (questionId: string) => {
     savedScroll = window.scrollY;
+    let shouldWarn = false;
+    const row = rows?.find((r) => r.id === questionId);
+    if (row) {
+      const tier = tierOf(row);
+      if (tier === 'fresh' || tier === 'soft') {
+        try {
+          const health = await loadPoolHealth();
+          const count = row.section === 'rw' ? health.fresh.rw : health.fresh.math;
+          if (count < 3) {
+            shouldWarn = true;
+          }
+        } catch {
+          // ignore error
+        }
+      }
+    }
+    setWarning(shouldWarn);
     await drillStore.getState().startSingle(questionId);
     if (drillStore.getState().session) {
       setMode({ kind: 'practice' });
@@ -61,6 +81,7 @@ export function BrowseScreen({ onBack, onMySkills }: { onBack: () => void; onMyS
 
   const backToList = () => {
     restoreScroll.current = true;
+    setWarning(false);
     setMode({ kind: 'list' });
     refresh();
   };
@@ -68,7 +89,18 @@ export function BrowseScreen({ onBack, onMySkills }: { onBack: () => void; onMyS
   if (error) return <div className="rounded-lg border border-red-900/50 bg-[#121215] p-5 text-sm text-red-400" role="alert">Could not load the questions: {error}</div>;
   if (!rows) return <div className="rounded-lg border border-[#27272A] bg-[#121215] p-6 text-center text-sm text-zinc-400">Loading questions...</div>;
 
-  if (mode.kind === 'practice') return <PlayScreen onExit={backToList} onFinished={(sessionId) => setMode({ kind: 'report', sessionId })} />;
+  if (mode.kind === 'practice') {
+    return (
+      <div className="space-y-3">
+        {warning && (
+          <p className="text-xs text-amber-300">
+            Doing this removes it from future full tests.
+          </p>
+        )}
+        <PlayScreen onExit={backToList} onFinished={(sessionId) => setMode({ kind: 'report', sessionId })} />
+      </div>
+    );
+  }
   if (mode.kind === 'report') {
     return (
       <ReportScreen

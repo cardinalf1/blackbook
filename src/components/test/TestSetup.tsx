@@ -1,4 +1,7 @@
-import type { TestKind, TestPreflight, TestSetupProps } from '../../types/test';
+import { useEffect, useState } from 'react';
+import type { TestKind, TestPreflight, TestSetupProps as BaseTestSetupProps } from '../../types/test';
+import { loadPoolHealth, type PoolHealthView } from '../../services/retry/load';
+import type { PoolHealth } from '../../services/test/pool';
 
 const KINDS: readonly { id: TestKind; label: string }[] = [
   { id: 'full', label: 'Full test (Reading and Writing, break, Math)' },
@@ -6,17 +9,50 @@ const KINDS: readonly { id: TestKind; label: string }[] = [
   { id: 'math', label: 'Math only' },
 ];
 
-function canStartTest(preflight: TestPreflight | null, busy: boolean, includeSeen: boolean): boolean {
+export interface TestSetupProps extends BaseTestSetupProps {
+  allowRepeats?: boolean;
+  onAllowRepeatsChange?: (allow: boolean) => void;
+  poolHealth?: PoolHealth | PoolHealthView | null;
+}
+
+function formatPoolCount(n: number): string {
+  return n >= 50 ? '50 or more' : String(n);
+}
+
+function getPoolHealthText(health: PoolHealth | PoolHealthView | null | undefined, kind: TestKind): string | null {
+  if (!health) return null;
+  const p: PoolHealth = 'fresh' in health ? health.fresh : health;
+  if (kind === 'full') {
+    return `Full tests left: ${formatPoolCount(p.full)} (estimate)`;
+  }
+  if (kind === 'rw') {
+    return `Reading and Writing tests left: ${formatPoolCount(p.rw)} (estimate)`;
+  }
+  if (kind === 'math') {
+    return `Math tests left: ${formatPoolCount(p.math)} (estimate)`;
+  }
+  return null;
+}
+
+function canStartTest(
+  preflight: TestPreflight | null,
+  busy: boolean,
+  includeSeen: boolean,
+  allowRepeats: boolean,
+): boolean {
   if (preflight === null || busy) {
     return false;
   }
   if (!preflight.allPossible) {
     return false;
   }
-  if (!preflight.allUnseen && !includeSeen) {
-    return false;
+  if (preflight.allUnseen) {
+    return true;
   }
-  return true;
+  if (preflight.allSoft) {
+    return includeSeen;
+  }
+  return allowRepeats;
 }
 
 export function TestSetup({
@@ -25,12 +61,33 @@ export function TestSetup({
   preflight,
   includeSeen,
   onIncludeSeenChange,
+  allowRepeats: controlledAllowRepeats,
+  onAllowRepeatsChange,
+  poolHealth: propPoolHealth,
   busy,
   error,
   onStart,
   onCancel,
 }: TestSetupProps) {
-  const isStartDisabled = !canStartTest(preflight, busy, includeSeen);
+  const [internalAllowRepeats, setInternalAllowRepeats] = useState(false);
+  const allowRepeats = controlledAllowRepeats !== undefined ? controlledAllowRepeats : internalAllowRepeats;
+
+  const handleAllowRepeatsChange = (val: boolean) => {
+    setInternalAllowRepeats(val);
+    onAllowRepeatsChange?.(val);
+  };
+
+  const [loadedHealth, setLoadedHealth] = useState<PoolHealthView | null>(null);
+  useEffect(() => {
+    if (propPoolHealth === undefined) {
+      loadPoolHealth().then(setLoadedHealth, () => undefined);
+    }
+  }, [propPoolHealth]);
+
+  const activeHealth = propPoolHealth !== undefined ? propPoolHealth : loadedHealth;
+  const poolHealthText = getPoolHealthText(activeHealth, kind);
+
+  const isStartDisabled = !canStartTest(preflight, busy, includeSeen, allowRepeats);
 
   return (
     <section className="space-y-6 rounded-lg border border-[#27272A] bg-[#121215] p-6 text-[#FAFAFA]">
@@ -74,7 +131,10 @@ export function TestSetup({
       </fieldset>
 
       <div className="space-y-3 rounded-md border border-[#27272A] bg-[#0A0A0C] p-4 text-sm">
-        <h3 className="text-xs font-medium uppercase tracking-wider text-zinc-400">Question pool status</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-xs font-medium uppercase tracking-wider text-zinc-400">Question pool status</h3>
+          {poolHealthText && <span className="font-mono text-xs text-zinc-400">{poolHealthText}</span>}
+        </div>
         {preflight === null ? (
           <p className="text-zinc-400">Checking your questions...</p>
         ) : preflight.allUnseen ? (
@@ -99,7 +159,7 @@ export function TestSetup({
               </div>
             )}
 
-            {preflight.allPossible ? (
+            {preflight.allSoft ? (
               <div className="space-y-1 pt-1">
                 <label className="flex items-center gap-2 text-zinc-200">
                   <input
@@ -108,7 +168,22 @@ export function TestSetup({
                     onChange={(e) => onIncludeSeenChange(e.target.checked)}
                     className="h-4 w-4 rounded border-[#27272A] bg-[#121215] text-zinc-100 focus:ring-zinc-400"
                   />
-                  <span>Include questions I have seen before</span>
+                  <span>Include questions I have seen but not answered</span>
+                </label>
+                <p className="text-xs text-zinc-400">
+                  Otherwise the test will not start.
+                </p>
+              </div>
+            ) : preflight.allPossible ? (
+              <div className="space-y-1 pt-1">
+                <label className="flex items-center gap-2 text-zinc-200">
+                  <input
+                    type="checkbox"
+                    checked={allowRepeats}
+                    onChange={(e) => handleAllowRepeatsChange(e.target.checked)}
+                    className="h-4 w-4 rounded border-[#27272A] bg-[#121215] text-zinc-100 focus:ring-zinc-400"
+                  />
+                  <span>Allow repeats of questions I have already done</span>
                 </label>
                 <p className="text-xs text-zinc-400">
                   Otherwise the test will not start.

@@ -1,7 +1,27 @@
+import { useEffect, useState } from 'react';
 import { MIN_TRUSTED_ATTEMPTS, type MySkillsProps } from '../../types/drill';
 import { formatDuration } from '../../utils/formatDuration';
+import { loadRetryState } from '../../services/retry/load';
+import type { RetryAccuracy } from '../../services/retry/queue';
 
-export function MySkills({ rows, unattributed, onBack }: MySkillsProps) {
+export interface MySkillsPropsExtended extends MySkillsProps {
+  retryAccuracy?: RetryAccuracy | null;
+}
+
+export function MySkills({ rows, unattributed, onBack, retryAccuracy }: MySkillsPropsExtended) {
+  const [accuracy, setAccuracy] = useState<RetryAccuracy | null>(retryAccuracy ?? null);
+
+  useEffect(() => {
+    if (retryAccuracy !== undefined) {
+      setAccuracy(retryAccuracy);
+      return;
+    }
+    loadRetryState().then(
+      (s) => setAccuracy(s.accuracy),
+      () => undefined,
+    );
+  }, [retryAccuracy]);
+
   return (
     <div className="space-y-6 text-[#FAFAFA]">
       <section className="rounded-lg border border-[#27272A] bg-[#121215] p-5">
@@ -113,6 +133,17 @@ export function MySkills({ rows, unattributed, onBack }: MySkillsProps) {
               {`${unattributed} attempts are on questions no longer in the question bank and are not shown.`}
             </div>
           )}
+        </section>
+      )}
+
+      {accuracy && (
+        <section className="rounded-lg border border-[#27272A] bg-[#121215] p-4 text-xs text-zinc-400">
+          <span className="font-medium text-zinc-200">
+            Retries: {accuracy.correct} of {accuracy.answered} correct
+          </span>
+          <span className="ml-2 text-zinc-500">
+            (separate from skill accuracy above)
+          </span>
         </section>
       )}
     </div>
