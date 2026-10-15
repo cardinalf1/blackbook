@@ -58,12 +58,12 @@ export const RW_SKILL_ORDER: readonly string[] = ['WIC', 'TSP', 'CTC', 'CID', 'C
 export const RW_DIFFICULTY_ONLY_DOMAINS: readonly string[] = ['SEC'];
 
 /**
- * Math order. 'spec' (default): multiple choice first, student-produced responses last, each block
- * by domain then easiest to hardest, as the Phase 3 spec asks (ASSUMED). 'official': the whole
- * module easiest to hardest, ties by domain (VERIFIED wording in source 4; placement of
- * student-produced responses not specified there).
+ * Math order. 'official' (default): the whole module easiest to hardest, ties by domain (VERIFIED
+ * wording in source 4; placement of student-produced responses is not specified there).
+ * 'spec': the earlier Phase 3 spec, multiple choice first, student-produced responses last, each
+ * block by domain then easiest to hardest (ASSUMED, kept as a switch).
  */
-export const MATH_ORDER: 'spec' | 'official' = 'spec';
+export const MATH_ORDER: 'spec' | 'official' = 'official';
 
 /** ASSUMED: the alert fires once at five minutes left and shows the timer if it was hidden. */
 export const FIVE_MINUTE_ALERT_MS = 5 * 60_000;

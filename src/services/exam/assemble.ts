@@ -74,7 +74,7 @@ function skillRank(code: string): number {
   return i < 0 ? RW_SKILL_ORDER.length : i;
 }
 
-export function assembleModule(rows: readonly BrowseRow[], spec: ExamModuleSpec, rng: Rng = Math.random): AssembledModule {
+export function assembleModule(rows: readonly BrowseRow[], spec: ExamModuleSpec, rng: Rng = Math.random, mathOrder: 'spec' | 'official' = MATH_ORDER): AssembledModule {
   const shape = EXAM_MODULES[spec.section];
   const live = rows.filter((r) => r.active && r.section === spec.section);
   const notes: string[] = [];
@@ -121,7 +121,7 @@ export function assembleModule(rows: readonly BrowseRow[], spec: ExamModuleSpec,
       }
       return DIFF_RANK[a.difficulty] - DIFF_RANK[b.difficulty];
     });
-  } else if (MATH_ORDER === 'spec') {
+  } else if (mathOrder === 'spec') {
     ordered = [...picked.filter((r) => r.format === 'mcq').sort(byDomainThenDifficulty), ...picked.filter((r) => r.format === 'spr').sort(byDomainThenDifficulty)];
   } else {
     ordered = [...picked].sort(

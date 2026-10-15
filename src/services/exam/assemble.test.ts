@@ -76,13 +76,23 @@ describe('assembleModule', () => {
     expect(cas.filter((d) => d === 'H')).toHaveLength(2);
   });
 
-  it('Math: 22 questions, multiple choice first, 6 student-produced responses last, each block by domain then difficulty', () => {
+  it('Math (official order, the default): 22 questions, easiest to hardest across the whole module, ties by domain', () => {
     const m = assembleModule(rows, { section: 'math', moduleNumber: 1, tier: 'routing' }, seeded(3));
     const picked = m.questionIds.map((id) => byId.get(id) as BrowseRow);
     expect(picked).toHaveLength(EXAM_MODULES.math.questions);
-    expect(picked.map((r) => r.format)).toEqual([...Array(16).fill('mcq'), ...Array(6).fill('spr')]);
+    expect(picked.filter((r) => r.format === 'spr')).toHaveLength(6);
     const count = (code: string) => picked.filter((r) => r.domainCode === code).length;
     expect([count('H'), count('P'), count('Q'), count('S')]).toEqual([8, 8, 3, 3]);
+    const key = (r: BrowseRow) => ({ E: 0, M: 1, H: 2 }[r.difficulty]) * 10 + ['H', 'P', 'Q', 'S'].indexOf(r.domainCode);
+    const keys = picked.map(key);
+    expect(keys).toEqual([...keys].sort((a, b) => a - b));
+  });
+
+  it('Math (spec switch): multiple choice first, 6 student-produced responses last, each block by domain then difficulty', () => {
+    const m = assembleModule(rows, { section: 'math', moduleNumber: 1, tier: 'routing' }, seeded(3), 'spec');
+    const picked = m.questionIds.map((id) => byId.get(id) as BrowseRow);
+    expect(picked).toHaveLength(EXAM_MODULES.math.questions);
+    expect(picked.map((r) => r.format)).toEqual([...Array(16).fill('mcq'), ...Array(6).fill('spr')]);
     const key = (r: BrowseRow) => ['H', 'P', 'Q', 'S'].indexOf(r.domainCode) * 10 + { E: 0, M: 1, H: 2 }[r.difficulty];
     const mcq = picked.slice(0, 16).map(key);
     const spr = picked.slice(16).map(key);
