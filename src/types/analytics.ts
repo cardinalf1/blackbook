@@ -319,6 +319,8 @@ export interface SkillsScreenProps {
 
 export interface TimingScreenProps {
   summary: TimingSummary;
+  /** Name of a skill from its code ("Unknown skill" when the code is not in the bank). */
+  skillName: (skillCode: string) => string;
 }
 
 export interface BehaviorScreenProps {
@@ -329,14 +331,30 @@ export interface TestHistoryScreenProps {
   history: TestHistory;
 }
 
+/** A drill on the top-ranked skills of one section. */
+export interface TopSkillsDrill {
+  section: Section;
+  skills: StudyRecommendation[];
+  config: DrillConfig;
+}
+
+/** A misses-first review drill for one section. */
+export interface MissesDrill {
+  section: Section;
+  /** Missed questions available in this section. */
+  available: number;
+  config: DrillConfig;
+}
+
 export interface StudyNextScreenProps {
   /** Ranked, best first. */
   recommendations: readonly StudyRecommendation[];
   /** The one-line explanation of the method and its parameters, shown on screen. */
   methodNote: string;
-  /** Start a drill for the top skills of one section, preferring questions never answered. */
-  onDrillTopSkills: (config: DrillConfig) => void;
-  /** Start a drill that serves previously missed questions, oldest miss first. Null config when there are none. */
-  misses: { count: number; config: DrillConfig | null };
-  onReviewMisses: (config: DrillConfig) => void;
+  /** One entry per section that has a recommendation. */
+  topDrills: readonly TopSkillsDrill[];
+  /** One entry per section that has missed questions. Empty when nothing was missed. */
+  missDrills: readonly MissesDrill[];
+  /** Starts a drill with this config. The flow runs it through the normal drill start. */
+  onLaunch: (config: DrillConfig) => void;
 }

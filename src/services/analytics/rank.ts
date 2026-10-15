@@ -12,7 +12,7 @@ import {
   UNSEEN_BONUS,
   UNSEEN_BONUS_RANKED,
 } from '../../config/analyticsConfig';
-import type { MissRow, SkillRow, StudyRecommendation } from '../../types/analytics';
+import type { MissesDrill, MissRow, SkillRow, StudyRecommendation, TopSkillsDrill } from '../../types/analytics';
 import type { DrillConfig } from '../../types/drill';
 import { SECTIONS, type Section } from '../../types/sat';
 import { pooled, wilsonLowerBound } from './metrics';
@@ -61,12 +61,6 @@ export function rankSkills(rows: readonly SkillRow[], length: number = STUDY_LIS
   return out.slice(0, length);
 }
 
-export interface TopSkillsDrill {
-  section: Section;
-  skills: StudyRecommendation[];
-  config: DrillConfig;
-}
-
 /**
  * One drill config per section: the top-ranked skills of that section, any difficulty, live
  * questions. The drill picker already serves never-answered questions first, so this prefers
@@ -84,13 +78,6 @@ export function topSkillsDrills(recs: readonly StudyRecommendation[]): TopSkills
     });
   }
   return out;
-}
-
-export interface MissesDrill {
-  section: Section;
-  /** Missed questions available in this section. */
-  available: number;
-  config: DrillConfig;
 }
 
 /**
