@@ -62,6 +62,14 @@ const EVENT_TYPES: Record<EventType, true> = {
   reference_closed: true,
   navigator_opened: true,
   navigator_closed: true,
+  test_started: true,
+  test_module_started: true,
+  test_module_submitted: true,
+  test_routed: true,
+  test_break_started: true,
+  test_break_ended: true,
+  test_finished: true,
+  test_abandoned: true,
 };
 
 function isExam(e: unknown): boolean {
@@ -74,8 +82,55 @@ function isExam(e: unknown): boolean {
   if (e.phase !== 'in_progress' && e.phase !== 'review' && e.phase !== 'submitted') return false;
   if (e.submittedBy !== null && e.submittedBy !== 'user' && e.submittedBy !== 'timer') return false;
   if (typeof e.timerHidden !== 'boolean' || typeof e.fiveMinuteAlertShown !== 'boolean') return false;
+  if (e.testId !== undefined && !isStr(e.testId)) return false;
   if (!Array.isArray(e.assemblyNotes) || !e.assemblyNotes.every((n) => typeof n === 'string' && n.length < 500)) return false;
   return e.pauses.every((p) => isObj(p) && isNum(p.at) && typeof p.reason === 'string' && p.reason.length < 100 && (p.resumedAt === null || isNum(p.resumedAt)));
+}
+
+const MODULE_KEYS = ['rw1', 'rw2', 'math1', 'math2'];
+
+function isSlot(s: unknown): boolean {
+  return (
+    isObj(s) &&
+    MODULE_KEYS.includes(s.key as string) &&
+    (s.section === 'rw' || s.section === 'math') &&
+    (s.moduleNumber === 1 || s.moduleNumber === 2) &&
+    (s.tier === 'routing' || s.tier === 'easier' || s.tier === 'harder') &&
+    Array.isArray(s.questionIds) &&
+    s.questionIds.length <= 100 &&
+    s.questionIds.every(isStr) &&
+    Array.isArray(s.notes) &&
+    s.notes.every((n) => typeof n === 'string' && n.length < 500) &&
+    (s.sessionId === null || isStr(s.sessionId))
+  );
+}
+
+function isEstimate(e: unknown): boolean {
+  if (e === null) return true;
+  if (!isObj(e) || !isNum(e.configVersion) || !Array.isArray(e.sections)) return false;
+  const secOk = e.sections.every(
+    (s) =>
+      isObj(s) && (s.section === 'rw' || s.section === 'math') && (s.route === 'easier' || s.route === 'harder') &&
+      isNum(s.low) && isNum(s.high) && isNum(s.mid) && isNum(s.weightedFraction) && typeof s.capped === 'boolean' && isMs(s.answered) && isMs(s.total),
+  );
+  return secOk && (e.total === null || (isObj(e.total) && isNum(e.total.low) && isNum(e.total.high) && isNum(e.total.mid)));
+}
+
+function isTest(t: unknown): boolean {
+  if (!isObj(t) || (t.kind !== 'full' && t.kind !== 'rw' && t.kind !== 'math')) return false;
+  if (!Array.isArray(t.steps) || t.steps.length > 10 || !isMs(t.stepIndex) || t.stepIndex > t.steps.length) return false;
+  if (!t.steps.every((s) => isObj(s) && (s.type === 'break' || (s.type === 'module' && MODULE_KEYS.includes(s.key as string))))) return false;
+  if (!isObj(t.slots) || !Object.entries(t.slots).every(([k, v]) => MODULE_KEYS.includes(k) && isSlot(v))) return false;
+  if (!Array.isArray(t.routing) || t.routing.length > 2) return false;
+  const routingOk = t.routing.every(
+    (r) =>
+      isObj(r) && (r.section === 'rw' || r.section === 'math') && (r.route === 'easier' || r.route === 'harder') &&
+      isNum(r.weightedFraction) && isNum(r.threshold) && isMs(r.correct) && isMs(r.total) && isNum(r.configVersion) && isNum(r.at),
+  );
+  if (!routingOk) return false;
+  const b = t.break;
+  if (b !== null && !(isObj(b) && isNum(b.startedAt) && isMs(b.durationMs) && isNum(b.deadlineAt) && (b.endedAt === null || isNum(b.endedAt)) && typeof b.endedEarly === 'boolean')) return false;
+  return typeof t.includeSeen === 'boolean' && typeof t.paused === 'boolean' && isNum(t.configVersion) && isEstimate(t.estimate);
 }
 
 export function parseSession(v: unknown): SessionRecord | null {
@@ -89,7 +144,8 @@ export function parseSession(v: unknown): SessionRecord | null {
   if (!(v.score === null || (isObj(v.score) && isNum(v.score.correct) && isNum(v.score.total)))) return null;
   if (!isObj(v.progress)) return null;
   if (v.exam !== undefined && !isExam(v.exam)) return null;
-  if ((v.mode === 'exam') !== (v.exam !== undefined)) return null;
+  if (v.test !== undefined && (!isTest(v.test) || v.exam !== undefined || v.queueIds.length !== 0)) return null;
+  if ((v.mode === 'exam') !== (v.exam !== undefined || v.test !== undefined)) return null;
   for (const id of v.queueIds as string[]) {
     const p = v.progress[id];
     if (!isObj(p)) return null;

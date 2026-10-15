@@ -5,6 +5,7 @@
 import type { ReactNode } from 'react';
 import type { DrillConfig } from './drill';
 import type { ExamState } from './exam';
+import type { TestState } from './test';
 import type { ChoiceLetter, Difficulty, Question, Section } from './sat';
 
 export type SessionMode = 'drill' | 'exam';
@@ -64,6 +65,11 @@ export interface SessionRecord {
   askConfidence: boolean;
   /** Exam modules only (mode 'exam'): timer, pauses, phase. */
   exam?: ExamState;
+  /**
+   * Full test or section run (Phase 4): this record is the container. It has no questions of its
+   * own (mode 'exam', empty queueIds); its modules are exam sessions with `exam.testId` set to its id.
+   */
+  test?: TestState;
 }
 
 /**
@@ -137,6 +143,15 @@ export interface EventPayloads {
   reference_closed: Record<string, never>;
   navigator_opened: Record<string, never>;
   navigator_closed: Record<string, never>;
+  // Full tests and section runs (Phase 4). Logged on the container session, never during a module's clock.
+  test_started: { kind: string; includeSeen: boolean };
+  test_module_started: { key: string; tier: string };
+  test_module_submitted: { key: string; by: string };
+  test_routed: { section: string; route: string; weightedFraction: number; threshold: number; configVersion: number };
+  test_break_started: { durationMs: number };
+  test_break_ended: { early: boolean; usedMs: number };
+  test_finished: { kind: string; paused: boolean };
+  test_abandoned: Record<string, never>;
 }
 
 export type EventType = keyof EventPayloads;

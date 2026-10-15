@@ -4,7 +4,7 @@
 import type { ChoiceLetter, Question, Section } from './sat';
 import type { SessionReport } from './session';
 
-/** Which module this is. Phase 3 only builds module 1 ('routing'); Phase 4 adds the second stage. */
+/** Which module this is. Module 1 is 'routing'; module 2 is 'easier' or 'harder' (Phase 4). */
 export interface ExamModuleSpec {
   section: Section;
   moduleNumber: 1 | 2;
@@ -45,6 +45,8 @@ export interface ExamState {
   fiveMinuteAlertShown: boolean;
   /** Plain-language notes from assembly, e.g. a domain short of questions. */
   assemblyNotes: string[];
+  /** Set when this module belongs to a full test or section run (Phase 4): the id of its container session. */
+  testId?: string;
 }
 
 /** What assembly produced, shown on the setup screen before starting. */

@@ -3,6 +3,7 @@
 // A domain short of questions is reported in plain words; the module is never padded with other
 // domains' questions and never repeats a question.
 
+import { TIER_MIX } from '../../config/scoringConfig';
 import { DIFFICULTY_MIX, EXAM_MODULES, MATH_ORDER, RW_DIFFICULTY_ONLY_DOMAINS, RW_SKILL_ORDER } from '../../config/examConfig';
 import type { BrowseRow, SeenStatus } from '../../types/browse';
 import type { AssembledModule, ExamModuleSpec } from '../../types/exam';
@@ -48,11 +49,11 @@ function pickFresh(pool: readonly BrowseRow[], n: number, rng: Rng): BrowseRow[]
 }
 
 /**
- * Picks `n` rows of one domain and format: a third each of easy, medium and hard where the pool
+ * Picks `n` rows of one domain and format: easy, medium and hard in the proportions of the module's tier (equal thirds for module 1) where the pool
  * allows; a short difficulty is filled from the others in the same domain and format (noted).
  */
-function pickSpread(pool: readonly BrowseRow[], n: number, rng: Rng, label: string, notes: string[]): BrowseRow[] {
-  const targets = apportion(n, DIFFICULTY_MIX.map(() => 1));
+function pickSpread(pool: readonly BrowseRow[], n: number, rng: Rng, label: string, notes: string[], mix: readonly number[]): BrowseRow[] {
+  const targets = apportion(n, mix);
   const chosen: BrowseRow[] = [];
   let short = 0;
   DIFFICULTY_MIX.forEach((d, i) => {
@@ -74,10 +75,17 @@ function skillRank(code: string): number {
   return i < 0 ? RW_SKILL_ORDER.length : i;
 }
 
-export function assembleModule(rows: readonly BrowseRow[], spec: ExamModuleSpec, rng: Rng = Math.random, mathOrder: 'spec' | 'official' = MATH_ORDER): AssembledModule {
+export function assembleModule(
+  rows: readonly BrowseRow[],
+  spec: ExamModuleSpec,
+  rng: Rng = Math.random,
+  mathOrder: 'spec' | 'official' = MATH_ORDER,
+  exclude: ReadonlySet<string> = new Set(),
+): AssembledModule {
   const shape = EXAM_MODULES[spec.section];
-  const live = rows.filter((r) => r.active && r.section === spec.section);
+  const live = rows.filter((r) => r.active && r.section === spec.section && !exclude.has(r.id));
   const notes: string[] = [];
+  const mix = TIER_MIX[spec.tier];
   const isMath = spec.section === 'math';
 
   // Student-produced responses per domain (Math only), in proportion to each domain's count.
@@ -93,11 +101,11 @@ export function assembleModule(rows: readonly BrowseRow[], spec: ExamModuleSpec,
     const mcqWant = d.count - sprWant;
     let got: BrowseRow[] = [];
     if (isMath) {
-      const spr = pickSpread(pool.filter((r) => r.format === 'spr'), sprWant, rng, `${d.label} student-produced response`, notes);
-      const mcq = pickSpread(pool.filter((r) => r.format === 'mcq'), mcqWant, rng, `${d.label} multiple-choice`, notes);
+      const spr = pickSpread(pool.filter((r) => r.format === 'spr'), sprWant, rng, `${d.label} student-produced response`, notes, mix);
+      const mcq = pickSpread(pool.filter((r) => r.format === 'mcq'), mcqWant, rng, `${d.label} multiple-choice`, notes, mix);
       got = [...mcq, ...spr];
     } else {
-      got = pickSpread(pool, d.count, rng, d.label, notes);
+      got = pickSpread(pool, d.count, rng, d.label, notes, mix);
     }
     if (got.length < d.count) {
       notes.push(`Only ${got.length} live ${d.label} questions were available for ${d.count} places. The module has ${d.count - got.length} fewer questions; nothing was added in their place.`);
