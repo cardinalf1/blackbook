@@ -1,7 +1,7 @@
 import type { PastDrillsProps } from '../../types/session';
 import { formatDuration } from '../../utils/formatDuration';
 
-export function PastDrills({ rows, onOpen, onBack }: PastDrillsProps) {
+export function PastDrills({ rows, inProgressSlot, onOpen, onBack }: PastDrillsProps) {
   return (
     <div className="space-y-6 text-[#FAFAFA]">
       <section className="rounded-lg border border-[#27272A] bg-[#121215] p-5">
@@ -25,6 +25,8 @@ export function PastDrills({ rows, onOpen, onBack }: PastDrillsProps) {
           </div>
         </div>
       </section>
+
+      {inProgressSlot}
 
       {rows.length === 0 ? (
         <section className="rounded-lg border border-[#27272A] bg-[#121215] p-8 text-center">
