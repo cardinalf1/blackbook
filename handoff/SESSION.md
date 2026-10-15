@@ -2,6 +2,44 @@
 
 Read this first in a new session, after AGENTS.md and CLAUDE.md. Updated by Claude at the end of each session or milestone. No College Board content in this file.
 
+## Phase 2d: draft investigation (step 1, before any fix)
+
+**Reproduction on the Phase 2c code** (20-question drill, 5 answered; data read with `bun scripts/inspect-sessions.ts` after each exit):
+
+| Exit | Session record | Draft and final answers | Event log | What the UI offered |
+|---|---|---|---|---|
+| Full page load (reopening the link; the tool cannot close a real tab) | in progress, on question 5, 5 of 20 answered | 5 stored: 4 final (Next), 1 draft (question 5) | 24 events | Home banner: "unfinished drill (5 of 20 answered)" with Resume and Discard |
+| Refresh | same | same | same | same banner |
+| Resume, then "Save and exit", Browse, back, My skills, back | same, plus active time saved on exit (9 s to 13 s) | same | 28 events (hide and navigation logged) | banner after each step |
+| Server restarted (process killed, started again) | same | same | same | banner after reload |
+
+**Root cause of what you saw (the Phase 2 code you tested, commit 2b537b8): both a save bug and a missing UI.**
+1. **Save.** A picked choice lived only in the question screen's own state until Submit (`QuestionView.tsx` line 43; only `submit` wrote an attempt, `drillStore.ts` line 103). Leaving before Submit lost the pick, and nothing was saved as a draft.
+2. **UI.** The only way back was one banner on the home screen for the newest unfinished drill (`App.tsx` line 133). Worse, "Start a drill" deleted the unfinished drill without asking (`drillStore.ts` lines 143 and 144), and Discard deleted it too.
+
+Phase 2c already fixed the save side: every change is a draft write, sessions are never deleted, and starting a new drill keeps the old one. Phase 2d adds the missing UI.
+
+## Phase 2d plan
+
+Branch `claude/phase2d-browse-drafts` from `phase2c-done`.
+
+**What Browse shows now:** it loads the whole bank and filters by section, domain, skill, difficulty, format, source and live status, 50 per page. Clicking a row opens an inline preview with a Check button that reveals the answer at once. That preview is not saved and not logged, and it breaks deferred feedback. It is replaced.
+
+1. **Interfaces (me).**
+   - `source` on sessions (`drill`, `browse`, later `exam`). Session record version 3, with migration 3 setting `source` to `drill` on existing sessions.
+   - Browse row, filter and status types.
+   - Props for the browser (now driven by props), the In progress list, and an `inProgressSlot` on Past drills.
+2. **Status (me).**
+   - One server query: `GET /api/status` derives seen, done, times attempted, last result (finished sessions only) and the "flag for later" mark from events, attempts and sessions in one pass. Nothing is stored twice.
+   - Backfill: any attempt also counts as seen.
+   - Pure `applyFilters` and `filterCounts` in `src/services/browse`.
+   - A cross-check test and `scripts/status-check.ts`, which recomputes status from the raw rows and compares.
+3. **Single-question practice (me).** `startSingle(questionId)` in the drill store: a session of length 1 with source `browse`, the same deferred feedback, and Done then the report. Browse stays mounted, hidden while you practice, so filters and scroll stay. Past drills labels these "Single question". They count toward My skills like any finished drill.
+4. **Gemini, 2 writers:**
+   - `gemini/browse-ui`: status badges, filters with counts, Random, clickable rows (`QuestionBrowser.tsx`).
+   - `gemini/in-progress`: the In progress list with Resume and Discard (with a confirmation), on the home screen and on Past drills.
+5. **Wiring, tests (resume twice, discard, restart, reload), browser run, timings on the full bank, reports, tag.**
+
 ## Morning report: Phase 2c (2026-10-15, unattended)
 
 **Done and committed** on `claude/phase2c-telemetry`, tag `phase2c-done`. Nothing pushed. Full details, decisions and what I could not verify are in `handoff/RUN-REPORT.md` (Phase 2c section).
