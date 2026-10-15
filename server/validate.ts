@@ -64,6 +64,20 @@ const EVENT_TYPES: Record<EventType, true> = {
   navigator_closed: true,
 };
 
+function isExam(e: unknown): boolean {
+  if (!isObj(e) || !isObj(e.module) || !isObj(e.timer) || !Array.isArray(e.pauses)) return false;
+  const m = e.module;
+  if ((m.section !== 'rw' && m.section !== 'math') || (m.moduleNumber !== 1 && m.moduleNumber !== 2)) return false;
+  if (m.tier !== 'routing' && m.tier !== 'easier' && m.tier !== 'harder') return false;
+  const t = e.timer;
+  if (!isMs(t.durationMs) || !(t.deadlineAt === null || isNum(t.deadlineAt)) || !(t.pausedRemainingMs === null || isMs(t.pausedRemainingMs))) return false;
+  if (e.phase !== 'in_progress' && e.phase !== 'review' && e.phase !== 'submitted') return false;
+  if (e.submittedBy !== null && e.submittedBy !== 'user' && e.submittedBy !== 'timer') return false;
+  if (typeof e.timerHidden !== 'boolean' || typeof e.fiveMinuteAlertShown !== 'boolean') return false;
+  if (!Array.isArray(e.assemblyNotes) || !e.assemblyNotes.every((n) => typeof n === 'string' && n.length < 500)) return false;
+  return e.pauses.every((p) => isObj(p) && isNum(p.at) && typeof p.reason === 'string' && p.reason.length < 100 && (p.resumedAt === null || isNum(p.resumedAt)));
+}
+
 export function parseSession(v: unknown): SessionRecord | null {
   if (!isObj(v) || v.version !== SESSION_RECORD_VERSION || !isStr(v.id) || !isMode(v.mode)) return null;
   if (v.source !== 'drill' && v.source !== 'browse' && v.source !== 'exam') return null;
@@ -74,6 +88,8 @@ export function parseSession(v: unknown): SessionRecord | null {
   if (!isMs(v.totalActiveMs) || typeof v.askConfidence !== 'boolean') return null;
   if (!(v.score === null || (isObj(v.score) && isNum(v.score.correct) && isNum(v.score.total)))) return null;
   if (!isObj(v.progress)) return null;
+  if (v.exam !== undefined && !isExam(v.exam)) return null;
+  if ((v.mode === 'exam') !== (v.exam !== undefined)) return null;
   for (const id of v.queueIds as string[]) {
     const p = v.progress[id];
     if (!isObj(p)) return null;

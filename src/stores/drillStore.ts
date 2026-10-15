@@ -17,6 +17,8 @@ import {
   attemptFor,
   createSession,
   currentQuestionId,
+  enterIndex,
+  leaveCurrent,
   finish,
   finishCheck,
   moveTo,
@@ -27,12 +29,14 @@ import {
   setResponse,
   toggleStrike,
 } from '../services/session/record';
+import { isExpired, isPaused, pauseExam as pauseExamState, resumeExam as resumeExamState, startTimer } from '../services/exam/timer';
 import { attemptStore, questionStore } from '../services/storage';
 import type { AttemptStore } from '../services/storage/attemptTypes';
 import type { QuestionStore } from '../services/storage/types';
 import { telemetry } from '../services/telemetry';
 import type { EventLogger } from '../services/telemetry/logger';
 import type { DrillConfig, QuestionFacet } from '../types/drill';
+import type { ExamModuleSpec, ExamState } from '../types/exam';
 import type { ChoiceLetter, Question } from '../types/sat';
 import type { Confidence, EventPayloads, EventType, HideReason, InteractionKind, SessionRecord, StoredAttempt } from '../types/session';
 
@@ -82,6 +86,23 @@ export interface DrillActions {
   unloading(activeMs: number): void;
   /** Leaves a finished session's screen. */
   closeFinished(): void;
+
+  // ---- exam modules (mode 'exam') ----
+  /** Starts a timed module with already assembled questions. */
+  startExam(spec: ExamModuleSpec, questionIds: readonly string[], durationMs: number, notes: readonly string[]): Promise<void>;
+  /** Leaves the current question for the review page. `activeMs` is its total active time. */
+  openReview(activeMs: number): void;
+  /** Back from the review page to a question (0-based). */
+  closeReview(index: number): void;
+  /** Submits the module. 'timer' skips the review page. Safe to call twice: the second call does nothing. */
+  submitExam(by: 'user' | 'timer', activeMs: number): Promise<boolean>;
+  pauseExam(reason: string, activeMs: number): void;
+  resumeExam(): void;
+  toggleTimer(): void;
+  /** The five-minute alert was shown: it will not show again, and the timer is shown. */
+  fiveMinuteAlertShown(): void;
+  /** Exam screen events with no payload: reference sheet and navigator opened or closed. */
+  note(type: 'reference_opened' | 'reference_closed' | 'navigator_opened' | 'navigator_closed'): void;
 }
 
 export type DrillStore = DrillState & DrillActions;
@@ -126,7 +147,9 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
   let typingTimer: unknown = null;
   let typingQuestion: string | null = null;
   /** A finish whose save failed, retried by retrySave. */
-  let pendingFinishMs: number | null = null;
+  let pendingFinish: { activeMs: number; by: 'user' | 'timer' } | null = null;
+  /** True while a finish or submit is being saved, so a second one (timer and button together) does nothing. */
+  let finishing = false;
   /** "Flag for later" writes that failed, retried by retrySave and by the next flag change. */
   const pendingFlags = new Map<string, boolean>();
 
@@ -186,6 +209,9 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
       while (inFlight) await inFlight;
       return !dirtySession;
     };
+
+    /** Answers and marks can change only while a question is on screen and the clock runs. */
+    const answerable = (s: SessionRecord) => s.status === 'in_progress' && (!s.exam || (s.exam.phase === 'in_progress' && !isPaused(s.exam.timer)));
 
     const touch = (kind: InteractionKind) => {
       const s = get().session;
@@ -251,7 +277,7 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
       if (typingTimer !== null) clearTimer(typingTimer);
       typingTimer = null;
       typingQuestion = null;
-      pendingFinishMs = null;
+      pendingFinish = null;
       dirtyAttempts = new Map();
       dirtySession = false;
     };
@@ -282,25 +308,39 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
       log('session_started', null, { count: session.queueIds.length, askConfidence: session.askConfidence });
     };
 
-    const finishNow = async (activeMs: number): Promise<boolean> => {
+    const finishNow = async (activeMs: number, by: 'user' | 'timer' = 'user'): Promise<boolean> => {
+      if (finishing) return false;
+      finishing = true;
+      try {
+        return await finishOnce(activeMs, by);
+      } finally {
+        finishing = false;
+      }
+    };
+
+    const finishOnce = async (activeMs: number, by: 'user' | 'timer'): Promise<boolean> => {
       settleTyping();
       if (!(await settle())) {
-        pendingFinishMs = activeMs;
+        pendingFinish = { activeMs, by };
         return false;
       }
       const s = get().session;
       if (!s || s.status !== 'in_progress') return false;
-      const done = finish(s, activeMs, grade, now());
+      // From the review page the current question was already left: keep its stored time.
+      const inReview = s.exam?.phase === 'review';
+      const ms = inReview ? progressOf(s, currentQuestionId(s) ?? '').activeMs : activeMs;
+      let done = finish(s, ms, grade, now());
+      if (done.exam) done = { ...done, exam: { ...done.exam, phase: 'submitted', submittedBy: by } };
       const attempts = done.queueIds.filter((id) => progressOf(done, id).response !== null).map((id) => attempt(done, id, 'final'));
       try {
         await deps.attempts.saveSession(done, attempts);
       } catch (e) {
-        pendingFinishMs = activeMs;
-        set({ saveError: `Your drill is not finished yet: ${msg(e)}` });
+        pendingFinish = { activeMs, by };
+        set({ saveError: `${s.mode === 'exam' ? 'Your module is not submitted yet' : 'Your drill is not finished yet'}: ${msg(e)}` });
         return false;
       }
-      pendingFinishMs = null;
-      leaveLog(s, 'finish', activeMs);
+      pendingFinish = null;
+      if (!inReview) leaveLog(s, 'finish', ms);
       set({ session: done, saveError: null, saving: false });
       log('session_finished', null, { correct: done.score?.correct ?? 0, total: done.score?.total ?? 0, totalActiveMs: done.totalActiveMs });
       return true;
@@ -313,7 +353,7 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
         try {
           const [flags, inProgress] = await Promise.all([
             deps.attempts.listFlags(),
-            deps.attempts.listSessions({ status: 'in_progress', mode: 'drill' }),
+            deps.attempts.listSessions({ status: 'in_progress' }),
           ]);
           set({ flags: Object.fromEntries(flags.map((f) => [f.questionId, true as const])), inProgress, error: null });
         } catch (e) {
@@ -370,6 +410,10 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
           enter(session);
           log('session_resumed', null, { index: session.index });
           if (session !== record) commit(session);
+          // The deadline passed while the module was closed: submit it now, as the timer would have.
+          if (session.exam && session.exam.phase !== 'submitted' && isExpired(session.exam.timer, now())) {
+            await finishNow(progressOf(session, currentQuestionId(session) ?? '').activeMs, 'timer');
+          }
         } catch (e) {
           set({ error: `Could not resume: ${msg(e)}` });
         }
@@ -402,7 +446,7 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
         const s = get().session;
         const id = s ? currentQuestionId(s) : null;
         const q = question(id);
-        if (!s || id === null || !q || s.status !== 'in_progress') return;
+        if (!s || id === null || !q || !answerable(s)) return;
         const before = progressOf(s, id).response;
         const typed = q.answer.kind === 'spr';
         // A struck-out choice cannot be the answer.
@@ -428,7 +472,7 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
       strike(letter) {
         const s = get().session;
         const id = s ? currentQuestionId(s) : null;
-        if (!s || id === null) return;
+        if (!s || id === null || !answerable(s)) return;
         const before = progressOf(s, id);
         const after = toggleStrike(s, id, letter, now());
         if (after === s) return;
@@ -446,7 +490,7 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
       toggleFlag() {
         const s = get().session;
         const id = s ? currentQuestionId(s) : null;
-        if (!s || id === null) return;
+        if (!s || id === null || !answerable(s)) return;
         const flagged = !progressOf(s, id).flagged;
         const after = setFlagged(s, id, flagged, now());
         if (after === s) return;
@@ -483,7 +527,7 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
       async go(kind, index, activeMs) {
         settleTyping();
         const s = get().session;
-        if (!s || s.status !== 'in_progress' || index < 0 || index >= s.queueIds.length) return false;
+        if (!s || !answerable(s) || index < 0 || index >= s.queueIds.length) return false;
         if (kind === 'next') log('nav_next', currentQuestionId(s), { from: s.index });
         else if (kind === 'back') log('nav_back', currentQuestionId(s), { from: s.index });
         else log('nav_jump', currentQuestionId(s), { from: s.index, to: index });
@@ -515,14 +559,14 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
         if (s) log('finish_cancelled', currentQuestionId(s), {});
       },
 
-      finish: finishNow,
+      finish: (activeMs) => finishNow(activeMs, 'user'),
 
       async retrySave() {
         set({ saveError: null, saving: true });
         if (pendingFlags.size > 0) await sendFlags();
         if (dirtySession) pump();
         await settle();
-        if (get().saveError === null && pendingFinishMs !== null) await finishNow(pendingFinishMs);
+        if (get().saveError === null && pendingFinish !== null) await finishNow(pendingFinish.activeMs, pendingFinish.by);
         set({ saving: false });
       },
 
@@ -561,6 +605,102 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
       closeFinished() {
         resetMemory();
         set({ session: null, questions: {}, saveError: null, saving: false });
+      },
+
+      async startExam(spec, questionIds, durationMs, notes) {
+        try {
+          if (questionIds.length === 0) {
+            set({ error: 'No live questions are available for this module.' });
+            return;
+          }
+          const config: DrillConfig = { section: spec.section, domainCode: 'all', skillCodes: [], difficulties: [], count: questionIds.length, liveOnly: true };
+          const at = now();
+          const exam: ExamState = {
+            module: spec,
+            timer: startTimer(durationMs, at),
+            pauses: [],
+            phase: 'in_progress',
+            submittedBy: null,
+            timerHidden: false,
+            fiveMinuteAlertShown: false,
+            assemblyNotes: [...notes],
+          };
+          await begin({ ...createSession(newId(), 'exam', config, questionIds, at, 'exam'), exam });
+        } catch (e) {
+          set({ error: `Could not start the module: ${msg(e)}` });
+        }
+      },
+
+      openReview(activeMs) {
+        settleTyping();
+        const s = get().session;
+        if (!s?.exam || s.exam.phase !== 'in_progress' || s.status !== 'in_progress') return;
+        leaveLog(s, 'review', activeMs);
+        const left = leaveCurrent(s, activeMs, now());
+        commit({ ...left, exam: { ...s.exam, phase: 'review' } });
+      },
+
+      closeReview(index) {
+        const s = get().session;
+        if (!s?.exam || s.exam.phase !== 'review' || s.status !== 'in_progress') return;
+        log('nav_jump', currentQuestionId(s), { from: s.index, to: index });
+        const back = enterIndex({ ...s, exam: { ...s.exam, phase: 'in_progress' } }, index, now());
+        commit(back);
+        enter(back);
+      },
+
+      submitExam(by, activeMs) {
+        const s = get().session;
+        if (!s?.exam || s.status !== 'in_progress') return Promise.resolve(false);
+        return finishNow(activeMs, by);
+      },
+
+      pauseExam(reason, activeMs) {
+        settleTyping();
+        const s = get().session;
+        if (!s?.exam || s.status !== 'in_progress' || isPaused(s.exam.timer)) return;
+        const exam = pauseExamState(s.exam, reason, now());
+        if (exam === s.exam) return;
+        let after: SessionRecord = { ...s, exam };
+        // The question is hidden while paused, so its active time stops too.
+        if (s.exam.phase === 'in_progress') {
+          leaveLog(s, 'pause', activeMs);
+          const id = currentQuestionId(s);
+          if (id !== null) after = recordActive(after, id, activeMs, now());
+        }
+        log('exam_paused', null, { reason });
+        commit(after);
+      },
+
+      resumeExam() {
+        const s = get().session;
+        if (!s?.exam || s.status !== 'in_progress' || !isPaused(s.exam.timer)) return;
+        const last = s.exam.pauses[s.exam.pauses.length - 1];
+        const exam = resumeExamState(s.exam, now());
+        const after = { ...s, exam };
+        log('exam_resumed', null, { pausedMs: last ? Math.max(0, now() - last.at) : 0 });
+        commit(after);
+        enter(after);
+      },
+
+      toggleTimer() {
+        const s = get().session;
+        if (!s?.exam || s.status !== 'in_progress') return;
+        const hidden = !s.exam.timerHidden;
+        log(hidden ? 'timer_hidden' : 'timer_shown', null, {});
+        commit({ ...s, exam: { ...s.exam, timerHidden: hidden } });
+      },
+
+      fiveMinuteAlertShown() {
+        const s = get().session;
+        if (!s?.exam || s.exam.fiveMinuteAlertShown) return;
+        log('five_minute_alert_shown', null, {});
+        commit({ ...s, exam: { ...s.exam, fiveMinuteAlertShown: true, timerHidden: false } });
+      },
+
+      note(type) {
+        const s = get().session;
+        if (s) log(type, currentQuestionId(s), {});
       },
     };
   });

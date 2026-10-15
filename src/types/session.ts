@@ -140,7 +140,7 @@ export interface EventPayloads {
 }
 
 export type EventType = keyof EventPayloads;
-export type HideReason = 'next' | 'back' | 'jump' | 'finish' | 'exit' | 'unload';
+export type HideReason = 'next' | 'back' | 'jump' | 'finish' | 'exit' | 'unload' | 'review' | 'pause';
 export type InteractionKind = 'select' | 'strike' | 'flag' | 'type' | 'confidence';
 
 /** One row of the append-only event log. */

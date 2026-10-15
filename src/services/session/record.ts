@@ -139,7 +139,7 @@ export function recordActive(s: SessionRecord, questionId: string, activeMs: num
 }
 
 /** Closes the visit to the current question: its total active time, and the first-visit time once. */
-function leaveCurrent(s: SessionRecord, activeMs: number, now: number): SessionRecord {
+export function leaveCurrent(s: SessionRecord, activeMs: number, now: number): SessionRecord {
   const id = currentQuestionId(s);
   if (id === null) return s;
   const p = progressOf(s, id);
@@ -154,6 +154,14 @@ export function moveTo(s: SessionRecord, index: number, activeMs: number, now: n
   const target = left.queueIds[index] as string;
   const p = progressOf(left, target);
   return { ...withProgress(left, target, { ...p, visits: p.visits + 1 }, now), index };
+}
+
+/** Shows the question at `index` (a new visit) without leaving the current one again. */
+export function enterIndex(s: SessionRecord, index: number, now: number): SessionRecord {
+  if (s.status !== 'in_progress' || index < 0 || index >= s.queueIds.length) return s;
+  const target = s.queueIds[index] as string;
+  const p = progressOf(s, target);
+  return { ...withProgress(s, target, { ...p, visits: p.visits + 1 }, now), index };
 }
 
 /** Ends the session. `isCorrect` grades one answered question. Unanswered questions count as wrong. */
