@@ -128,4 +128,55 @@ describe('PastDrills', () => {
       root.unmount();
     });
   });
+
+  it('renders inProgressSlot when given, even when there are no past drills', async () => {
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <PastDrills
+          rows={[]}
+          inProgressSlot={<div data-testid="in-progress-slot">In progress placeholder</div>}
+          onOpen={vi.fn()}
+          onBack={vi.fn()}
+        />,
+      );
+    });
+
+    expect(container.textContent).toContain('Past drills');
+    expect(container.textContent).toContain('In progress placeholder');
+    expect(container.textContent).toContain('No finished drills yet.');
+
+    const slot = container.querySelector('[data-testid="in-progress-slot"]');
+    expect(slot).not.toBeNull();
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('renders inProgressSlot between header and table when past drills exist', async () => {
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <PastDrills
+          rows={mockRows}
+          inProgressSlot={<div data-testid="in-progress-slot">In progress placeholder</div>}
+          onOpen={vi.fn()}
+          onBack={vi.fn()}
+        />,
+      );
+    });
+
+    expect(container.textContent).toContain('In progress placeholder');
+    expect(container.textContent).toContain('Reading and Writing');
+
+    const slot = container.querySelector('[data-testid="in-progress-slot"]');
+    expect(slot).not.toBeNull();
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
 });
