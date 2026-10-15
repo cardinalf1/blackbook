@@ -518,7 +518,6 @@ export function TestReportView({
                   className="flex flex-col justify-between rounded-md border border-[#27272A] bg-[#0A0A0C] p-4"
                 >
                   <div>
-                    <span className="text-xs text-zinc-400">{label}</span>
                     <div className="mt-1 font-mono text-xl font-semibold text-zinc-100">
                       {label}: {secEst.low} to {secEst.high}
                     </div>
@@ -538,7 +537,6 @@ export function TestReportView({
             {report.kind === 'full' && report.estimate.total && (
               <div className="flex flex-col justify-between rounded-md border border-[#27272A] bg-[#0A0A0C] p-4">
                 <div>
-                  <span className="text-xs text-zinc-400">Total</span>
                   <div className="mt-1 font-mono text-xl font-semibold text-zinc-100">
                     Total: {report.estimate.total.low} to {report.estimate.total.high}
                   </div>
