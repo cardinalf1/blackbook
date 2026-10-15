@@ -19,6 +19,7 @@ export function DrillSetup({ taxonomy, facets, onStart, onCancel }: DrillSetupPr
   const domainSelectId = useId();
   const countInputId = useId();
   const liveOnlyId = useId();
+  const askConfidenceId = useId();
 
   // Pick initial section from taxonomy if available, otherwise default to 'rw'.
   const initialSection: Section = useMemo(() => {
@@ -32,6 +33,7 @@ export function DrillSetup({ taxonomy, facets, onStart, onCancel }: DrillSetupPr
   const [difficulties, setDifficulties] = useState<Difficulty[]>([]);
   const [countInput, setCountInput] = useState<string>('10');
   const [liveOnly, setLiveOnly] = useState<boolean>(true);
+  const [askConfidence, setAskConfidence] = useState<boolean>(false);
 
   // Domains & skills for the selected section
   const currentSectionTaxonomy = useMemo(() => {
@@ -66,8 +68,9 @@ export function DrillSetup({ taxonomy, facets, onStart, onCancel }: DrillSetupPr
       difficulties,
       count,
       liveOnly,
+      askConfidence,
     }),
-    [section, domainCode, skillCodes, difficulties, count, liveOnly],
+    [section, domainCode, skillCodes, difficulties, count, liveOnly, askConfidence],
   );
 
   // Live match count calculated using matchingCount from facets service
@@ -251,7 +254,7 @@ export function DrillSetup({ taxonomy, facets, onStart, onCancel }: DrillSetupPr
           </div>
         </div>
 
-        {/* Question count and Live set only */}
+        {/* Question count, Live set only, and Confidence toggle */}
         <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2">
           <label htmlFor={countInputId} className="block space-y-1">
             <span className="text-xs text-zinc-400">Question count</span>
@@ -266,19 +269,35 @@ export function DrillSetup({ taxonomy, facets, onStart, onCancel }: DrillSetupPr
             />
           </label>
 
-          <label
-            htmlFor={liveOnlyId}
-            className="flex cursor-pointer items-center gap-2 pb-2 text-xs text-zinc-300"
-          >
-            <input
-              id={liveOnlyId}
-              type="checkbox"
-              checked={liveOnly}
-              onChange={(e) => setLiveOnly(e.target.checked)}
-              className="h-4 w-4 rounded border border-[#27272A] bg-[#0A0A0C] text-zinc-100 accent-zinc-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-            />
-            <span>Live set only</span>
-          </label>
+          <div className="space-y-2 pb-1">
+            <label
+              htmlFor={liveOnlyId}
+              className="flex cursor-pointer items-center gap-2 text-xs text-zinc-300"
+            >
+              <input
+                id={liveOnlyId}
+                type="checkbox"
+                checked={liveOnly}
+                onChange={(e) => setLiveOnly(e.target.checked)}
+                className="h-4 w-4 rounded border border-[#27272A] bg-[#0A0A0C] text-zinc-100 accent-zinc-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+              />
+              <span>Live set only</span>
+            </label>
+
+            <label
+              htmlFor={askConfidenceId}
+              className="flex cursor-pointer items-center gap-2 text-xs text-zinc-300"
+            >
+              <input
+                id={askConfidenceId}
+                type="checkbox"
+                checked={askConfidence}
+                onChange={(e) => setAskConfidence(e.target.checked)}
+                className="h-4 w-4 rounded border border-[#27272A] bg-[#0A0A0C] text-zinc-100 accent-zinc-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+              />
+              <span>Ask how sure I am after each answer</span>
+            </label>
+          </div>
         </div>
 
         {/* Notices */}
