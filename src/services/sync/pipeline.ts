@@ -276,6 +276,8 @@ export async function runPipeline(scope: DownloadScope, deps: PipelineDeps): Pro
     const toFetch: RawListRow[] = [];
     for (const { row } of work) {
       const c = scope.refetchAll ? null : await deps.cache.get(rowId(row));
+      // Reading the local cache is progress too: a cold disk can take longer than the stall limit.
+      lastActivity = now();
       if (c !== null && c.updatedAt >= row.updateDate) cache.set(rowId(row), c);
       else toFetch.push(row);
     }

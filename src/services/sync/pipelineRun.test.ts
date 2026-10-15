@@ -181,6 +181,22 @@ describe('runPipeline', () => {
     expect(err.message).toContain(err.lastRequest?.questionId ?? 'x');
   });
 
+  it('does not call a slow read of a full local cache a stall', async () => {
+    const src = source({ rw: 4, math: 4 });
+    const cache = new MapCache();
+    await runPipeline(all, deps(src.fetch, { cache }));
+    // Each cached read takes 25 ms, 8 reads take 200 ms in total: well past a 60 ms stall limit.
+    const slow: DetailCache = {
+      get: async (id) => {
+        await new Promise((r) => setTimeout(r, 25));
+        return cache.get(id);
+      },
+      put: (id, v) => cache.put(id, v),
+    };
+    const { bank } = await runPipeline(all, deps(src.fetch, { cache: slow, limits: { ...fast, stallMs: 60 } }));
+    expect(bank.questions).toHaveLength(8);
+  });
+
   it('can be cancelled mid-run, keeping what was already cached', async () => {
     const ctl = new AbortController();
     const cache = new MapCache();
