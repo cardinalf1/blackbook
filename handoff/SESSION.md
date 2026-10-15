@@ -2,6 +2,26 @@
 
 Read this first in a new session, after AGENTS.md and CLAUDE.md. Updated by Claude at the end of each session or milestone. No College Board content in this file.
 
+## Morning report: Phase 3 (2026-10-15, unattended)
+
+**Done and committed** on `claude/phase3-exam-shell`, tag `phase3-done`. Nothing pushed. Phase 4 not started. Details, decisions and what I could not verify are in `handoff/RUN-REPORT.md` (summary at the top, Phase 3 section at the end).
+
+- **Practice module** (home): one timed module under test conditions. Reading and Writing is 27 questions in 32 minutes, Math 22 in 35. The numbers come from official sources, cited in `docs/exam-spec.md`. Every number lives in `src/config/examConfig.ts`, marked verified, derived or assumed.
+- **Assembly:** live set only, unseen questions first, no repeats, and any shortfall shown on the setup screen.
+- **Timer:** works from a saved deadline, so it stays right in a hidden tab, after sleep and after a reload. If time ran out while the tab was closed, the module submits as soon as you reopen it.
+- **During the module:** Hide/Show on the timer, a five-minute alert, an emergency pause (marked in the results), a navigator, the review page, arrow keys, the reference sheet (Math), and SPR input limited to 5 characters (6 with a minus sign).
+- **Results:** raw score, time per question, flagged and missed questions with explanations, domain and skill tables. No score estimate.
+- **Kept apart:** exam attempts are stored as mode `exam` and stay out of My skills.
+
+**To test it** (`bun run dev`, open the printed link):
+1. Click Practice module and choose Reading and Writing: 27 questions, 32:00, with the domain counts. Start the clock.
+2. Answer about half, then reload the page. In progress shows the Exam module; Resume, and the time left has kept running.
+3. Try Hide/Show, open the navigator with the counter in the bottom bar and jump to a question, and use the Left and Right arrow keys. Mark one question for review.
+4. On the last question, Next opens the review page. Check the unanswered and marked lists, then Submit and confirm. Read the results.
+5. Start a Math module. Open Reference, jump to one of the last 6 questions (SPR) and try typing letters or more than 5 characters. Press Pause, pick a reason, then Resume.
+6. Quick time-out: in the browser console run `localStorage.setItem('blackbook.dev.examSeconds','330')`, start a Math module and wait. You get the five-minute alert after 30 seconds, then an automatic submit at 0:00. The results say so and show the pause if you made one. Afterwards run `localStorage.removeItem('blackbook.dev.examSeconds')`.
+7. Run `bun scripts/telemetry-check.ts` (it ends with "Cross-check passed"), and open My skills: the exam answers are not counted there.
+
 ## Phase 3 plan (unattended run, 2026-10-15)
 
 Branch `claude/phase3-exam-shell` from `phase2d-done` (gates green there).

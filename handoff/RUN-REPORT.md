@@ -1,6 +1,50 @@
 # Run report: Phases 2c, 2d and 3 (unattended run, 2026-10-15)
 
-The summary for the whole run goes at the top when the run ends. Phase sections follow.
+## Summary
+
+All three phases are **done**, each tagged on its own branch. Nothing is pushed. The final state is branch `claude/phase3-exam-shell` (tag `phase3-done`): typecheck clean, 52 test files and 437 tests passing, `bun run sync` exit 0, and no `data/`, `fixtures/` or `.env` files tracked.
+
+| Phase | Status | Branch, tag | Definition of done |
+|---|---|---|---|
+| 2c: deferred feedback, history, telemetry | Done | `claude/phase2c-telemetry`, `phase2c-done` | All items met |
+| 2d: drafts, browse to practice, seen status | Done | `claude/phase2d-browse-drafts`, `phase2d-done` | All items met |
+| 3: exam shell, one timed module | Done | `claude/phase3-exam-shell`, `phase3-done` | All items met |
+
+Each branch starts from the previous phase's tag, so `claude/phase3-exam-shell` contains everything.
+
+**Definition-of-done items not met:** none. Some items were met in a form other than the one described:
+- A reload stood in for closing the tab.
+- Auto-submit ran with a dev-only 5:30 module limit instead of the full 35 minutes.
+- Random's preference for unseen questions is proven by unit tests, not in the browser.
+
+**Main decisions** (full lists in each phase section):
+- Drill score counts unanswered questions as wrong.
+- My skills counts only final answers in finished sessions, and drills and exams are kept apart by mode.
+- Sessions are never deleted: Discard marks them abandoned, and finished sessions are locked on the server.
+- "Seen" means shown on screen or answered. Deleting telemetry turns shown-but-unanswered questions back to Unseen.
+- The Math question order follows your spec (multiple choice first, SPR last). The official manual says otherwise; a config switch, `MATH_ORDER`, selects the official order.
+- Each exam module counts all 27 or 22 questions (no pretest). Per-module domain counts are derived from the official section shares.
+- A dev-only localStorage key shortens module time for testing.
+- An "Exam module" opened from Past drills shows the standard report.
+
+**Not verified:**
+- Fine visual detail in every phase. The preview screenshots come back at 640x400, and even magnified the text was soft. I checked layout through element positions, and every screen through its text.
+- A real tab close, a real tab switch, and a real 32- or 35-minute run to zero.
+- Behaviour of the official app that the sources don't describe (timer hide, alert style, review page, navigator). It is listed in `docs/exam-spec.md` for you to compare.
+
+**Quota and tool problems:**
+- The T3 session restarted three times. Cut-off background commands were rerun, and no work was lost (the ledger and commits covered each restart).
+- One `/compact` failed on a usage limit; the run continued.
+- I once killed every `node.exe` to stop a runaway test, which was too broad. Nothing else appeared affected, and I used PIDs only after that.
+- A `git stash -u` changed the line endings of your `phaseexec/` files. I restored them to LF, and their content is unchanged.
+- One checkpoint commit that failed typecheck was undone before merging.
+- One commit with a failing test (4512b18) was fixed in the next commit (e7c8b21).
+
+**How to test each phase.** Run `bun install`, then `bun run dev`, then open the printed link. The step-by-step lists are at the top of `handoff/SESSION.md`, one per phase:
+- **2c:** run a 20-question drill with changes, flags and confidence ratings. Close and resume it. Type `k` in the dev terminal mid-drill, answer, then type `s` and press Retry. Finish, read the report, and check Past drills. Run `bun scripts/telemetry-check.ts`. On "Your data", export and then delete telemetry.
+- **2d:** in the In progress list, resume a 5-of-20 drill. In Browse, set filters, practice a question with Done, come back with filters, page and scroll kept, and check Seen, Done and the "—" result for an unfinished drill. Try Random and Discard. Run `bun scripts/status-check.ts`.
+- **3:** under "Practice module", take a full Reading and Writing module: reload midway (the time continues), use Hide, the navigator and the arrow keys, then Review and Submit. For Math, the reference sheet and the SPR box rules apply. Pause once to see it marked in the results. For a quick time-out test, in the browser console run `localStorage.setItem('blackbook.dev.examSeconds','330')`, start a Math module and wait 5:30. Remove the key afterwards. Run `bun scripts/telemetry-check.ts` for the cross-check.
+
 
 ## Phase 2c: deferred feedback, session history, telemetry
 
@@ -106,3 +150,51 @@ Two writers at Medium in worktrees: `gemini/browse-ui` (QuestionBrowser) and `ge
 
 ### Problems during the run
 - The T3 session restarted twice. The dev server and one gate command were cut off, and I reran the gates afterwards.
+
+## Phase 3: exam shell (one timed module end to end)
+
+Branch `claude/phase3-exam-shell` (from `phase2d-done`). Tag `phase3-done`.
+
+### Gate before starting
+Green at `phase2d-done`: typecheck, 349 tests, sync exit 0.
+
+### Definition of done
+| Item | Status |
+|---|---|
+| typecheck, tests, sync, nothing from the source in git, nothing pushed | Met. 52 files, 437 tests. Sync exit 0 (run at the end). |
+| A full 27-question Reading and Writing module and a full 22-question Math module | Met in the browser. Reading and Writing: 27 questions in the official domain order (8 / 7 / 7 / 5), 25 answered, 2 marked for review, navigator jump, arrow keys, Hide and Show, review page, Submit with confirmation, results. Math: 22 questions (16 multiple choice, then 6 SPR), reference sheet, the SPR input rules, a pause, the five-minute alert, then time ran out. |
+| Close the tab midway and resume with the right time left | Met. Reading and Writing showed 31:55 on question 14. After a reload and Resume from In progress it was back on question 14 showing 31:45, the 10 seconds the reload took. |
+| One module runs out of time and auto-submits | Met. The Math module ran with the dev-only 5:30 limit, in a tab that was not visible. At zero it submitted on its own, without the review page. The results say "Time ran out. The module was submitted automatically.", time used 5:30 of 5:30. The answers given (4 multiple choice and one SPR, `7/2`) were stored and graded; the cross-check passed (active 330.0 s vs 329.9 s stored, score 0 / 22 both ways). |
+| Pause is flagged in the results | Met. An emergency pause with the reason "Technical problem" hid the questions and stopped the clock: 5:11 at the pause, 5:10 after resuming six seconds later. The results show "Paused: this is not a clean timed run." with the time, the reason and the length (0:07). |
+| Tests prove timer correctness under a hidden tab and a reload, and the deadline passing while closed | Met. `src/services/exam/timer.test.ts` covers a hidden tab (throttled ticks against the deadline), a sleep jump, a reload (the stored timer gives the same time left), the deadline passing while closed, pause and resume, and the five-minute rule. `src/hooks/useExamClock.test.tsx` covers the redraw after a long gap and a single expiry callback. `src/stores/examStore.test.ts` covers resume after reload with the right time, auto-submit on reopen after the deadline, and a single submit when the timer and the button fire together. |
+| Exam attempts stored apart from drill attempts; results match the stored answers (cross-check) | Met. Attempts carry mode `exam` (25 final ones for the Reading and Writing module). `bun scripts/telemetry-check.ts` on that module: answers, change counts, active time (33.4 s against 33.4 s stored), grades and score (5 / 27 from events, 5 / 27 stored) all agree. My skills counts only drill attempts (`countableAttempts(..., 'drill')`), and a test proves exam attempts stay out. |
+| Morning report in SESSION.md | Met. |
+
+### Spec and sources
+`docs/exam-spec.md` cites the SAT Suite alignment pages for Reading and Writing and for Math, the translated Bluebook test directions (PDF), and the Digital SAT Suite technical manual (PDF). I read the PDFs locally.
+- **Verified:** 27 questions in 32 min and 22 in 35 min; the domain shares; the Reading and Writing domain order and the order inside each domain; about 25% of Math questions are SPR; SPR up to 5 characters, or 6 with a minus sign; auto-submit at zero; no return after moving on.
+- **Derived:** the per-module domain counts.
+- **Assumed:** everything else, each labelled in `src/config/examConfig.ts`.
+
+### Decisions I made
+1. **Math order conflicts with the source.** Your spec asks for multiple choice first and SPR in the last quarter, each block by domain and then easiest to hardest. The technical manual says Math runs easiest to hardest across the whole module and does not say where SPR questions go. I followed your spec as the default and added `MATH_ORDER = 'official'` in `examConfig.ts` to switch.
+2. **No pretest questions.** All 27 or 22 questions count. Domain counts per module come from the whole-section shares (8 / 7 / 7 / 5 and 8 / 8 / 3 / 3), and 6 SPR questions per Math module.
+3. **Difficulty mix.** Equal thirds of easy, medium and hard per domain. A short difficulty is filled from the same domain and format and noted; a short domain is reported and never padded.
+4. **Exam actions live on the existing session store.** They reuse its save queue and Retry banner, so a failed save blocks moving on and blocks submitting, and Retry finishes a pending submit. Telemetry goes through the same 2c logger with mode `exam`.
+5. **Active time per question stops while paused** (the question is hidden) and on the review page.
+6. **"Leave (the clock keeps running)".** A small button saves and returns home; the module stays In progress, and its clock keeps running. Not in the spec; added so the module is not a trap.
+7. **Dev-only short timer.** The localStorage key `blackbook.dev.examSeconds` shortens module time in a dev build only, so auto-submit can be tested without waiting 35 minutes. The setup screen says so when it applies.
+8. **Opening an exam from Past drills** shows the standard report (labelled "Exam module" in the list). The full results screen with the time-out and pause notes appears right after submitting.
+9. **Review page wording.** I removed a sentence (from my own brief) claiming that on test day you cannot move on before time expires. No source supports it.
+
+### Gemini
+Four writers at Medium in worktrees: `gemini/exam-nav`, `gemini/exam-header` and `gemini/exam-panes` ran in parallel, then `gemini/exam-review-results`. All stayed in their files; each reported real typecheck and test output, and my runs after each merge matched. I reviewed the SPR input (it calls my `nextSprValue`), the reference sheet formulas (correct, written as text), and the header (no timers or Date.now; it only displays). Fixes by me: the review-page sentence above, and a heading for the report embedded in the results.
+
+### Could not verify
+- Fine visual detail at full resolution (screenshots come back at 640x400): the split pane widths, the navigator styling and the focus rings were checked through the DOM, not by eye.
+- A real 32- or 35-minute run to zero. Auto-submit ran with the dev 5:30 limit, through the same code path.
+- Behavior of the official app that the sources do not describe: Hide/Show, the five-minute alert style, the review page layout and navigator details. All are listed as assumed in `docs/exam-spec.md` for you to check.
+
+### Problems during the run
+- One commit (4512b18) went in with a failing test: my command chain did not stop on the failure. It was fixed in the next commit (e7c8b21); since then I check test output before every commit.
+- The first "Practice module" click in the browser raced the page's initial load; the second worked. Not reproduced afterwards.
