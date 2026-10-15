@@ -116,7 +116,7 @@ function scope(f: AnalyticsFilter): { sql: string; params: SqlParam[] } {
       COALESCE(json_extract(x.data, '$.exam.module.section'), json_extract(x.data, '$.config.section')) AS section,
       COALESCE(json_extract(x.data, '$.totalActiveMs'), 0) AS active_ms
     FROM sessions x LEFT JOIN sessions c ON c.id = x.test_id
-    WHERE x.status = 'finished' AND x.test_kind IS NULL
+    WHERE x.status = 'finished' AND x.test_kind IS NULL AND x.source <> 'retry'
   ),
   s AS (SELECT * FROM s0 ${where.length ? `WHERE ${where.join(' AND ')}` : ''}),
   a AS (
@@ -132,7 +132,7 @@ function scope(f: AnalyticsFilter): { sql: string; params: SqlParam[] } {
 const BASELINE_SQL = `
   base AS (
     SELECT t.mode, q.section, q.difficulty, t.time_ms
-    FROM attempts t JOIN sessions x ON x.id = t.session_id AND x.status = 'finished' AND x.test_kind IS NULL
+    FROM attempts t JOIN sessions x ON x.id = t.session_id AND x.status = 'finished' AND x.test_kind IS NULL AND x.source <> 'retry'
          JOIN qmeta q ON q.id = t.question_id
     WHERE t.status = 'final' AND t.response <> ''
   ),

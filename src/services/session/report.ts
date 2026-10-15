@@ -93,6 +93,7 @@ const TEST_KIND_LABEL = { full: 'Full test', rw: 'Reading and Writing section', 
 export function kindLabel(session: SessionRecord): string {
   if (session.test) return TEST_KIND_LABEL[session.test.kind];
   if (session.mode === 'exam') return 'Exam module';
+  if (session.source === 'retry') return 'Retry';
   return session.source === 'browse' ? 'Single question' : 'Drill';
 }
 

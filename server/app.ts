@@ -6,6 +6,7 @@ import { importBankText } from '../src/services/import/importBank';
 import type { Sanitizer } from '../src/services/normalize/sanitize';
 import { filterFromParams } from '../src/services/analytics/filter';
 import type { AttemptStore, SessionFilter, TelemetryStore } from '../src/services/storage/attemptTypes';
+import type { MistakeStore } from '../src/types/mistakes';
 import type { AnalyticsStore } from '../src/types/analytics';
 import type { QuestionQuery } from '../src/services/storage/types';
 import type { DownloadProgress, DownloadScopeChoice } from '../src/types/download';
@@ -13,13 +14,16 @@ import { DIFFICULTIES, SECTIONS, type Difficulty, type Section } from '../src/ty
 import type { DiskBankStore } from './bankStore';
 import type { DownloadManager } from './download';
 import { ClosedSessionError } from './userDb';
-import { isObj, parseAttempt, parseEvent, parseSession } from './validate';
+import { BackupError, type BackupManager } from './backups';
+import { isObj, parseAttempt, parseEvent, parseSession, parseTag, type ValidatedUserData } from './validate';
 import { checkHostAndOrigin, checkRequest, sameSecret, sessionCookie, type SecurityConfig } from './security';
 
 export interface AppDeps {
   security: SecurityConfig;
   bank: DiskBankStore;
-  users: AttemptStore & TelemetryStore;
+  users: AttemptStore & TelemetryStore & MistakeStore & { replaceAll(data: ValidatedUserData): Promise<void> };
+  /** Snapshots and restore. Absent in tests that do not need them. */
+  backups?: BackupManager;
   /** Summaries computed in SQL. Absent in tests that do not need them. */
   analytics?: AnalyticsStore;
   downloads: DownloadManager;
@@ -34,6 +38,7 @@ export interface AppDeps {
 const MAX_IMPORT_BYTES = 200 * 1024 * 1024;
 const MAX_EVENT_BATCH = 5000;
 const MAX_EVENT_BYTES = 2 * 1024 * 1024;
+const MAX_RESTORE_BYTES = 400 * 1024 * 1024;
 
 function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -234,6 +239,33 @@ export function createHandler(deps: AppDeps): (req: Request) => Promise<Response
       if (path === '/api/data/stats' && m === 'GET') return json(await deps.users.stats());
       if (path === '/api/data/export' && m === 'GET') {
         return json(await deps.users.exportAll(), 200, { 'Content-Disposition': 'attachment; filename="blackbook-data.json"' });
+      }
+      if (path === '/api/mistake-tags' && m === 'GET') return json(await deps.users.listTags());
+      if (path === '/api/mistake-tags' && m === 'POST') {
+        const tag = parseTag(await readJson(req));
+        if (!tag) return problem(400, 'Malformed mistake tag.');
+        await deps.users.addTag(tag);
+        return json({ ok: true });
+      }
+      if (path === '/api/backups' && m === 'GET') {
+        if (!deps.backups) return problem(404, 'Not found.');
+        return json(await deps.backups.list());
+      }
+      if ((path === '/api/backups/restore' || path === '/api/data/restore') && m === 'POST') {
+        const backups = deps.backups;
+        if (!backups) return problem(404, 'Not found.');
+        if (Number(req.headers.get('content-length') ?? '0') > MAX_RESTORE_BYTES) return problem(413, 'That file is too large to restore.');
+        const body = await readJson(req);
+        try {
+          if (path === '/api/backups/restore') {
+            if (!isObj(body) || typeof body.name !== 'string') return problem(400, 'Pick a backup to restore.');
+            return json(await backups.restoreSnapshot(body.name));
+          }
+          return json(await backups.restore(isObj(body) ? body.data : undefined));
+        } catch (e) {
+          if (e instanceof BackupError) return problem(400, e.message);
+          throw e;
+        }
       }
       if (path === '/api/user-data' && m === 'DELETE') {
         await deps.users.clearAll();

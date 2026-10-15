@@ -1,7 +1,9 @@
 // Storage adapters backed by the local server. Same contracts as the in-memory stores.
 
 import type { QuestionStatus } from '../../types/browse';
+import type { BackupList, BackupStore, RestoreResult } from '../../types/backup';
 import type { FlagRecord } from '../../types/drill';
+import type { MistakeStore, MistakeTag } from '../../types/mistakes';
 import type { EventRecord, SessionRecord, StoredAttempt, TelemetryStats, UserDataExport } from '../../types/session';
 import type { Question, Section } from '../../types/sat';
 import type { AnalyticsFilter, AnalyticsStore, BehaviorSummary, MissRow, OverviewSummary, SkillDetail, SkillsSummary, TestHistory, TimingSummary } from '../../types/analytics';
@@ -44,7 +46,7 @@ export class HttpQuestionStore implements QuestionStore {
   }
 }
 
-export class HttpAttemptStore implements AttemptStore, TelemetryStore {
+export class HttpAttemptStore implements AttemptStore, TelemetryStore, MistakeStore {
   constructor(private readonly api: ApiClient) {}
 
   async saveSession(session: SessionRecord, attempts: readonly StoredAttempt[] = []): Promise<void> {
@@ -99,8 +101,32 @@ export class HttpAttemptStore implements AttemptStore, TelemetryStore {
     return this.api.request<QuestionStatus[]>('/api/status');
   }
 
+  async addTag(tag: MistakeTag): Promise<void> {
+    await this.api.request('/api/mistake-tags', { method: 'POST', body: JSON.stringify(tag) });
+  }
+
+  async listTags(): Promise<MistakeTag[]> {
+    return this.api.request<MistakeTag[]>('/api/mistake-tags');
+  }
+
   async clearAll(): Promise<void> {
     await this.api.request('/api/user-data', { method: 'DELETE' });
+  }
+}
+
+export class HttpBackupStore implements BackupStore {
+  constructor(private readonly api: ApiClient) {}
+
+  list(): Promise<BackupList> {
+    return this.api.request<BackupList>('/api/backups');
+  }
+
+  restoreSnapshot(name: string): Promise<RestoreResult> {
+    return this.api.request<RestoreResult>('/api/backups/restore', { method: 'POST', body: JSON.stringify({ name }) });
+  }
+
+  restoreExport(data: unknown): Promise<RestoreResult> {
+    return this.api.request<RestoreResult>('/api/data/restore', { method: 'POST', body: JSON.stringify({ data }) });
   }
 }
 

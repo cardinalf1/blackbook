@@ -8,8 +8,10 @@ import { isSessionV1, upgradeSession, upgradeSessionV1 } from '../src/services/s
 import type { AttemptStore, SessionFilter, TelemetryStore } from '../src/services/storage/attemptTypes';
 import type { QuestionStatus } from '../src/types/browse';
 import type { FlagRecord } from '../src/types/drill';
+import type { MistakeStore, MistakeTag } from '../src/types/mistakes';
 import type { EventRecord, EventType, SessionRecord, StoredAttempt, TelemetryStats, UserDataExport } from '../src/types/session';
 import { transaction, type SqlDb, type SqlParam } from './sql';
+import type { ValidatedUserData } from './validate';
 
 /** SQL text, or a function for steps SQL alone cannot do (rewriting stored JSON). */
 export type Migration = string | ((db: SqlDb) => void);
@@ -113,6 +115,46 @@ export const MIGRATIONS: readonly Migration[] = [
   CREATE INDEX sessions_finished ON sessions (status, finished_at);
   CREATE INDEX events_type ON events (type, session_id, question_id);
   CREATE INDEX attempts_status ON attempts (status, session_id, question_id);
+  `,
+  // 5: Phase 6. Sessions may start from the retry queue (the source CHECK has to be rebuilt to allow
+  // it), and mistake tags live in their own append-only table: attempts are never touched.
+  `
+  CREATE TABLE sessions_v5 (
+    id TEXT PRIMARY KEY,
+    mode TEXT NOT NULL CHECK (mode IN ('drill', 'exam')),
+    source TEXT NOT NULL DEFAULT 'drill' CHECK (source IN ('drill', 'browse', 'exam', 'retry')),
+    status TEXT NOT NULL CHECK (status IN ('in_progress', 'finished', 'abandoned')),
+    started_at INTEGER NOT NULL,
+    finished_at INTEGER,
+    last_activity_at INTEGER NOT NULL,
+    data TEXT NOT NULL
+  );
+  INSERT INTO sessions_v5 (id, mode, source, status, started_at, finished_at, last_activity_at, data)
+    SELECT id, mode, source, status, started_at, finished_at, last_activity_at, data FROM sessions;
+  DROP TABLE sessions;
+  ALTER TABLE sessions_v5 RENAME TO sessions;
+  CREATE INDEX sessions_status ON sessions (status, mode, started_at);
+  ALTER TABLE sessions ADD COLUMN test_id TEXT GENERATED ALWAYS AS (json_extract(data, '$.exam.testId')) VIRTUAL;
+  ALTER TABLE sessions ADD COLUMN test_kind TEXT GENERATED ALWAYS AS (json_extract(data, '$.test.kind')) VIRTUAL;
+  ALTER TABLE sessions ADD COLUMN test_paused INTEGER GENERATED ALWAYS AS (COALESCE(json_extract(data, '$.test.paused'), 0)) VIRTUAL;
+  ALTER TABLE sessions ADD COLUMN exam_paused INTEGER GENERATED ALWAYS AS (COALESCE(json_array_length(json_extract(data, '$.exam.pauses')), 0) > 0) VIRTUAL;
+  CREATE INDEX sessions_test ON sessions (test_id);
+  CREATE INDEX sessions_finished ON sessions (status, finished_at);
+
+  -- One row per tag action. The newest row for a (session, question) is the tag in force; older rows
+  -- are the history. No foreign key and no update: discarding a session never deletes its tags.
+  CREATE TABLE mistake_tags (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    question_id TEXT NOT NULL,
+    reason TEXT NOT NULL CHECK (reason IN ('careless', 'concept_gap', 'misread', 'ran_out_of_time', 'guessed', 'other')),
+    note TEXT NOT NULL,
+    suggested INTEGER NOT NULL CHECK (suggested IN (0, 1)),
+    at INTEGER NOT NULL
+  );
+  CREATE INDEX mistake_tags_question ON mistake_tags (session_id, question_id, at);
+  CREATE TRIGGER mistake_tags_append_only BEFORE UPDATE ON mistake_tags
+    BEGIN SELECT RAISE(ABORT, 'mistake tags are append-only'); END;
   `,
 ];
 
@@ -274,7 +316,7 @@ export class ClosedSessionError extends Error {
   }
 }
 
-export class SqliteUserStore implements AttemptStore, TelemetryStore {
+export class SqliteUserStore implements AttemptStore, TelemetryStore, MistakeStore {
   constructor(private readonly db: SqlDb) {
     migrate(db);
   }
@@ -286,28 +328,30 @@ export class SqliteUserStore implements AttemptStore, TelemetryStore {
       const prev = this.db.get<{ status: string; data: string }>('SELECT status, data FROM sessions WHERE id = ?', s.id);
       if (prev && prev.status !== 'in_progress' && prev.data !== JSON.stringify(s)) throw new ClosedSessionError();
       insertSession(this.db, 'sessions', s);
-      for (const a of attempts) {
-        this.db.run(
-          `INSERT INTO attempts (id, question_id, session_id, mode, status, response, correct, time_ms, first_visit_ms, changes, confidence, at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT (id) DO UPDATE SET status = excluded.status, response = excluded.response, correct = excluded.correct,
-             time_ms = excluded.time_ms, first_visit_ms = excluded.first_visit_ms, changes = excluded.changes,
-             confidence = excluded.confidence, at = excluded.at`,
-          a.id,
-          a.questionId,
-          a.sessionId,
-          a.mode,
-          a.status,
-          a.response,
-          a.correct ? 1 : 0,
-          Math.max(0, Math.round(a.timeMs)),
-          a.firstVisitMs === null ? null : Math.max(0, Math.round(a.firstVisitMs)),
-          a.changes,
-          a.confidence,
-          a.at,
-        );
-      }
+      for (const a of attempts) this.insertAttempt(a);
     });
+  }
+
+  private insertAttempt(a: StoredAttempt): void {
+    this.db.run(
+      `INSERT INTO attempts (id, question_id, session_id, mode, status, response, correct, time_ms, first_visit_ms, changes, confidence, at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (id) DO UPDATE SET status = excluded.status, response = excluded.response, correct = excluded.correct,
+         time_ms = excluded.time_ms, first_visit_ms = excluded.first_visit_ms, changes = excluded.changes,
+         confidence = excluded.confidence, at = excluded.at`,
+      a.id,
+      a.questionId,
+      a.sessionId,
+      a.mode,
+      a.status,
+      a.response,
+      a.correct ? 1 : 0,
+      Math.max(0, Math.round(a.timeMs)),
+      a.firstVisitMs === null ? null : Math.max(0, Math.round(a.firstVisitMs)),
+      a.changes,
+      a.confidence,
+      a.at,
+    );
   }
 
   async getSession(id: string): Promise<SessionRecord | null> {
@@ -396,7 +440,70 @@ export class SqliteUserStore implements AttemptStore, TelemetryStore {
       sessions: await this.listSessions(),
       attempts: await this.listAttempts(),
       events: await this.listEvents(),
+      mistakeTags: await this.listTags(),
+      flags: await this.listFlags(),
     };
+  }
+
+  async addTag(t: MistakeTag): Promise<void> {
+    transaction(this.db, () => {
+      this.db.run(
+        'INSERT OR IGNORE INTO mistake_tags (id, session_id, question_id, reason, note, suggested, at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        t.id,
+        t.sessionId,
+        t.questionId,
+        t.reason,
+        t.note,
+        t.suggested ? 1 : 0,
+        t.at,
+      );
+    });
+  }
+
+  async listTags(): Promise<MistakeTag[]> {
+    return this.db
+      .all<{ id: string; session_id: string; question_id: string; reason: string; note: string; suggested: number; at: number }>(
+        'SELECT * FROM mistake_tags ORDER BY at, id',
+      )
+      .map((r) => ({
+        id: r.id,
+        sessionId: r.session_id,
+        questionId: r.question_id,
+        reason: r.reason as MistakeTag['reason'],
+        note: r.note,
+        suggested: Number(r.suggested) === 1,
+        at: r.at,
+      }));
+  }
+
+  /**
+   * Replaces all user data with `data`, in one transaction: either everything is swapped or nothing
+   * is. The caller has already validated every record.
+   */
+  async replaceAll(data: ValidatedUserData): Promise<void> {
+    transaction(this.db, () => {
+      this.db.run('DELETE FROM attempts');
+      this.db.run('DELETE FROM flags');
+      this.db.run('DELETE FROM sessions');
+      this.db.run('DELETE FROM events');
+      this.db.run('DELETE FROM mistake_tags');
+      for (const s of data.sessions) insertSession(this.db, 'sessions', s);
+      for (const a of data.attempts) this.insertAttempt(a);
+      for (const f of data.flags) this.db.run('INSERT OR REPLACE INTO flags (question_id, at) VALUES (?, ?)', f.questionId, f.at);
+      for (const e of data.events) {
+        this.db.run(
+          `INSERT OR IGNORE INTO events (id, session_id, mode, question_id, type, ts, mono_ms, page_id, seq, payload)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          e.id, e.sessionId, e.mode, e.questionId, e.type, e.ts, e.monoMs, e.pageId, e.seq, JSON.stringify(e.payload),
+        );
+      }
+      for (const t of data.mistakeTags) {
+        this.db.run(
+          'INSERT OR IGNORE INTO mistake_tags (id, session_id, question_id, reason, note, suggested, at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          t.id, t.sessionId, t.questionId, t.reason, t.note, t.suggested ? 1 : 0, t.at,
+        );
+      }
+    });
   }
 
   async questionStatus(): Promise<QuestionStatus[]> {
@@ -419,6 +526,7 @@ export class SqliteUserStore implements AttemptStore, TelemetryStore {
       this.db.run('DELETE FROM flags');
       this.db.run('DELETE FROM sessions');
       this.db.run('DELETE FROM events');
+      this.db.run('DELETE FROM mistake_tags');
     });
   }
 }

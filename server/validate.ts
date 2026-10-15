@@ -1,6 +1,8 @@
 // Input checks for the user-data routes. The server only accepts well-formed records, so a bad
 // client can never write something the app cannot read back.
 
+import type { FlagRecord } from '../src/types/drill';
+import { MISTAKE_NOTE_MAX, MISTAKE_REASONS, type MistakeReason, type MistakeTag } from '../src/types/mistakes';
 import { CHOICE_LETTERS, type ChoiceLetter } from '../src/types/sat';
 import {
   CONFIDENCE_LEVELS,
@@ -70,6 +72,8 @@ const EVENT_TYPES: Record<EventType, true> = {
   test_break_ended: true,
   test_finished: true,
   test_abandoned: true,
+  mistake_tag_set: true,
+  mistake_tag_changed: true,
 };
 
 function isExam(e: unknown): boolean {
@@ -135,7 +139,7 @@ function isTest(t: unknown): boolean {
 
 export function parseSession(v: unknown): SessionRecord | null {
   if (!isObj(v) || v.version !== SESSION_RECORD_VERSION || !isStr(v.id) || !isMode(v.mode)) return null;
-  if (v.source !== 'drill' && v.source !== 'browse' && v.source !== 'exam') return null;
+  if (v.source !== 'drill' && v.source !== 'browse' && v.source !== 'exam' && v.source !== 'retry') return null;
   if (v.status !== 'in_progress' && v.status !== 'finished' && v.status !== 'abandoned') return null;
   if (!isObj(v.config) || !Array.isArray(v.queueIds) || !v.queueIds.every(isStr) || v.queueIds.length > 500) return null;
   if (!isNum(v.index) || v.index < 0 || (v.queueIds.length > 0 && v.index >= v.queueIds.length)) return null;
@@ -171,4 +175,60 @@ export function parseEvent(v: unknown): EventRecord | null {
   if (typeof v.type !== 'string' || !(v.type in EVENT_TYPES) || !isNum(v.ts) || !isNum(v.monoMs) || !isStr(v.pageId) || !isMs(v.seq)) return null;
   if (!isObj(v.payload) || JSON.stringify(v.payload).length > 2000) return null;
   return v as unknown as EventRecord;
+}
+
+export function parseTag(v: unknown): MistakeTag | null {
+  if (!isObj(v)) return null;
+  if (!isStr(v.id) || !isStr(v.sessionId) || !isStr(v.questionId) || !isNum(v.at) || typeof v.suggested !== 'boolean') return null;
+  if (!MISTAKE_REASONS.includes(v.reason as MistakeReason)) return null;
+  if (typeof v.note !== 'string' || v.note.length > MISTAKE_NOTE_MAX) return null;
+  return v as unknown as MistakeTag;
+}
+
+/** The records of a backup or export, every one checked. Question content is never part of it. */
+export interface ValidatedUserData {
+  sessions: SessionRecord[];
+  attempts: StoredAttempt[];
+  events: EventRecord[];
+  flags: FlagRecord[];
+  mistakeTags: MistakeTag[];
+}
+
+const MAX_RESTORE_ROWS = 2_000_000;
+
+/**
+ * Checks a parsed export or snapshot. Returns the records, or a plain sentence saying what is wrong.
+ * Exports from before Phase 6 have no tags or flags; those lists are then empty.
+ */
+export function parseUserData(v: unknown): ValidatedUserData | string {
+  if (!isObj(v) || v.app !== 'blackbook') return 'That file is not a Blackbook export.';
+  const list = (key: string): unknown[] | string => {
+    const x = v[key];
+    if (x === undefined) return [];
+    return Array.isArray(x) && x.length <= MAX_RESTORE_ROWS ? x : `The ${key} in that file are not readable.`;
+  };
+  const lists = { sessions: list('sessions'), attempts: list('attempts'), events: list('events'), flags: list('flags'), mistakeTags: list('mistakeTags') };
+  for (const [k, x] of Object.entries(lists)) if (typeof x === 'string') return x;
+  const check = <T>(key: string, items: unknown, parse: (x: unknown) => T | null): T[] | string => {
+    const out: T[] = [];
+    for (const x of items as unknown[]) {
+      const r = parse(x);
+      if (r === null) return `A ${key} record in that file is damaged, so nothing was restored.`;
+      out.push(r);
+    }
+    return out;
+  };
+  const sessions = check('session', lists.sessions, parseSession);
+  const attempts = check('attempt', lists.attempts, parseAttempt);
+  const events = check('event', lists.events, parseEvent);
+  const mistakeTags = check('mistake tag', lists.mistakeTags, parseTag);
+  const flags = check('flag', lists.flags, (x) => (isObj(x) && isStr(x.questionId) && isNum(x.at) ? ({ questionId: x.questionId, at: x.at } as FlagRecord) : null));
+  for (const r of [sessions, attempts, events, mistakeTags, flags]) if (typeof r === 'string') return r;
+  return {
+    sessions: sessions as SessionRecord[],
+    attempts: attempts as StoredAttempt[],
+    events: events as EventRecord[],
+    flags: flags as FlagRecord[],
+    mistakeTags: mistakeTags as MistakeTag[],
+  };
 }

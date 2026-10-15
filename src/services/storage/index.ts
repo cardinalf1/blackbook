@@ -1,7 +1,9 @@
 import { api } from '../api/client';
 import type { AttemptStore, TelemetryStore } from './attemptTypes';
 import type { AnalyticsStore } from '../../types/analytics';
-import { HttpAnalyticsStore, HttpAttemptStore, HttpQuestionStore } from './http';
+import type { BackupStore } from '../../types/backup';
+import type { MistakeStore } from '../../types/mistakes';
+import { HttpAnalyticsStore, HttpAttemptStore, HttpBackupStore, HttpQuestionStore } from './http';
 import type { QuestionStore } from './types';
 
 export type { AttemptStore, SessionFilter, TelemetryStore } from './attemptTypes';
@@ -17,6 +19,12 @@ export const attemptStore: AttemptStore = userStore;
 
 /** App-wide event log, on disk next to the attempts. Only the telemetry logger writes to it. */
 export const telemetryStore: TelemetryStore = userStore;
+
+/** Mistake tags, append-only, kept next to the attempts they describe. */
+export const mistakeStore: MistakeStore = userStore;
+
+/** Snapshots of user data and restore from them or from an export file. */
+export const backupStore: BackupStore = new HttpBackupStore(api);
 
 /** Summaries for the analytics screens, computed by the local program. */
 export const analyticsStore: AnalyticsStore = new HttpAnalyticsStore(api);

@@ -1,11 +1,13 @@
 import type { QuestionStatus } from '../../types/browse';
 import type { FlagRecord } from '../../types/drill';
+import type { MistakeStore, MistakeTag } from '../../types/mistakes';
 import { deriveStatus, examShownIds, shownIds } from '../browse/status';
 import type { EventRecord, SessionRecord, StoredAttempt, TelemetryStats, UserDataExport } from '../../types/session';
 import type { AttemptStore, SessionFilter, TelemetryStore } from './attemptTypes';
 
 /** In-memory user store for tests. Same contracts as the SQLite store behind the local server. */
-export class MemoryAttemptStore implements AttemptStore, TelemetryStore {
+export class MemoryAttemptStore implements AttemptStore, TelemetryStore, MistakeStore {
+  private tags = new Map<string, MistakeTag>();
   private attempts = new Map<string, StoredAttempt>();
   private flags = new Map<string, FlagRecord>();
   private sessions = new Map<string, SessionRecord>();
@@ -79,7 +81,17 @@ export class MemoryAttemptStore implements AttemptStore, TelemetryStore {
       sessions: await this.listSessions(),
       attempts: await this.listAttempts(),
       events: await this.listEvents(),
+      mistakeTags: await this.listTags(),
+      flags: await this.listFlags(),
     };
+  }
+
+  async addTag(tag: MistakeTag): Promise<void> {
+    if (!this.tags.has(tag.id)) this.tags.set(tag.id, structuredClone(tag));
+  }
+
+  async listTags(): Promise<MistakeTag[]> {
+    return structuredClone([...this.tags.values()].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id)));
   }
 
   async questionStatus(): Promise<QuestionStatus[]> {
@@ -93,5 +105,6 @@ export class MemoryAttemptStore implements AttemptStore, TelemetryStore {
     this.flags.clear();
     this.sessions.clear();
     this.events.clear();
+    this.tags.clear();
   }
 }

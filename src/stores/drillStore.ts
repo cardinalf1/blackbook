@@ -8,6 +8,7 @@
 
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { useStore } from 'zustand';
+import { RETRY_SESSION_MAX } from '../config/mistakeConfig';
 import { isCorrect } from '../services/answers';
 import { selectQuestionIds, type Rng } from '../services/drill/select';
 import {
@@ -59,6 +60,11 @@ export interface DrillActions {
   /** Loads flags and the unfinished sessions. Call at startup and when returning home. */
   init(): Promise<void>;
   start(config: DrillConfig, facets: readonly QuestionFacet[]): Promise<void>;
+  /**
+   * Serves the given due questions in order as a drill session with source "retry": deferred feedback
+   * and the usual report, but kept out of first-attempt statistics.
+   */
+  startRetry(questionIds: readonly string[], facets: readonly QuestionFacet[]): Promise<void>;
   /** Practice one question picked in Browse: a session of length 1 with source "browse". */
   startSingle(questionId: string): Promise<void>;
   resume(sessionId: string): Promise<void>;
@@ -372,6 +378,22 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
           await begin(createSession(newId(), 'drill', { ...config, count: ids.length }, ids, now()));
         } catch (e) {
           set({ error: `Could not start the drill: ${msg(e)}` });
+        }
+      },
+
+      async startRetry(questionIds, facets) {
+        try {
+          const known = new Map(facets.map((f) => [f.id, f]));
+          const ids = [...new Set(questionIds)].filter((id) => known.has(id)).slice(0, RETRY_SESSION_MAX);
+          const first = known.get(ids[0] ?? '');
+          if (!first) {
+            set({ error: 'None of the questions due for retry are in the bank any more.' });
+            return;
+          }
+          const config: DrillConfig = { section: first.section, domainCode: 'all', skillCodes: [], difficulties: [], count: ids.length, liveOnly: false, questionIds: ids };
+          await begin(createSession(newId(), 'drill', config, ids, now(), 'retry'));
+        } catch (e) {
+          set({ error: `Could not start the retry: ${msg(e)}` });
         }
       },
 

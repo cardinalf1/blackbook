@@ -11,6 +11,7 @@ import { createSanitizer } from '../src/services/normalize/sanitize';
 import type { PipelineDeps } from '../src/services/sync/pipeline';
 import { createHandler } from './app';
 import { DiskBankStore } from './bankStore';
+import { BackupManager } from './backups';
 import { DownloadManager } from './download';
 import { FsDetailCache } from './files';
 import { createIdleMonitor } from './idle';
@@ -62,6 +63,13 @@ async function main(): Promise<void> {
   const bank = new DiskBankStore(join(dataFolder, 'bank.json'));
   const db = openSqlite(join(dataFolder, 'user.db'));
   const users = new SqliteUserStore(db);
+  const backups = new BackupManager(join(dataFolder, 'backups'), users);
+  try {
+    const made = await backups.snapshotIfDue();
+    if (made) console.log(`Backup written: ${made}`);
+  } catch (e) {
+    console.error(`Could not write today's backup: ${e instanceof Error ? e.message : String(e)}`);
+  }
   const analytics = new SqlAnalytics(db, { load: () => bank.analyticsMeta() });
   const cache = new FsDetailCache(join(dataFolder, 'raw'));
   const downloads = new DownloadManager({ bank, cache, window: pipelineWindow, fetch: (i, init) => fetch(i, init), dataFolder });
@@ -91,6 +99,7 @@ async function main(): Promise<void> {
     },
     bank,
     users,
+    backups,
     analytics,
     downloads,
     sanitize: createSanitizer(window as unknown as Parameters<typeof createSanitizer>[0]),

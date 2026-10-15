@@ -6,13 +6,15 @@ import type { SessionMode, SessionRecord, StoredAttempt } from '../../types/sess
 /**
  * The attempts that statistics may use: final answers in finished sessions of one mode. Drafts,
  * unfinished and discarded sessions never count, and drill and exam results are kept apart.
+ * Retry sessions are left out too: skill accuracy is about first attempts, and retry results are
+ * reported on their own line (see services/retry/queue).
  */
 export function countableAttempts(
   attempts: readonly StoredAttempt[],
   sessions: readonly SessionRecord[],
   mode: SessionMode,
 ): StoredAttempt[] {
-  const finished = new Set(sessions.filter((s) => s.status === 'finished' && s.mode === mode).map((s) => s.id));
+  const finished = new Set(sessions.filter((s) => s.status === 'finished' && s.mode === mode && s.source !== 'retry').map((s) => s.id));
   return attempts.filter((a) => a.status === 'final' && a.mode === mode && a.response !== '' && finished.has(a.sessionId));
 }
 

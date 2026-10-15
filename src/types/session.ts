@@ -3,14 +3,15 @@
 // session is finished. Records hold question ids only, never question content.
 
 import type { ReactNode } from 'react';
-import type { DrillConfig } from './drill';
+import type { DrillConfig, FlagRecord } from './drill';
+import type { MistakeReason, MistakeTag } from './mistakes';
 import type { ExamState } from './exam';
 import type { TestState } from './test';
 import type { ChoiceLetter, Difficulty, Question, Section } from './sat';
 
 export type SessionMode = 'drill' | 'exam';
-/** Where a session was started: a drill setup, one question picked in Browse, or an exam module. */
-export type SessionSource = 'drill' | 'browse' | 'exam';
+/** Where a session was started: a drill setup, one question picked in Browse, an exam module, or the retry queue. */
+export type SessionSource = 'drill' | 'browse' | 'exam' | 'retry';
 export type SessionStatus = 'in_progress' | 'finished' | 'abandoned';
 export type Confidence = 'guess' | 'unsure' | 'sure';
 export const CONFIDENCE_LEVELS: readonly Confidence[] = ['guess', 'unsure', 'sure'];
@@ -152,6 +153,9 @@ export interface EventPayloads {
   test_break_ended: { early: boolean; usedMs: number };
   test_finished: { kind: string; paused: boolean };
   test_abandoned: Record<string, never>;
+  /** Ids and the reason only. The note the user types is never logged. */
+  mistake_tag_set: { reason: MistakeReason; suggested: boolean };
+  mistake_tag_changed: { from: MistakeReason; to: MistakeReason };
 }
 
 export type EventType = keyof EventPayloads;
@@ -193,6 +197,10 @@ export interface UserDataExport {
   sessions: SessionRecord[];
   attempts: StoredAttempt[];
   events: EventRecord[];
+  /** Every tag action, history included. Absent in exports made before Phase 6. */
+  mistakeTags?: MistakeTag[];
+  /** On-screen "Flag for later" marks. Absent in exports made before Phase 6. */
+  flags?: FlagRecord[];
 }
 
 // ---- Report ----

@@ -74,7 +74,7 @@ class Data {
   sessions(f: AnalyticsFilter): Sess[] {
     const out: Sess[] = [];
     for (const s of this.raw.sessions) {
-      if (s.status !== 'finished' || s.test) continue;
+      if (s.status !== 'finished' || s.test || s.source === 'retry') continue;
       const container = s.exam?.testId ? this.containers.get(s.exam.testId) : undefined;
       let kind: Kind;
       if (s.source === 'browse') kind = 'single';
