@@ -45,7 +45,7 @@ Times are in milliseconds. "Choice" is a letter A to D.
 | Type | Payload | When |
 |---|---|---|
 | `question_shown` | `{index, visit}` | The question is rendered on screen. `visit` counts from 1 |
-| `question_hidden` | `{index, visitActiveMs, reason}` | The question leaves the screen. `reason` is `next`, `back`, `jump`, `finish`, `exit` or `unload` |
+| `question_hidden` | `{index, visitActiveMs, reason}` | The question leaves the screen. `reason` is `next`, `back`, `jump`, `finish`, `exit`, `unload`, and in exam modules also `review` (the review page opened) and `pause` (an emergency pause hid it) |
 | `first_interaction` | `{sinceShownMs, kind}` | First select, strike, flag, typing or rating in this visit. `kind` is `select`, `strike`, `flag`, `type` or `confidence` |
 | `choice_selected` | `{choice}` | A choice is picked with no answer before |
 | `choice_changed` | `{from, to}` | A different choice replaces the answer |
@@ -86,9 +86,22 @@ Pointer movement does not count as input and is not recorded.
 | `rationale_viewed` | `{}` | A report item is expanded and its explanation is shown |
 | `report_item_time` | `{dwellMs}` | A report item is collapsed, or the report closes while it is open |
 
-### Reserved for the exam shell (Phase 3)
+### Exam modules (Phase 3)
 
-`timer_hidden`, `timer_shown`, `five_minute_alert_shown`, `exam_paused {reason}`, `exam_resumed {pausedMs}`, `reference_opened`, `reference_closed`, `navigator_opened`, `navigator_closed`. The exam's question navigator uses `nav_jump`.
+Exam events have `mode: exam`. All the question, choice, flag and navigation events above are logged the same way. `question_shown` is logged only when a question is actually displayed, so a question never reached before time ran out has no showing and stays Unseen in Browse.
+
+| Type | Payload | When |
+|---|---|---|
+| `timer_hidden` / `timer_shown` | `{}` | Hide or Show on the countdown |
+| `five_minute_alert_shown` | `{}` | The five-minute alert appears (once per module) |
+| `exam_paused` | `{reason}` | An emergency pause starts; `reason` is the option clicked |
+| `exam_resumed` | `{pausedMs}` | The pause ends; `pausedMs` is its length |
+| `reference_opened` / `reference_closed` | `{}` | The Math reference sheet opens or closes |
+| `navigator_opened` / `navigator_closed` | `{}` | The question navigator opens or closes. A jump from it (or from the review page) is `nav_jump {from, to}` |
+| `finish_clicked` | `{unanswered, flagged}` | Submit pressed on the review page |
+| `session_finished` | `{correct, total, totalActiveMs}` | The module is submitted, by you or by the timer (the session record says which) |
+
+The timer never waits on the logger: the countdown is recomputed from the saved deadline, and logging only appends to memory.
 
 ## Delivery
 
