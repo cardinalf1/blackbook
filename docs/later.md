@@ -48,3 +48,8 @@ One line per idea, grouped by phase (AGENTS.md rule 8).
 - Browse: remember filters across reloads.
 - Calibration: let a user record their official scores next to test results, so the score estimate's conversion could be fitted. Needs enough points to mean anything.
 - Full test: a "directions" screen before each module like the real app.
+
+## Phase 5 (Analytics)
+- Record official scores after test day to calibrate the estimate (needs the owner to supply them).
+- Export analytics tables as CSV.
+- Compare skills against a target score once a calibration source exists.

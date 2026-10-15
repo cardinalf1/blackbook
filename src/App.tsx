@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AnalyticsFlow } from './components/analytics/AnalyticsFlow';
+import { loadFacets } from './services/drill/facetCache';
+import type { DrillConfig } from './types/drill';
 import { DownloadController } from './components/download/DownloadController';
 import { DrillFlow, type DrillStart } from './components/drill/DrillFlow';
 import { ImportPanel } from './components/ImportPanel';
@@ -23,6 +26,7 @@ type View =
   | { kind: 'home'; meta: BankMeta | null; count: number }
   | { kind: 'practice'; questions: Question[]; index: number }
   | { kind: 'browse' }
+  | { kind: 'analytics' }
   | { kind: 'drill'; startAt: DrillStart }
   | { kind: 'exam'; startAt: 'setup' | 'play' }
   | { kind: 'test'; startAt: 'setup' | 'open'; testId?: string };
@@ -68,6 +72,19 @@ export default function App() {
     const t = window.setInterval(() => void api.request('/api/health').catch(() => undefined), HEARTBEAT_MS);
     return () => window.clearInterval(t);
   }, []);
+
+  /** Starts a drill from a prefilled config (Study next) through the normal drill start. */
+  const launchDrill = async (config: DrillConfig) => {
+    try {
+      const facets = await loadFacets(questionStore);
+      await drillStore.getState().start(config, facets);
+      const session = drillStore.getState().session;
+      if (session) setView({ kind: 'drill', startAt: 'play' });
+      else setError(drillStore.getState().error ?? 'Could not start that drill.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const startPractice = async () => {
     const all = await questionStore.query({});
@@ -132,6 +149,13 @@ export default function App() {
                   className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
                 >
                   My skills
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setView({ kind: 'analytics' })}
+                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
+                >
+                  Analytics
                 </button>
                 <button
                   type="button"
@@ -240,6 +264,8 @@ export default function App() {
           onMySkills={() => setView({ kind: 'drill', startAt: 'skills' })}
         />
       )}
+
+      {view.kind === 'analytics' && <AnalyticsFlow onExit={() => void loadHome()} onLaunch={(config) => void launchDrill(config)} />}
 
       {view.kind === 'browse' && <BrowseScreen onBack={() => void loadHome()} onMySkills={() => setView({ kind: 'drill', startAt: 'skills' })} />}
     </main>
