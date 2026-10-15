@@ -20,10 +20,11 @@ describe('TestSetup', () => {
 
   const fullUnseenPreflight: TestPreflight = {
     sections: [
-      { section: 'rw', unseenOk: true, anyOk: true, shortfalls: [] },
-      { section: 'math', unseenOk: true, anyOk: true, shortfalls: [] },
+      { section: 'rw', unseenOk: true, softOk: true, anyOk: true, shortfalls: [] },
+      { section: 'math', unseenOk: true, softOk: true, anyOk: true, shortfalls: [] },
     ],
     allUnseen: true,
+    allSoft: true,
     allPossible: true,
   };
 
@@ -183,17 +184,20 @@ describe('TestSetup', () => {
         {
           section: 'rw',
           unseenOk: false,
+          softOk: true,
           anyOk: true,
           shortfalls: ['Reading and Writing: need 5 more questions for Module 2'],
         },
         {
           section: 'math',
           unseenOk: true,
+          softOk: true,
           anyOk: true,
           shortfalls: [],
         },
       ],
       allUnseen: false,
+      allSoft: true,
       allPossible: true,
     };
 
@@ -265,11 +269,13 @@ describe('TestSetup', () => {
         {
           section: 'math',
           unseenOk: false,
+          softOk: false,
           anyOk: false,
           shortfalls: ['Math bank has only 15 questions total; need 44.'],
         },
       ],
       allUnseen: false,
+      allSoft: false,
       allPossible: false,
     };
 

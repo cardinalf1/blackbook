@@ -14,6 +14,8 @@ export interface QuestionStatus {
   seen: boolean;
   /** A final answer exists in any session. */
   done: boolean;
+  /** On screen in any exam module (finished, paused or discarded), answered or not. Such a question is used up for exams. */
+  examShown: boolean;
   /** Final, non-empty answers across all sessions. */
   attempts: number;
   /** From the newest final answer in a finished session only. Null when there is none. */
@@ -37,6 +39,8 @@ export interface BrowseRow {
   /** In the bank's live set. */
   active: boolean;
   status: SeenStatus;
+  /** Shown in an exam module at any time. With status 'done' this makes the question consumed (see services/eligibility). */
+  examShown: boolean;
   attempts: number;
   lastResult: LastResult | null;
   flagged: boolean;

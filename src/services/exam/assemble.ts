@@ -1,18 +1,18 @@
 // Builds one exam module from the live set. Pure: rows (with seen status) and randomness come in.
 // Shape and order come from src/config/examConfig.ts; see docs/exam-spec.md for what is verified.
 // A domain short of questions is reported in plain words; the module is never padded with other
-// domains' questions and never repeats a question.
+// domains' questions. Which questions may be drawn is decided only by services/eligibility.
 
 import { TIER_MIX } from '../../config/scoringConfig';
 import { DIFFICULTY_MIX, EXAM_MODULES, MATH_ORDER, RW_DIFFICULTY_ONLY_DOMAINS, RW_SKILL_ORDER } from '../../config/examConfig';
-import type { BrowseRow, SeenStatus } from '../../types/browse';
+import type { BrowseRow } from '../../types/browse';
 import type { AssembledModule, ExamModuleSpec } from '../../types/exam';
 import type { Difficulty } from '../../types/sat';
+import { eligibleRows, STRICT_POLICY, TIER_ORDER, tierOf, type EligibilityPolicy } from '../eligibility/eligibility';
 
 export type Rng = () => number;
 
 const DIFF_RANK: Record<Difficulty, number> = { E: 0, M: 1, H: 2 };
-const FRESH_RANK: Record<SeenStatus, number> = { unseen: 0, seen: 1, done: 2 };
 const DIFF_WORD: Record<Difficulty, string> = { E: 'easy', M: 'medium', H: 'hard' };
 
 /** Splits `total` across `weights` by largest remainder; ties go to the earlier entry. */
@@ -40,11 +40,11 @@ function shuffle<T>(items: readonly T[], rng: Rng): T[] {
   return a;
 }
 
-/** Up to `n` rows from `pool`, unseen first, then seen but not done, then done; random within each. */
+/** Up to `n` rows from `pool`, fresh first, then soft, then consumed (the pool is already limited by the policy); random within each. */
 function pickFresh(pool: readonly BrowseRow[], n: number, rng: Rng): BrowseRow[] {
   if (n <= 0) return [];
   return shuffle(pool, rng)
-    .sort((a, b) => FRESH_RANK[a.status] - FRESH_RANK[b.status])
+    .sort((a, b) => TIER_ORDER[tierOf(a)] - TIER_ORDER[tierOf(b)])
     .slice(0, n);
 }
 
@@ -81,9 +81,10 @@ export function assembleModule(
   rng: Rng = Math.random,
   mathOrder: 'spec' | 'official' = MATH_ORDER,
   exclude: ReadonlySet<string> = new Set(),
+  policy: EligibilityPolicy = STRICT_POLICY,
 ): AssembledModule {
   const shape = EXAM_MODULES[spec.section];
-  const live = rows.filter((r) => r.active && r.section === spec.section && !exclude.has(r.id));
+  const live = eligibleRows(rows, policy).filter((r) => r.section === spec.section && !exclude.has(r.id));
   const notes: string[] = [];
   const mix = TIER_MIX[spec.tier];
   const isMath = spec.section === 'math';
@@ -137,7 +138,7 @@ export function assembleModule(
     );
   }
 
-  const freshness = { unseen: 0, seen: 0, done: 0 };
-  for (const r of ordered) freshness[r.status]++;
+  const freshness = { fresh: 0, soft: 0, consumed: 0 };
+  for (const r of ordered) freshness[tierOf(r)]++;
   return { spec, questionIds: ordered.map((r) => r.id), notes, domains, freshness };
 }

@@ -11,6 +11,7 @@ import { useStore } from 'zustand';
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { EXAM_MODULES } from '../config/examConfig';
 import { loadRows } from '../services/browse/rows';
+import type { EligibilityPolicy } from '../services/eligibility/eligibility';
 import { assembleModule, type Rng } from '../services/exam/assemble';
 import { isPaused } from '../services/exam/timer';
 import { abandon, createSession } from '../services/session/record';
@@ -67,7 +68,11 @@ export interface TestState {
 
 export interface TestActions {
   /** Builds module 1 of each section, writes the container and positions on the first module. */
-  start(kind: TestKind, includeSeen: boolean): Promise<boolean>;
+  /**
+   * `includeSeen` allows questions shown but never answered; `allowRepeats` additionally allows
+   * questions already answered or shown in an exam (the test is then labeled "contains repeats").
+   */
+  start(kind: TestKind, includeSeen: boolean, allowRepeats?: boolean): Promise<boolean>;
   /** Opens an unfinished or finished test and brings it up to date. */
   open(testId: string): Promise<void>;
   /** Starts the clock of the module the test is waiting on. */
@@ -142,11 +147,11 @@ export function createTestStore(deps: TestDeps): StoreApi<TestStore> {
       return slots.find((slot) => slot.sessionId === s.id)?.key ?? (s.exam ? moduleKey(s.exam.module.section, s.exam.module.moduleNumber) : null);
     };
 
-    /** Rows for assembling module 2: unseen only unless the user allowed seen questions. */
-    const rowsFor = async (includeSeen: boolean): Promise<BrowseRow[]> => {
-      const rows = await deps.loadRows();
-      return includeSeen ? rows : rows.filter((r) => r.status === 'unseen');
-    };
+    /** Which questions assembly may draw from: the one eligibility rule, at the level the user chose. */
+    const policyOf = (t: { includeSeen: boolean; allowRepeats?: boolean }): EligibilityPolicy => ({
+      allowSoft: t.includeSeen,
+      allowRepeats: t.allowRepeats === true,
+    });
 
     /** One reconcile pass. Returns the updated container. */
     const reconcileOnce = async (start: SessionRecord): Promise<SessionRecord> => {
@@ -206,8 +211,9 @@ export function createTestStore(deps: TestDeps): StoreApi<TestStore> {
           log(c, 'test_routed', { section: slot.section, route: decision.route, weightedFraction: decision.weightedFraction, threshold: decision.threshold, configVersion: decision.configVersion });
           const used = new Set(Object.values(test.slots).flatMap((s) => (s ? s.questionIds : [])));
           const spec = specFor(slot.section, 2, decision.route);
-          const built = assembleModule(await rowsFor(test.includeSeen), spec, rng, undefined, used);
+          const built = assembleModule(await deps.loadRows(), spec, rng, undefined, used, policyOf(test));
           nextTest = applyRouting(test, decision, newSlot(spec, built.questionIds, built.notes));
+          if (built.freshness.consumed > 0) nextTest = { ...nextTest, containsRepeats: true };
         }
         log(c, 'test_module_submitted', { key: slot.key, by: session.exam?.submittedBy ?? 'user' });
         const at = session.finishedAt ?? now();
@@ -225,16 +231,19 @@ export function createTestStore(deps: TestDeps): StoreApi<TestStore> {
       busy: false,
       error: null,
 
-      start(kind, includeSeen) {
+      start(kind, includeSeen, allowRepeats = false) {
         return serial(async () => {
           set({ busy: true, error: null });
           try {
-            const rows = await rowsFor(includeSeen);
+            const rows = await deps.loadRows();
+            const policy = policyOf({ includeSeen, allowRepeats });
+            let containsRepeats = false;
             const slots: TestModuleSlot[] = [];
             const notes: string[] = [];
             for (const section of sectionsFor(kind)) {
               const spec = specFor(section, 1, 'routing');
-              const built = assembleModule(rows, spec, rng);
+              const built = assembleModule(rows, spec, rng, undefined, undefined, policy);
+              if (built.freshness.consumed > 0) containsRepeats = true;
               if (built.questionIds.length < EXAM_MODULES[section].questions) {
                 notes.push(`Not enough questions for ${section === 'rw' ? 'Reading and Writing' : 'Math'} Module 1.`);
               }
@@ -247,8 +256,8 @@ export function createTestStore(deps: TestDeps): StoreApi<TestStore> {
             const first = sectionsFor(kind)[0] as Section;
             const config: DrillConfig = { section: first, domainCode: 'all', skillCodes: [], difficulties: [], count: 0, liveOnly: true };
             const base = createSession(newId(), 'exam', config, [], now(), 'exam');
-            const c = await save({ ...base, test: newTest(kind, includeSeen, slots) });
-            log(c, 'test_started', { kind, includeSeen });
+            const c = await save({ ...base, test: { ...newTest(kind, includeSeen, slots), allowRepeats, containsRepeats } });
+            log(c, 'test_started', { kind, includeSeen, allowRepeats });
             set({ busy: false });
             return true;
           } catch (e) {

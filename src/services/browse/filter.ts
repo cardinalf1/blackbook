@@ -103,6 +103,7 @@ export function buildRows(questions: readonly Question[], status: readonly Quest
       source: q.source,
       active: q.active,
       status: seenStatus(s),
+      examShown: s?.examShown ?? false,
       attempts: s?.attempts ?? 0,
       lastResult: s?.lastResult ?? null,
       flagged: s?.flagged ?? false,

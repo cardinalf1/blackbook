@@ -71,11 +71,11 @@ export function ExamSetup({ onStart, onCancel }: { onStart: (m: AssembledModule,
         </div>
         <div className="rounded-md border border-[#27272A] bg-[#0A0A0C] p-3">
           <dt className="text-xs text-zinc-400">New to you</dt>
-          <dd className="font-mono text-zinc-100">{assembled.freshness.unseen}</dd>
+          <dd className="font-mono text-zinc-100">{assembled.freshness.fresh}</dd>
         </div>
         <div className="rounded-md border border-[#27272A] bg-[#0A0A0C] p-3">
           <dt className="text-xs text-zinc-400">Seen or done before</dt>
-          <dd className="font-mono text-zinc-100">{assembled.freshness.seen + assembled.freshness.done}</dd>
+          <dd className="font-mono text-zinc-100">{assembled.freshness.soft + assembled.freshness.consumed}</dd>
         </div>
       </dl>
 

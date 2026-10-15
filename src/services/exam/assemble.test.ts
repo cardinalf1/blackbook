@@ -16,7 +16,7 @@ function pool(perCell = 6, over: (r: BrowseRow) => BrowseRow = (r) => r): Browse
       rows.push(
         over({
           id: `${section}-${n++}`, displayId: `d${n}`, section, domainCode, domain: domainCode, skillCode, skill: skillCode, difficulty,
-          format, source: 'digital', active: true, status: 'unseen', attempts: 0, lastResult: null, flagged: false,
+          format, source: 'digital', active: true, status: 'unseen', examShown: false, attempts: 0, lastResult: null, flagged: false,
         }),
       );
     }
@@ -109,8 +109,8 @@ describe('assembleModule', () => {
   it('prefers questions not seen before', () => {
     // Everything done except a few unseen per cell: the unseen ones must all be used first.
     const r2 = pool(6, (r) => ({ ...r, status: Number(r.id.split('-')[1]) % 6 < 2 ? 'unseen' : 'done' }));
-    const m = assembleModule(r2, { section: 'rw', moduleNumber: 1, tier: 'routing' }, seeded(5));
-    expect(m.freshness).toEqual({ unseen: 27, seen: 0, done: 0 });
+    const m = assembleModule(r2, { section: 'rw', moduleNumber: 1, tier: 'routing' }, seeded(5), undefined, undefined, { allowSoft: true, allowRepeats: true });
+    expect(m.freshness).toEqual({ fresh: 27, soft: 0, consumed: 0 });
   });
 
   it('a thin domain is reported in plain words and never padded or repeated', () => {

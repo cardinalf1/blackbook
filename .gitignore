@@ -10,3 +10,6 @@ coverage/
 # College Board content and raw samples stay local (AGENTS.md rule 1)
 data/
 fixtures/
+
+# Research notes quote the source site; stay untracked
+docs/research/

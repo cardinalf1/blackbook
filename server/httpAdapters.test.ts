@@ -207,14 +207,35 @@ describe.each([
     // d only shown, e only flagged.
     await attempts.appendEvents([{ ...event('e1', 's2', 5, 0), questionId: 'd', type: 'question_shown', payload: { index: 0, visit: 1 } }]);
     await attempts.setFlag('e', true);
+    // An exam module that was shown f (never answered) and never reached g; h's showing exists only as an exam event.
+    const x1: SessionRecord = {
+      ...createSession('x1', 'exam', CONFIG, ['f', 'g'], 3),
+      status: 'abandoned',
+      exam: {
+        module: { section: 'math', moduleNumber: 1, tier: 'routing' },
+        timer: { durationMs: 1000, deadlineAt: null, pausedRemainingMs: null },
+        pauses: [],
+        phase: 'in_progress',
+        submittedBy: null,
+        timerHidden: false,
+        fiveMinuteAlertShown: false,
+        assemblyNotes: [],
+      },
+    };
+    await attempts.saveSession(x1);
+    await attempts.appendEvents([{ ...event('e2', 'x1', 6, 0), mode: 'exam', questionId: 'h', type: 'question_shown', payload: { index: 0, visit: 1 } }]);
     const got = await attempts.questionStatus();
+    const base = { done: false, examShown: false, attempts: 0, lastResult: null, flagged: false };
     expect(got).toEqual([
-      { questionId: 'a', seen: true, done: true, attempts: 2, lastResult: 'correct', flagged: false },
-      { questionId: 'b', seen: true, done: false, attempts: 0, lastResult: null, flagged: false },
-      { questionId: 'c', seen: true, done: false, attempts: 0, lastResult: null, flagged: false },
-      { questionId: 'd', seen: true, done: false, attempts: 0, lastResult: null, flagged: false },
+      { ...base, questionId: 'a', seen: true, done: true, attempts: 2, lastResult: 'correct' },
+      { ...base, questionId: 'b', seen: true },
+      { ...base, questionId: 'c', seen: true },
+      { ...base, questionId: 'd', seen: true },
       // A flag alone does not count as seen (the showing may have been deleted with the telemetry).
-      { questionId: 'e', seen: false, done: false, attempts: 0, lastResult: null, flagged: true },
+      { ...base, questionId: 'e', seen: false, flagged: true },
+      // Shown in an exam, even a discarded one and never answered: used up for exams. g was never reached.
+      { ...base, questionId: 'f', seen: true, examShown: true },
+      { ...base, questionId: 'h', seen: true, examShown: true },
     ]);
   });
 });

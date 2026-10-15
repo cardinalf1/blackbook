@@ -144,7 +144,7 @@ export interface EventPayloads {
   navigator_opened: Record<string, never>;
   navigator_closed: Record<string, never>;
   // Full tests and section runs (Phase 4). Logged on the container session, never during a module's clock.
-  test_started: { kind: string; includeSeen: boolean };
+  test_started: { kind: string; includeSeen: boolean; allowRepeats?: boolean };
   test_module_started: { key: string; tier: string };
   test_module_submitted: { key: string; by: string };
   test_routed: { section: string; route: string; weightedFraction: number; threshold: number; configVersion: number };

@@ -20,7 +20,7 @@ function pool(perCell: number, over: (r: BrowseRow) => BrowseRow = (r) => r): Br
       rows.push(
         over({
           id: `${section}-${n++}`, displayId: `d${n}`, section, domainCode, domain: domainCode, skillCode, skill: skillCode, difficulty,
-          format, source: 'digital', active: true, status: 'unseen', attempts: 0, lastResult: null, flagged: false,
+          format, source: 'digital', active: true, status: 'unseen', examShown: false, attempts: 0, lastResult: null, flagged: false,
         }),
       );
     }

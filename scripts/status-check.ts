@@ -6,7 +6,7 @@
 
 import { join, resolve } from 'node:path';
 import { applyFilters, buildRows, filterCounts } from '../src/services/browse/filter';
-import { deriveStatus, shownIds } from '../src/services/browse/status';
+import { deriveStatus, examShownIds, shownIds } from '../src/services/browse/status';
 import { DEFAULT_BROWSE_FILTERS } from '../src/types/browse';
 import { DiskBankStore } from '../server/bankStore';
 import { openSqlite } from '../server/sqlBun';
@@ -22,7 +22,7 @@ const fromSql = await users.questionStatus();
 const sqlMs = performance.now() - t0;
 
 const [attempts, sessions, events, flags] = await Promise.all([users.listAttempts(), users.listSessions(), users.listEvents(), users.listFlags()]);
-const reference = deriveStatus(attempts, sessions, shownIds(events), flags);
+const reference = deriveStatus(attempts, sessions, shownIds(events), flags, examShownIds(sessions, events));
 
 const problems: string[] = [];
 const refById = new Map(reference.map((s) => [s.questionId, s]));

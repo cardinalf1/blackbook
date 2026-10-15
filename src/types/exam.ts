@@ -58,7 +58,7 @@ export interface AssembledModule {
   /** Planned and actual count per domain, for the setup screen. */
   domains: { code: string; label: string; planned: number; actual: number }[];
   /** How many picked questions were unseen, seen but not done, or done before. */
-  freshness: { unseen: number; seen: number; done: number };
+  freshness: { fresh: number; soft: number; consumed: number };
 }
 
 // ---- Props contracts. Screens are thin: all logic arrives through these props. ----

@@ -85,8 +85,12 @@ export interface TestState {
   slots: Partial<Record<ModuleKey, TestModuleSlot>>;
   routing: RoutingDecision[];
   break: TestBreak | null;
-  /** Seen questions may be used when the pool of unseen ones is too thin. Chosen on the setup screen. */
+  /** Seen-but-never-answered questions may be used because the fresh pool was short. Chosen on the setup screen. */
   includeSeen: boolean;
+  /** The user confirmed "allow repeats of questions I have already done". Absent in tests saved before Phase 6. */
+  allowRepeats?: boolean;
+  /** At least one assembled module holds a question that was already consumed. Drives the "contains repeats" label. */
+  containsRepeats?: boolean;
   /** Any emergency pause in any module marks the whole test, for good. */
   paused: boolean;
   estimate: ScoreEstimate | null;
@@ -94,12 +98,14 @@ export interface TestState {
   configVersion: number;
 }
 
-/** Preflight result for one section: can every module be built from unseen questions? */
+/** Preflight result for one section: can every module be built under each level of the eligibility rule? */
 export interface SectionPreflight {
   section: Section;
-  /** Unseen live questions that can fill module 1 / the easier module 2 / the harder module 2. */
+  /** Never-shown questions alone can fill module 1 / the easier module 2 / the harder module 2. */
   unseenOk: boolean;
-  /** Same with seen questions allowed. */
+  /** Same when questions seen in a drill or Browse but never answered are allowed too. */
+  softOk: boolean;
+  /** Same when repeats (questions already answered or shown in an exam) are allowed too. */
   anyOk: boolean;
   /** Plain-language lines for the setup screen. Empty when everything is fine. */
   shortfalls: string[];
@@ -107,9 +113,11 @@ export interface SectionPreflight {
 
 export interface TestPreflight {
   sections: SectionPreflight[];
-  /** True when every section can be built from unseen questions alone. */
+  /** True when every section can be built from never-shown questions alone. */
   allUnseen: boolean;
-  /** True when every section can be built at all if seen questions are allowed. */
+  /** True when every section can be built once seen-but-unanswered questions are allowed. */
+  allSoft: boolean;
+  /** True when every section can be built at all if repeats are allowed. */
   allPossible: boolean;
 }
 

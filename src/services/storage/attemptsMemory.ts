@@ -1,6 +1,6 @@
 import type { QuestionStatus } from '../../types/browse';
 import type { FlagRecord } from '../../types/drill';
-import { deriveStatus, shownIds } from '../browse/status';
+import { deriveStatus, examShownIds, shownIds } from '../browse/status';
 import type { EventRecord, SessionRecord, StoredAttempt, TelemetryStats, UserDataExport } from '../../types/session';
 import type { AttemptStore, SessionFilter, TelemetryStore } from './attemptTypes';
 
@@ -83,7 +83,9 @@ export class MemoryAttemptStore implements AttemptStore, TelemetryStore {
   }
 
   async questionStatus(): Promise<QuestionStatus[]> {
-    return deriveStatus([...this.attempts.values()], [...this.sessions.values()], shownIds([...this.events.values()]), [...this.flags.values()]);
+    const sessions = [...this.sessions.values()];
+    const events = [...this.events.values()];
+    return deriveStatus([...this.attempts.values()], sessions, shownIds(events), [...this.flags.values()], examShownIds(sessions, events));
   }
 
   async clearAll(): Promise<void> {

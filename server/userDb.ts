@@ -231,10 +231,15 @@ const toEvent = (r: EventRow): EventRecord => ({
  * Correctness comes only from finished sessions.
  */
 const STATUS_SQL = `
-WITH ids AS (
+WITH exam_visits AS (
+  SELECT DISTINCT je.key AS q FROM sessions s, json_each(s.data, '$.progress') je
+  WHERE s.mode = 'exam' AND json_extract(je.value, '$.visits') > 0
+),
+ids AS (
   SELECT question_id AS q FROM events WHERE type = 'question_shown' AND question_id IS NOT NULL
   UNION SELECT question_id FROM attempts
   UNION SELECT question_id FROM flags
+  UNION SELECT q FROM exam_visits
 ),
 done AS (
   SELECT question_id AS q, COUNT(*) AS n FROM attempts WHERE status = 'final' AND response <> '' GROUP BY question_id
@@ -247,7 +252,10 @@ last AS (
 )
 SELECT ids.q AS question_id,
        (EXISTS (SELECT 1 FROM events e WHERE e.question_id = ids.q AND e.type = 'question_shown')
-        OR EXISTS (SELECT 1 FROM attempts a WHERE a.question_id = ids.q)) AS seen,
+        OR EXISTS (SELECT 1 FROM attempts a WHERE a.question_id = ids.q)
+        OR EXISTS (SELECT 1 FROM exam_visits v WHERE v.q = ids.q)) AS seen,
+       (EXISTS (SELECT 1 FROM events e WHERE e.question_id = ids.q AND e.type = 'question_shown' AND e.mode = 'exam')
+        OR EXISTS (SELECT 1 FROM exam_visits v WHERE v.q = ids.q)) AS exam_shown,
        COALESCE(done.n, 0) AS attempts,
        (SELECT correct FROM last WHERE last.q = ids.q AND last.rn = 1) AS last_correct,
        EXISTS (SELECT 1 FROM flags f WHERE f.question_id = ids.q) AS flagged
@@ -393,11 +401,12 @@ export class SqliteUserStore implements AttemptStore, TelemetryStore {
 
   async questionStatus(): Promise<QuestionStatus[]> {
     return this.db
-      .all<{ question_id: string; seen: number; attempts: number; last_correct: number | null; flagged: number }>(STATUS_SQL)
+      .all<{ question_id: string; seen: number; exam_shown: number; attempts: number; last_correct: number | null; flagged: number }>(STATUS_SQL)
       .map((r) => ({
         questionId: r.question_id,
         seen: Number(r.seen) === 1,
         done: Number(r.attempts) > 0,
+        examShown: Number(r.exam_shown) === 1,
         attempts: Number(r.attempts),
         lastResult: r.last_correct === null ? null : Number(r.last_correct) === 1 ? 'correct' : 'incorrect',
         flagged: Number(r.flagged) === 1,

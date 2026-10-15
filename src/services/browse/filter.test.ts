@@ -21,6 +21,7 @@ function makeRows(): BrowseRow[] {
       source: i % 7 === 0 ? 'legacy' : 'digital',
       active: i % 4 !== 0,
       status,
+      examShown: false,
       attempts: status === 'done' ? 1 + (i % 2) : 0,
       lastResult: status === 'done' ? (i % 2 === 0 ? 'correct' : 'incorrect') : null,
       flagged: i % 10 === 0,
@@ -71,7 +72,7 @@ describe('browse filters', () => {
 
   it('derives the badge from status', () => {
     expect(seenStatus(undefined)).toBe('unseen');
-    expect(seenStatus({ questionId: 'x', seen: true, done: false, attempts: 0, lastResult: null, flagged: false })).toBe('seen');
-    expect(seenStatus({ questionId: 'x', seen: true, done: true, attempts: 1, lastResult: null, flagged: false })).toBe('done');
+    expect(seenStatus({ questionId: 'x', seen: true, done: false, examShown: false, attempts: 0, lastResult: null, flagged: false })).toBe('seen');
+    expect(seenStatus({ questionId: 'x', seen: true, done: true, examShown: false, attempts: 1, lastResult: null, flagged: false })).toBe('done');
   });
 });
