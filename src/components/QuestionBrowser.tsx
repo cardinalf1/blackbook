@@ -1,4 +1,4 @@
-import { useMemo, type JSX } from 'react';
+import { useMemo } from 'react';
 import { applyFilters, filterCounts } from '../services/browse/filter';
 import {
   BROWSE_PAGE_SIZE,
@@ -45,22 +45,7 @@ function StatusBadge({ status }: { status: SeenStatus }) {
   }
 }
 
-const DEFAULT_STATE: BrowseViewState = {
-  filters: DEFAULT_BROWSE_FILTERS,
-  page: 0,
-};
-
-export function QuestionBrowser(props?: Partial<QuestionBrowserProps>): JSX.Element;
-export function QuestionBrowser(props: QuestionBrowserProps): JSX.Element;
-export function QuestionBrowser(props: Partial<QuestionBrowserProps> = {}): JSX.Element {
-  const {
-    rows = [],
-    state = DEFAULT_STATE,
-    onStateChange = () => {},
-    onOpen = () => {},
-    onRandom = () => {},
-  } = props;
-
+export function QuestionBrowser({ rows, state, onStateChange, onOpen, onRandom }: QuestionBrowserProps) {
   const filteredRows = useMemo(() => applyFilters(rows, state.filters), [rows, state.filters]);
   const counts = useMemo(() => filterCounts(rows, state.filters), [rows, state.filters]);
 

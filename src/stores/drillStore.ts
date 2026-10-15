@@ -55,6 +55,8 @@ export interface DrillActions {
   /** Loads flags and the unfinished sessions. Call at startup and when returning home. */
   init(): Promise<void>;
   start(config: DrillConfig, facets: readonly QuestionFacet[]): Promise<void>;
+  /** Practice one question picked in Browse: a session of length 1 with source "browse". */
+  startSingle(questionId: string): Promise<void>;
   resume(sessionId: string): Promise<void>;
   /** Marks an unfinished session abandoned. It is never deleted. */
   discard(sessionId: string): Promise<void>;
@@ -269,6 +271,17 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
       if (get().error?.startsWith(FLAG_ERROR)) set({ error: null });
     };
 
+    /** Saves a new session and makes it the open one. Waits for any earlier writes first. */
+    const begin = async (fresh: SessionRecord) => {
+      if (!(await settle())) throw new Error('your last answers are not saved yet');
+      const { session, questions } = await load(fresh);
+      await deps.attempts.saveSession(session);
+      resetMemory();
+      set({ session, questions, error: null, saveError: null, saving: false });
+      enter(session);
+      log('session_started', null, { count: session.queueIds.length, askConfidence: session.askConfidence });
+    };
+
     const finishNow = async (activeMs: number): Promise<boolean> => {
       settleTyping();
       if (!(await settle())) {
@@ -316,15 +329,30 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
             set({ error: 'No questions match that setup.' });
             return;
           }
-          const fresh = createSession(newId(), 'drill', { ...config, count: ids.length }, ids, now());
-          const { session, questions } = await load(fresh);
-          await deps.attempts.saveSession(session);
-          resetMemory();
-          set({ session, questions, error: null, saveError: null, saving: false });
-          enter(session);
-          log('session_started', null, { count: session.queueIds.length, askConfidence: session.askConfidence });
+          await begin(createSession(newId(), 'drill', { ...config, count: ids.length }, ids, now()));
         } catch (e) {
           set({ error: `Could not start the drill: ${msg(e)}` });
+        }
+      },
+
+      async startSingle(questionId) {
+        try {
+          const q = await deps.bank.get(questionId);
+          if (!q) {
+            set({ error: 'That question is no longer in the bank.' });
+            return;
+          }
+          const config: DrillConfig = {
+            section: q.section,
+            domainCode: q.domainCode,
+            skillCodes: [q.skillCode],
+            difficulties: [q.difficulty],
+            count: 1,
+            liveOnly: false,
+          };
+          await begin(createSession(newId(), 'drill', config, [q.id], now(), 'browse'));
+        } catch (e) {
+          set({ error: `Could not open the question: ${msg(e)}` });
         }
       },
 

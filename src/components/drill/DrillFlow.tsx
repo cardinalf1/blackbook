@@ -19,6 +19,7 @@ import { PastDrills } from '../results/PastDrills';
 import { DrillPlay } from './DrillPlay';
 import { DrillSetup } from './DrillSetup';
 import { FinishConfirm } from './FinishConfirm';
+import { InProgressSection } from './InProgressSection';
 
 export type DrillStart = 'setup' | 'play' | 'skills' | 'past' | 'data';
 
@@ -83,7 +84,14 @@ export function DrillFlow({ onExit, startAt }: { onExit: () => void; startAt: Dr
     case 'skills':
       return <SkillsScreen facets={facets} onBack={step.back ? () => setStep(step.back as Step) : onExit} />;
     case 'past':
-      return <PastScreen facets={facets} onOpen={(sessionId) => setStep({ kind: 'report', sessionId, from: 'past' })} onBack={onExit} />;
+      return (
+        <PastScreen
+          facets={facets}
+          onOpen={(sessionId) => setStep({ kind: 'report', sessionId, from: 'past' })}
+          onResumed={() => setStep({ kind: 'play' })}
+          onBack={onExit}
+        />
+      );
     case 'data':
       return <DataScreen onBack={onExit} />;
     case 'report':
@@ -100,7 +108,7 @@ export function DrillFlow({ onExit, startAt }: { onExit: () => void; startAt: Dr
   }
 }
 
-function PlayScreen({ onExit, onFinished }: { onExit: () => void; onFinished: (sessionId: string) => void }) {
+export function PlayScreen({ onExit, onFinished }: { onExit: () => void; onFinished: (sessionId: string) => void }) {
   const session = useDrill((s) => s.session);
   const questions = useDrill((s) => s.questions);
   const error = useDrill((s) => s.error);
@@ -161,6 +169,7 @@ function PlayQuestion({ session, question, onExit }: { session: SessionRecord; q
     }
   };
   const last = session.index === session.queueIds.length - 1;
+  const single = session.source === 'browse';
   const check = finishCheck(session);
 
   return (
@@ -185,8 +194,14 @@ function PlayQuestion({ session, question, onExit }: { session: SessionRecord; q
             return;
           }
           actions.finishClicked();
+          // A single question with an answer has nothing to check: Done finishes it.
+          if (single && p.response !== null) {
+            void nav(() => actions.finish(readTime()));
+            return;
+          }
           setConfirming(true);
         }}
+        finishLabel={single ? 'Done' : 'Finish'}
         // Each answer is saved in the background; navigation itself waits for the save, so the
         // buttons only show "Saving..." while a move is actually waiting.
         saving={navigating}
@@ -222,7 +237,7 @@ function PlayQuestion({ session, question, onExit }: { session: SessionRecord; q
   );
 }
 
-function ReportScreen(props: { sessionId: string; backLabel: string; onBack: () => void; onMySkills: () => void }) {
+export function ReportScreen(props: { sessionId: string; backLabel: string; onBack: () => void; onMySkills: () => void }) {
   const { sessionId } = props;
   const [report, setReport] = useState<SessionReport | null>(null);
   const [session, setSession] = useState<SessionRecord | null>(null);
@@ -278,7 +293,8 @@ function ReportScreen(props: { sessionId: string; backLabel: string; onBack: () 
   );
 }
 
-function PastScreen({ facets, onOpen, onBack }: { facets: QuestionFacet[]; onOpen: (id: string) => void; onBack: () => void }) {
+function PastScreen(props: { facets: QuestionFacet[]; onOpen: (id: string) => void; onResumed: () => void; onBack: () => void }) {
+  const { facets, onOpen, onBack } = props;
   const [rows, setRows] = useState<PastSessionRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -289,7 +305,7 @@ function PastScreen({ facets, onOpen, onBack }: { facets: QuestionFacet[]; onOpe
   }, [facets]);
   if (error) return <Notice error>Could not read your past drills: {error}</Notice>;
   if (!rows) return <Notice>Loading...</Notice>;
-  return <PastDrills rows={rows} onOpen={onOpen} onBack={onBack} />;
+  return <PastDrills rows={rows} onOpen={onOpen} onBack={onBack} inProgressSlot={<InProgressSection onResumed={props.onResumed} />} />;
 }
 
 function DataScreen({ onBack }: { onBack: () => void }) {

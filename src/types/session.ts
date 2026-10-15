@@ -259,6 +259,8 @@ export interface DrillPlayProps {
   onBack: () => void;
   /** On the last question this is Finish. */
   onNext: () => void;
+  /** Label on the last question's button. Defaults to "Finish"; "Done" for a single question. */
+  finishLabel?: string;
   /** True while an answer is being saved: navigation buttons are disabled. */
   saving: boolean;
   /** Shown in a red banner with a Retry button. Navigation stays disabled while it is set. */

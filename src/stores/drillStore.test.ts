@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { toFacet } from '../services/drill/facets';
 import { computeSkillStats, countableAttempts } from '../services/drill/stats';
-import { buildReport } from '../services/session/report';
+import { buildReport, kindLabel } from '../services/session/report';
 import { MemoryAttemptStore } from '../services/storage/attemptsMemory';
 import { MemoryQuestionStore } from '../services/storage/memory';
 import type { BankMeta } from '../services/storage/types';
 import type { EventLogger } from '../services/telemetry/logger';
 import type { DrillConfig } from '../types/drill';
 import type { Question } from '../types/sat';
-import type { EventType, SessionRecord, StoredAttempt } from '../types/session';
+import type { EventRecord, EventType, SessionRecord, StoredAttempt } from '../types/session';
 import { createDrillStore, TYPING_SETTLE_MS } from './drillStore';
 
 // Synthetic questions only (AGENTS.md rule 1).
@@ -383,5 +383,87 @@ describe('drill store: telemetry', () => {
     ]);
     expect(rec.events.find((e) => e.type === 'question_hidden')?.payload).toMatchObject({ visitActiveMs: 1200, reason: 'next' });
     expect(rec.events.find((e) => e.type === 'first_interaction')?.payload).toMatchObject({ sinceShownMs: 100, kind: 'select' });
+  });
+});
+
+describe('drill store: Phase 2d', () => {
+  /** A logger that writes straight into the store's event log, so status can read the showings. */
+  function liveLog(store: MemoryAttemptStore): Pick<EventLogger, 'log'> {
+    let seq = 0;
+    return {
+      log: (type, ctx, payload) => {
+        void store.appendEvents([
+          { id: `ev${seq}`, sessionId: ctx.sessionId, mode: ctx.mode, questionId: ctx.questionId ?? null, type, ts: seq, monoMs: seq, pageId: 'p', seq: seq++, payload },
+        ] as EventRecord[]);
+      },
+    };
+  }
+
+  it('practices one question from Browse as a session of length 1, labelled Single question', async () => {
+    const { attempts, mk, facets } = await setup();
+    const store = mk();
+    await store.getState().startSingle('q3');
+    const s = cur(store);
+    expect(s).toMatchObject({ source: 'browse', mode: 'drill', queueIds: ['q3'], config: { count: 1, skillCodes: ['S1'] } });
+    store.getState().select('A');
+    expect(cur(store).score).toBeNull();
+    expect(await store.getState().finish(700)).toBe(true);
+    expect(cur(store).score).toEqual({ correct: 1, total: 1 });
+    const done = (await attempts.listSessions({ status: 'finished' }))[0] as SessionRecord;
+    expect(kindLabel(done)).toBe('Single question');
+    // It counts toward My skills like any finished drill.
+    expect(countableAttempts(await attempts.listAttempts(), await attempts.listSessions(), 'drill')).toHaveLength(1);
+    expect(computeSkillStats(countableAttempts(await attempts.listAttempts(), await attempts.listSessions(), 'drill'), facets).rows[0]?.attempts).toBe(1);
+  });
+
+  it('resumes the same drill twice in a row, and leaving and coming back keeps it listed', async () => {
+    const { attempts, bank, mk, facets } = await setup();
+    const a = mk();
+    await a.getState().start({ ...config, askConfidence: true }, facets);
+    a.getState().select('B');
+    a.getState().rate('sure');
+    await a.getState().go('next', 1, 1500);
+    a.getState().strike('C');
+    expect(await a.getState().exit(900)).toBe(true);
+
+    for (let round = 0; round < 2; round++) {
+      const b = createDrillStore({ attempts, bank });
+      await b.getState().init();
+      expect(b.getState().inProgress.map((s) => s.id)).toEqual(['sess1']);
+      await b.getState().resume('sess1');
+      const s = cur(b);
+      expect(s.index).toBe(1);
+      expect(s.progress[s.queueIds[0] as string]).toMatchObject({ response: 'B', confidence: 'sure', activeMs: 1500 });
+      expect(s.progress[s.queueIds[1] as string]).toMatchObject({ struck: ['C'], activeMs: 900 });
+      expect(await b.getState().exit(900)).toBe(true);
+    }
+    expect(await attempts.listSessions()).toHaveLength(1);
+  });
+
+  it('status: an unanswered question in a finished drill is Seen but not Done; one never shown stays Unseen', async () => {
+    const { attempts, bank, facets } = await setup();
+    const store = createDrillStore({ attempts, bank, telemetry: liveLog(attempts), rng: () => 0.5, newId: () => 's1' });
+    await store.getState().start(config, facets);
+    const [q1, q2, q3] = cur(store).queueIds as [string, string, string];
+    store.getState().shown();
+    store.getState().select('A');
+    await store.getState().go('next', 1, 100);
+    store.getState().shown(); // q2 on screen, left unanswered
+    await store.getState().finish(100); // q3 never shown
+    const status = new Map((await attempts.questionStatus()).map((s) => [s.questionId, s]));
+    expect(status.get(q1)).toMatchObject({ seen: true, done: true, attempts: 1, lastResult: 'correct' });
+    expect(status.get(q2)).toMatchObject({ seen: true, done: false, lastResult: null });
+    expect(status.get(q3)).toBeUndefined();
+  });
+
+  it('status: a question answered only in an unfinished drill shows no result', async () => {
+    const { attempts, bank, facets } = await setup();
+    const store = createDrillStore({ attempts, bank, telemetry: liveLog(attempts), rng: () => 0.5, newId: () => 's1' });
+    await store.getState().start(config, facets);
+    const q1 = curId(store);
+    store.getState().shown();
+    store.getState().select('B');
+    await store.getState().go('next', 1, 100); // final, but the drill is not finished
+    expect((await attempts.questionStatus()).find((s) => s.questionId === q1)).toMatchObject({ done: true, attempts: 1, lastResult: null });
   });
 });

@@ -29,11 +29,12 @@ export function DrillPlay({
   saveError,
   onRetry,
   onExit,
+  finishLabel = 'Finish',
 }: DrillPlayProps) {
   const { answer } = question;
   const navDisabled = saving || saveError !== null;
   const isLast = index === total - 1;
-  const nextLabel = saving ? 'Saving...' : isLast ? 'Finish' : 'Next';
+  const nextLabel = saving ? 'Saving...' : isLast ? finishLabel : 'Next';
   const showConfidence = askConfidence && response !== null && response !== '';
 
   return (

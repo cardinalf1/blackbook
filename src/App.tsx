@@ -2,12 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { DownloadController } from './components/download/DownloadController';
 import { DrillFlow, type DrillStart } from './components/drill/DrillFlow';
 import { ImportPanel } from './components/ImportPanel';
-import { QuestionBrowser } from './components/QuestionBrowser';
+import { BrowseScreen } from './components/browse/BrowseScreen';
+import { InProgressSection } from './components/drill/InProgressSection';
 import { QuestionView } from './components/QuestionView';
 import { DOWNLOAD_ENABLED } from './config';
 import { api, ApiError, initApiAuth } from './services/api/client';
 import { questionStore, type BankMeta } from './services/storage';
-import { answeredCount } from './services/session/record';
 import { startTelemetry } from './services/telemetry';
 import { drillStore, useDrill } from './stores/drillStore';
 import type { Question } from './types/sat';
@@ -35,7 +35,6 @@ function sample<T>(items: readonly T[], n: number): T[] {
 export default function App() {
   const [view, setView] = useState<View>({ kind: 'loading' });
   const [error, setError] = useState<string | null>(null);
-  const resumable = useDrill((s) => s.inProgress[0] ?? null);
 
   const loadHome = useCallback(async () => {
     setError(null);
@@ -147,40 +146,7 @@ export default function App() {
               </div>
             </section>
           )}
-          {resumable && view.count > 0 && (
-            <section className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-900/50 bg-amber-950/30 p-4 text-sm text-amber-200">
-              <span>
-                You have an unfinished drill ({answeredCount(resumable)} of {resumable.queueIds.length} answered).
-              </span>
-              <div className="ml-auto flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void drillStore
-                      .getState()
-                      .resume(resumable.id)
-                      .then(() => {
-                        if (drillStore.getState().session) setView({ kind: 'drill', startAt: 'play' });
-                      });
-                  }}
-                  className="rounded-md bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-                >
-                  Resume
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (window.confirm('Discard this unfinished drill? It is kept as abandoned and will not count toward your skills.')) {
-                      void drillStore.getState().discard(resumable.id);
-                    }
-                  }}
-                  className="rounded-md border border-[#27272A] px-3 py-1 text-xs text-zinc-200 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-                >
-                  Discard
-                </button>
-              </div>
-            </section>
-          )}
+          {view.count > 0 && <InProgressSection onResumed={() => setView({ kind: 'drill', startAt: 'play' })} />}
           {DOWNLOAD_ENABLED ? (
             <>
               <DownloadController
@@ -231,16 +197,7 @@ export default function App() {
 
       {view.kind === 'drill' && <DrillFlow startAt={view.startAt} onExit={() => void loadHome()} />}
 
-      {view.kind === 'browse' && (
-        <section className="space-y-4">
-          <nav className="flex items-center gap-3 text-sm">
-            <button type="button" onClick={() => void loadHome()} className="text-zinc-400 hover:text-zinc-100">
-              Back
-            </button>
-          </nav>
-          <QuestionBrowser />
-        </section>
-      )}
+      {view.kind === 'browse' && <BrowseScreen onBack={() => void loadHome()} onMySkills={() => setView({ kind: 'drill', startAt: 'skills' })} />}
     </main>
   );
 }
