@@ -104,6 +104,7 @@ describe('TestReportView', () => {
 
     return {
       testId: 'test-report-full-1',
+      containsRepeats: false,
       kind: 'full',
       startedAt: 1700000000000,
       finishedAt: 1700007200000,
@@ -318,6 +319,7 @@ describe('TestReportView', () => {
 
     return {
       testId: `test-report-section-${kind}`,
+      containsRepeats: false,
       kind,
       startedAt: 1700000000000,
       finishedAt: 1700003600000,
@@ -471,7 +473,7 @@ describe('TestReportView', () => {
     });
 
     expect(container.textContent).toContain(
-      'The easier second module limits the top of this range.',
+      'The easier second module may limit the top of your range; the exact effect is not published.',
     );
 
     // Uncapped report
@@ -488,7 +490,7 @@ describe('TestReportView', () => {
     });
 
     expect(container.textContent).not.toContain(
-      'The easier second module limits the top of this range.',
+      'The easier second module may limit the top of your range; the exact effect is not published.',
     );
 
     await act(async () => {

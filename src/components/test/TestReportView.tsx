@@ -480,6 +480,12 @@ export function TestReportView({
             This test included an emergency pause.
           </div>
         )}
+        {report.containsRepeats && (
+          <div className="rounded-md border border-amber-800/60 bg-amber-950/40 p-3 text-xs text-amber-300">
+            Contains repeats: some questions in this test were ones you had already done or seen in an exam. The estimate
+            below is likely higher than a fresh test would give.
+          </div>
+        )}
       </section>
 
       {/* 2. Estimate block */}
@@ -509,7 +515,7 @@ export function TestReportView({
                   </div>
                   {secEst.capped && (
                     <div className="mt-3 rounded border border-amber-800/60 bg-amber-950/40 p-2 text-xs text-amber-300">
-                      The easier second module limits the top of this range.
+                      The easier second module may limit the top of your range; the exact effect is not published.
                     </div>
                   )}
                 </div>
@@ -555,7 +561,7 @@ export function TestReportView({
                 <div className="rounded-md border border-[#27272A] bg-[#121215] px-4 py-2.5 font-mono text-xs text-zinc-300">
                   {section.routing.route === 'harder'
                     ? 'Routed to the harder Module 2'
-                    : 'Routed to the easier Module 2'}{' '}
+                    : 'Routed to the easier Module 2 (this may limit the top of your range; the exact effect is not published)'}{' '}
                   ({Math.round(section.routing.weightedFraction * 100)}% of module 1 weighted score)
                 </div>
               )}

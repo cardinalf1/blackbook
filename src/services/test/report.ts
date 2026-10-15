@@ -103,6 +103,7 @@ export function buildTestReport(container: SessionRecord, modules: readonly Modu
     startedAt: container.startedAt,
     finishedAt: container.finishedAt,
     paused: test.paused || sections.some((s) => s.modules.some((m) => m.pauses.length > 0)),
+    containsRepeats: test.containsRepeats === true,
     estimate: test.estimate,
     sections,
     break: test.break,

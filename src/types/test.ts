@@ -160,6 +160,8 @@ export interface TestReport {
   finishedAt: number | null;
   /** Any emergency pause in any module. */
   paused: boolean;
+  /** Built with "allow repeats" and at least one question was already done or shown in an exam. */
+  containsRepeats: boolean;
   estimate: ScoreEstimate | null;
   sections: TestSectionReport[];
   break: TestBreak | null;

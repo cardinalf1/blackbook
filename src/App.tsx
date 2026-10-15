@@ -3,7 +3,8 @@ import { AnalyticsFlow } from './components/analytics/AnalyticsFlow';
 import { loadFacets } from './services/drill/facetCache';
 import type { DrillConfig } from './types/drill';
 import { DownloadController } from './components/download/DownloadController';
-import { DrillFlow, type DrillStart } from './components/drill/DrillFlow';
+import { DrillFlow, ReportScreen, type DrillStart } from './components/drill/DrillFlow';
+import { MistakeLogScreen } from './components/mistakes/MistakeLogScreen';
 import { ImportPanel } from './components/ImportPanel';
 import { BrowseScreen } from './components/browse/BrowseScreen';
 import { InProgressSection } from './components/drill/InProgressSection';
@@ -28,6 +29,8 @@ type View =
   | { kind: 'practice'; questions: Question[]; index: number }
   | { kind: 'browse' }
   | { kind: 'analytics' }
+  | { kind: 'mistakes' }
+  | { kind: 'mistakeReport'; sessionId: string }
   | { kind: 'drill'; startAt: DrillStart }
   | { kind: 'exam'; startAt: 'setup' | 'play' }
   | { kind: 'test'; startAt: 'setup' | 'open'; testId?: string };
@@ -224,6 +227,13 @@ export default function App() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setView({ kind: 'mistakes' })}
+                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
+                >
+                  Mistake log
+                </button>
+                <button
+                  type="button"
                   onClick={() => setView({ kind: 'browse' })}
                   className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
                 >
@@ -317,6 +327,19 @@ export default function App() {
       )}
 
       {view.kind === 'analytics' && <AnalyticsFlow onExit={() => void loadHome()} onLaunch={(config) => void launchDrill(config)} />}
+
+      {view.kind === 'mistakes' && (
+        <MistakeLogScreen onBack={() => void loadHome()} onOpenReport={(sessionId) => setView({ kind: 'mistakeReport', sessionId })} />
+      )}
+
+      {view.kind === 'mistakeReport' && (
+        <ReportScreen
+          sessionId={view.sessionId}
+          backLabel="Back to mistake log"
+          onBack={() => setView({ kind: 'mistakes' })}
+          onMySkills={() => setView({ kind: 'drill', startAt: 'skills' })}
+        />
+      )}
 
       {view.kind === 'browse' && <BrowseScreen onBack={() => void loadHome()} onMySkills={() => setView({ kind: 'drill', startAt: 'skills' })} />}
     </main>

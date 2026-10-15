@@ -1,3 +1,4 @@
+import { isBreakShortened } from '../../services/test/devOverrides';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadRows } from '../../services/browse/rows';
 import { loadPoolHealth, type PoolHealthView } from '../../services/retry/load';
@@ -208,6 +209,7 @@ function BreakStep() {
       nextTitle={slot ? moduleTitle(slot.section, slot.moduleNumber) : 'Results'}
       busy={busy}
       onEnd={() => void testStore.getState().endBreak(true)}
+      canEndEarly={isBreakShortened()}
     />
   );
 }

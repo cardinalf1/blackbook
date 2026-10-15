@@ -7,6 +7,7 @@ import { MemoryQuestionStore } from '../services/storage/memory';
 import { currentStep } from '../services/test/flow';
 import type { EventLogger } from '../services/telemetry/logger';
 import type { Difficulty, Question, Section } from '../types/sat';
+import { createSession } from '../services/session/record';
 import type { EventRecord } from '../types/session';
 import { createDrillStore, type DrillStore } from './drillStore';
 import { createTestStore, type TestStore } from './testStore';
@@ -325,5 +326,38 @@ describe('full test', () => {
     const all = await w.attempts.listSessions();
     expect(all).toHaveLength(2);
     expect(all.every((s) => s.status === 'abandoned')).toBe(true);
+  });
+});
+
+describe('the global done rule in the test store', () => {
+  it('refuses a test built from questions already done, and labels one built with repeats allowed', async () => {
+    const w = await world();
+    const rw = w.questions.filter((q) => q.section === 'rw').map((q) => q.id);
+    const done = { ...createSession('browse-all', 'drill', { section: 'rw', domainCode: 'all', skillCodes: [], difficulties: [], count: rw.length, liveOnly: true }, rw, 1, 'browse'), status: 'finished' as const };
+    await w.attempts.saveSession(
+      done,
+      rw.map((id) => ({ id: `browse-all:${id}`, sessionId: 'browse-all', questionId: id, mode: 'drill' as const, status: 'final' as const, response: 'A', correct: true, timeMs: 1, firstVisitMs: 1, changes: 0, confidence: null, at: 1 })),
+    );
+    const { test } = w.page();
+    expect(await test.getState().start('rw', true)).toBe(false);
+    expect(await test.getState().start('rw', false, true)).toBe(true);
+    const t = test.getState().record?.test;
+    expect(t?.allowRepeats).toBe(true);
+    expect(t?.containsRepeats).toBe(true);
+  });
+
+  it('a second test never reuses questions shown in the first one, even unanswered', async () => {
+    const w = await world();
+    const a = w.page();
+    expect(await a.test.getState().start('rw', false)).toBe(true);
+    await a.test.getState().startModule();
+    // Only the first question of the module is ever shown; then the test is discarded.
+    const first = a.drill.getState().session?.queueIds[0] as string;
+    a.drill.getState().shown();
+    await a.test.getState().discard(a.test.getState().record?.id as string);
+    const b = w.page();
+    expect(await b.test.getState().start('rw', false)).toBe(true);
+    const slot = b.test.getState().record?.test?.slots.rw1;
+    expect(slot?.questionIds).not.toContain(first);
   });
 });

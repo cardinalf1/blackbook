@@ -26,6 +26,7 @@ export function MistakeReviewPanel({
   const [selectedReasons, setSelectedReasons] = useState<Record<string, MistakeReason>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -58,11 +59,14 @@ export function MistakeReviewPanel({
         suggested: true,
         previous: item.tag,
       });
+      setSaveError(null);
       setItems((prev) =>
         prev.map((it) =>
           it.questionId === item.questionId ? { ...it, tag: saved, suggestion: null } : it,
         ),
       );
+    } catch (e) {
+      setSaveError(`Could not save the tag: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setSavingIds((prev) => {
         const next = new Set(prev);
@@ -73,11 +77,8 @@ export function MistakeReviewPanel({
   };
 
   const handleSaveTag = async (item: MistakeItem) => {
-    const reason =
-      selectedReasons[item.questionId] ??
-      item.tag?.reason ??
-      item.suggestion?.reason ??
-      'careless';
+    const reason = selectedReasons[item.questionId] ?? item.tag?.reason;
+    if (!reason) return;
     const note = notes[item.questionId] ?? item.tag?.note ?? '';
     setSavingIds((prev) => new Set(prev).add(item.questionId));
     try {
@@ -90,11 +91,14 @@ export function MistakeReviewPanel({
         suggested: false,
         previous: item.tag,
       });
+      setSaveError(null);
       setItems((prev) =>
         prev.map((it) =>
           it.questionId === item.questionId ? { ...it, tag: saved, suggestion: null } : it,
         ),
       );
+    } catch (e) {
+      setSaveError(`Could not save the tag: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setSavingIds((prev) => {
         const next = new Set(prev);
@@ -135,15 +139,17 @@ export function MistakeReviewPanel({
             </p>
           ) : (
             <div className="space-y-4">
+              <p className="text-xs text-zinc-500">Tagging is optional. Nothing here is saved until you press a button.</p>
+              {saveError && (
+                <p role="alert" className="text-xs text-red-400">
+                  {saveError}
+                </p>
+              )}
               {items.map((item) => {
                 const reportItem = report.items.find((r) => r.questionId === item.questionId);
                 const displayId = reportItem?.displayId ?? item.questionId;
                 const skill = reportItem?.skill ?? '';
-                const currentReason =
-                  selectedReasons[item.questionId] ??
-                  item.tag?.reason ??
-                  item.suggestion?.reason ??
-                  'careless';
+                const currentReason = selectedReasons[item.questionId] ?? item.tag?.reason ?? '';
                 const currentNote = notes[item.questionId] ?? item.tag?.note ?? '';
                 const isSaving = savingIds.has(item.questionId);
 
@@ -210,6 +216,9 @@ export function MistakeReviewPanel({
                         }
                         className="rounded border border-[#27272A] bg-[#121215] px-2.5 py-1 text-xs text-zinc-200 transition-colors focus:border-zinc-500 focus:outline-none"
                       >
+                        <option value="" disabled>
+                          Pick a reason
+                        </option>
                         {MISTAKE_REASONS.map((reason) => (
                           <option key={reason} value={reason}>
                             {MISTAKE_REASON_LABEL[reason]}
@@ -235,7 +244,7 @@ export function MistakeReviewPanel({
 
                       <button
                         type="button"
-                        disabled={isSaving}
+                        disabled={isSaving || currentReason === ''}
                         onClick={() => handleSaveTag(item)}
                         className="rounded border border-zinc-700 bg-zinc-800 px-3 py-1 font-mono text-xs font-medium text-zinc-100 transition-colors hover:bg-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 disabled:opacity-50"
                       >
