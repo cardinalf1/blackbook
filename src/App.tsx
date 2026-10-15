@@ -5,6 +5,7 @@ import { ImportPanel } from './components/ImportPanel';
 import { BrowseScreen } from './components/browse/BrowseScreen';
 import { InProgressSection } from './components/drill/InProgressSection';
 import { ExamFlow } from './components/exam/ExamFlow';
+import { TestFlow } from './components/test/TestFlow';
 import { QuestionView } from './components/QuestionView';
 import { DOWNLOAD_ENABLED } from './config';
 import { api, ApiError, initApiAuth } from './services/api/client';
@@ -23,7 +24,8 @@ type View =
   | { kind: 'practice'; questions: Question[]; index: number }
   | { kind: 'browse' }
   | { kind: 'drill'; startAt: DrillStart }
-  | { kind: 'exam'; startAt: 'setup' | 'play' };
+  | { kind: 'exam'; startAt: 'setup' | 'play' }
+  | { kind: 'test'; startAt: 'setup' | 'open'; testId?: string };
 
 function sample<T>(items: readonly T[], n: number): T[] {
   const a = [...items];
@@ -119,6 +121,13 @@ export default function App() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setView({ kind: 'test', startAt: 'setup' })}
+                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
+                >
+                  Practice test
+                </button>
+                <button
+                  type="button"
                   onClick={() => setView({ kind: 'drill', startAt: 'skills' })}
                   className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
                 >
@@ -157,6 +166,7 @@ export default function App() {
           )}
           {view.count > 0 && (
             <InProgressSection
+              onOpenTest={(testId) => setView({ kind: 'test', startAt: 'open', testId })}
               onResumed={() =>
                 setView(drillStore.getState().session?.mode === 'exam' ? { kind: 'exam', startAt: 'play' } : { kind: 'drill', startAt: 'play' })
               }
@@ -211,10 +221,24 @@ export default function App() {
       )}
 
       {view.kind === 'drill' && (
-        <DrillFlow startAt={view.startAt} onExit={() => void loadHome()} onOpenExam={() => setView({ kind: 'exam', startAt: 'play' })} />
+        <DrillFlow
+          startAt={view.startAt}
+          onExit={() => void loadHome()}
+          onOpenExam={() => setView({ kind: 'exam', startAt: 'play' })}
+          onOpenTest={(testId) => setView({ kind: 'test', startAt: 'open', testId })}
+        />
       )}
       {view.kind === 'exam' && (
         <ExamFlow startAt={view.startAt} onExit={() => void loadHome()} onMySkills={() => setView({ kind: 'drill', startAt: 'skills' })} />
+      )}
+
+      {view.kind === 'test' && (
+        <TestFlow
+          startAt={view.startAt}
+          testId={view.testId}
+          onExit={() => void loadHome()}
+          onMySkills={() => setView({ kind: 'drill', startAt: 'skills' })}
+        />
       )}
 
       {view.kind === 'browse' && <BrowseScreen onBack={() => void loadHome()} onMySkills={() => setView({ kind: 'drill', startAt: 'skills' })} />}

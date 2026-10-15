@@ -47,7 +47,7 @@ function Notice({ children, error = false }: { children: ReactNode; error?: bool
  * Setup, the question loop, the report, Past drills, the Data page and the skills table. Session
  * state lives in the drill store; this component chooses the screen and loads what it shows.
  */
-export function DrillFlow({ onExit, startAt, onOpenExam }: { onExit: () => void; startAt: DrillStart; onOpenExam?: () => void }) {
+export function DrillFlow({ onExit, startAt, onOpenExam, onOpenTest }: { onExit: () => void; startAt: DrillStart; onOpenExam?: () => void; onOpenTest?: (testId: string) => void }) {
   const error = useDrill((s) => s.error);
   const [step, setStep] = useState<Step>(startAt === 'skills' ? { kind: 'skills', back: null } : { kind: startAt });
   const [facets, setFacets] = useState<QuestionFacet[] | null>(null);
@@ -88,6 +88,7 @@ export function DrillFlow({ onExit, startAt, onOpenExam }: { onExit: () => void;
         <PastScreen
           facets={facets}
           onOpen={(sessionId) => setStep({ kind: 'report', sessionId, from: 'past' })}
+          onOpenTest={onOpenTest}
           onResumed={() => {
             // An exam module resumes in the exam screen, not the drill one.
             if (drillStore.getState().session?.mode === 'exam' && onOpenExam) onOpenExam();
@@ -297,7 +298,7 @@ export function ReportScreen(props: { sessionId: string; backLabel: string; onBa
   );
 }
 
-function PastScreen(props: { facets: QuestionFacet[]; onOpen: (id: string) => void; onResumed: () => void; onBack: () => void }) {
+function PastScreen(props: { facets: QuestionFacet[]; onOpen: (id: string) => void; onOpenTest?: (id: string) => void; onResumed: () => void; onBack: () => void }) {
   const { facets, onOpen, onBack } = props;
   const [rows, setRows] = useState<PastSessionRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -309,7 +310,8 @@ function PastScreen(props: { facets: QuestionFacet[]; onOpen: (id: string) => vo
   }, [facets]);
   if (error) return <Notice error>Could not read your past drills: {error}</Notice>;
   if (!rows) return <Notice>Loading...</Notice>;
-  return <PastDrills rows={rows} onOpen={onOpen} onBack={onBack} inProgressSlot={<InProgressSection onResumed={props.onResumed} />} />;
+  const open = (id: string) => (rows.find((r) => r.id === id)?.isTest && props.onOpenTest ? props.onOpenTest(id) : onOpen(id));
+  return <PastDrills rows={rows} onOpen={open} onBack={onBack} inProgressSlot={<InProgressSection onResumed={props.onResumed} onOpenTest={props.onOpenTest} />} />;
 }
 
 function DataScreen({ onBack }: { onBack: () => void }) {

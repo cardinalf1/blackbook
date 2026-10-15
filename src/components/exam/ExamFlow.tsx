@@ -79,7 +79,7 @@ export function ExamFlow({ startAt, onExit, onMySkills }: { startAt: 'setup' | '
   );
 }
 
-function ExamPlay({ onExit }: { onExit: () => void }) {
+export function ExamPlay({ onExit }: { onExit: () => void }) {
   const session = useDrill((s) => s.session);
   const questions = useDrill((s) => s.questions);
   const saveError = useDrill((s) => s.saveError);
