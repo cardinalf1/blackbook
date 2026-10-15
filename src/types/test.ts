@@ -188,8 +188,13 @@ export interface BreakScreenProps {
   durationMs: number;
   /** For example "Section 2, Module 1: Math". */
   nextTitle: string;
-  /** Ends the break now. */
+  /** Ends the break now. Only used when `canEndEarly` is set. */
   onEnd: () => void;
+  /**
+   * VERIFIED (official help text): students cannot start or end a scheduled break early, so the
+   * real exam mode leaves this off. It is on only in the dev shortened-break mode.
+   */
+  canEndEarly?: boolean;
   busy: boolean;
 }
 

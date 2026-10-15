@@ -17,6 +17,11 @@ export function moduleDurationMs(section: Section): number {
   return override(DEV_DURATION_OVERRIDE_KEY) ?? EXAM_MODULES[section].durationMs;
 }
 
+/** True only in a dev build with a shortened break. Only then may the break be ended early (the real one cannot). */
+export function isBreakShortened(): boolean {
+  return override(DEV_BREAK_OVERRIDE_KEY) !== null;
+}
+
 /** Break length: the configured one, or in a dev build only, a short override. */
 export function breakDurationMs(): number {
   return override(DEV_BREAK_OVERRIDE_KEY) ?? BREAK_MS;

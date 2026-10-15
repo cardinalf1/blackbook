@@ -20,13 +20,13 @@ Checked over the whole local bank with a script (3,695 questions counted by sect
 | Module 2 depends on module 1 performance | Yes | Verified (sources 1, 2) |
 | Difficulty bands | E 1 to 3, M 4 to 5, H 6 to 7 | Verified in the bank data |
 | Band weights | 1, 1.25, 1.5, 2, 2.5, 3, 3.5 | Assumed; they only say harder counts more |
-| Routing rule | Weighted share correct on module 1 at or above `ROUTING_THRESHOLD` (0.5) goes to the harder module 2 | Assumed. Community figures say about two thirds correct; 0.5 on the weighted scale is about "all easy and medium right" |
+| Routing rule | Weighted share correct on module 1 at or above `ROUTING_THRESHOLD` (0.5) goes to the harder module 2 | Assumed (Blackbook's own; official text says only "around the median" section score). Community figures say about two thirds correct; 0.5 on the weighted scale is about "all easy and medium right" |
 | Module 2 difficulty mix (easy : medium : hard) | Easier 5:4:1, harder 1:4:5 | Assumed |
-| Easier-route ceiling | 600 per section (`EASIER_ROUTE_CAP`) | Assumed, community-derived (source 3) |
-| Harder-route floor | 400 per section (`HARDER_ROUTE_FLOOR`) | Assumed |
+| Easier-route ceiling | 600 per section (`EASIER_ROUTE_CAP`) | Community-derived, unverified (source 3). Official text says a full range of section scores is possible from either Module 2, so this may be too low; the report says the easier route "may limit the top of your range; the exact effect is not published" |
+| Harder-route floor | 400 per section (`HARDER_ROUTE_FLOOR`) | Community-derived, unverified (no source found) |
 | Conversion | Linear from the weighted share correct over both modules onto 200 to 600 (easier route) or 400 to 800 (harder route) | Assumed |
 | Range | Half-width 40, plus up to 120 for the unanswered share, plus 20 on the easier route; rounded to 10; the easier route's top is cut at the ceiling | Assumed |
-| Break | 10 minutes | Assumed (`docs/exam-spec.md`) |
+| Break | 10 minutes, cannot be ended early | Verified (`docs/exam-spec.md`) |
 
 ## How the estimate is computed
 

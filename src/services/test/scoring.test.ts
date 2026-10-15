@@ -61,6 +61,14 @@ describe('estimate', () => {
     }
   });
 
+  it('the easier route has a visibly wider range than the harder one at the same share correct', () => {
+    const width = (route: 'easier' | 'harder') => {
+      const e = estimateSection(full(route, 22));
+      return e.high - e.low;
+    };
+    expect(width('easier')).toBeGreaterThan(width('harder'));
+  });
+
   it('is monotone in the number right', () => {
     const mids = [0, 11, 22, 33, 44].map((r) => estimateSection(full('harder', r)).mid);
     expect(mids).toEqual([...mids].sort((a, b) => a - b));

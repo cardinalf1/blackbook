@@ -53,3 +53,9 @@ One line per idea, grouped by phase (AGENTS.md rule 8).
 - Record official scores after test day to calibrate the estimate (needs the owner to supply them).
 - Export analytics tables as CSV.
 - Compare skills against a target score once a calibration source exists.
+
+## Phase 6 (foundations)
+- Check in a real Bluebook practice test whether "." and "/" count toward the 5/6-character limit of a student-produced response (the owner will check; Blackbook counts them today).
+- Check where student-produced items sit inside a Math module, and the other items in the "Check in real Bluebook" list in `docs/exam-spec.md`.
+- Real break: wait for a click to start the next section after the break ends, instead of continuing by itself.
+- Settings: the app stores none yet (only dev overrides), so backups hold none; add them to the export if a settings store appears.

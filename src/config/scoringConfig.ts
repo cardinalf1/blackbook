@@ -18,10 +18,11 @@ export const BAND_WEIGHTS: Readonly<Record<number, number>> = { 1: 1, 2: 1.25, 3
 export const DIFFICULTY_WEIGHTS: Readonly<Record<Difficulty, number>> = { E: 1.25, M: 2.25, H: 3.25 };
 
 /**
- * ASSUMED: module 1 goes to the harder module 2 when the weighted share correct is at least this.
- * Community sources put the cut at roughly two thirds correct, unevenly across sections and
- * administrations; nothing official is published. 0.5 on the weighted scale is about "all easy and
- * medium right".
+ * ASSUMED (Blackbook's own choice): module 1 goes to the harder module 2 when the weighted share
+ * correct is at least this. The only official statement is that the break point is "around the
+ * median" section score; it does not say whether routing uses number correct, a weighted score or
+ * an IRT estimate. Community sources put the cut at roughly two thirds correct, unevenly across
+ * sections and administrations. 0.5 on the weighted scale is about "all easy and medium right".
  */
 export const ROUTING_THRESHOLD = 0.5;
 
@@ -36,9 +37,14 @@ export const TIER_MIX: Readonly<Record<'routing' | 'easier' | 'harder', readonly
   harder: [1, 4, 5],
 };
 
-/** ASSUMED (community-derived, not official): the top of the scale reachable through the easier module 2. */
+/**
+ * COMMUNITY-DERIVED, UNVERIFIED: the top of the scale reachable through the easier module 2.
+ * Official text says "a range of section scores is possible, no matter which second module", so
+ * this is likely too hard a cap; the only figure found is a blog's. It is kept so the estimate
+ * leans cautious on the easier route, and the report says the effect is not published.
+ */
 export const EASIER_ROUTE_CAP = 600;
-/** ASSUMED: the lowest section score shown for someone routed to the harder module 2. */
+/** COMMUNITY-DERIVED, UNVERIFIED (no source found at all): the lowest section score shown on the harder module 2. */
 export const HARDER_ROUTE_FLOOR = 400;
 export const SCORE_MIN = 200;
 export const SCORE_MAX = 800;
@@ -47,10 +53,13 @@ export const SCORE_MAX = 800;
 export const BASE_HALF_WIDTH = 40;
 /** ASSUMED: extra half-width when every question is unanswered; scales with the unanswered share. */
 export const UNANSWERED_HALF_WIDTH = 120;
-/** ASSUMED: extra half-width on the easier route, where the conversion is less certain. */
+/** ASSUMED: extra half-width on the easier route, where the conversion is less certain; makes its range visibly wider. */
 export const EASIER_ROUTE_EXTRA_HALF_WIDTH = 20;
 /** Scores are shown rounded to this step. */
 export const SCORE_STEP = 10;
 
-/** ASSUMED: length of the break between sections (the prompt's spec; the real value is not read from a source here). */
+/**
+ * VERIFIED: one 10-minute scheduled break between Reading and Writing and Math (Specifications
+ * Overview, official help text). Students cannot start or end it early (How do student breaks work).
+ */
 export const BREAK_MS = 10 * 60_000;

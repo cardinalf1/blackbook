@@ -45,7 +45,7 @@ describe('BreakScreen', () => {
 
     // Statement that break ends by itself at zero and finished modules cannot be reopened
     expect(container.textContent).toContain(
-      'The break ends by itself at zero. Finished modules cannot be reopened.',
+      'The break cannot be ended early. It ends by itself at zero. Finished modules cannot be reopened.',
     );
 
     // No back button exists
@@ -92,6 +92,7 @@ describe('BreakScreen', () => {
           durationMs={600000}
           nextTitle="Section 2, Module 1: Math"
           onEnd={onEnd}
+          canEndEarly
           busy={false}
         />,
       );
@@ -124,6 +125,7 @@ describe('BreakScreen', () => {
           durationMs={600000}
           nextTitle="Section 2, Module 1: Math"
           onEnd={onEnd}
+          canEndEarly
           busy={true}
         />,
       );
@@ -143,5 +145,19 @@ describe('BreakScreen', () => {
     await act(async () => {
       root.unmount();
     });
+  });
+});
+
+describe('BreakScreen in the real exam mode', () => {
+  it('has no way to end the break early unless canEndEarly is set', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<BreakScreen remainingMs={600000} durationMs={600000} nextTitle="Math" onEnd={vi.fn()} busy={false} />);
+    });
+    expect(container.querySelectorAll('button')).toHaveLength(0);
+    expect(container.textContent).toContain('cannot be ended early');
+    container.remove();
   });
 });

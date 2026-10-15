@@ -5,6 +5,7 @@ export function BreakScreen({
   remainingMs,
   nextTitle,
   onEnd,
+  canEndEarly = false,
   busy,
 }: BreakScreenProps) {
   return (
@@ -27,20 +28,22 @@ export function BreakScreen({
           Next: <span className="font-medium text-zinc-100">{nextTitle}</span>
         </p>
         <p className="text-xs text-zinc-400">
-          The break ends by itself at zero. Finished modules cannot be reopened.
+          The break cannot be ended early. It ends by itself at zero. Finished modules cannot be reopened.
         </p>
       </div>
 
-      <div className="pt-2">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onEnd}
-          className="rounded-md bg-zinc-100 px-5 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-200 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-        >
-          End break and continue
-        </button>
-      </div>
+      {canEndEarly && (
+        <div className="pt-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onEnd}
+            className="rounded-md bg-zinc-100 px-5 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-200 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+          >
+            End break and continue
+          </button>
+        </div>
+      )}
     </section>
   );
 }
