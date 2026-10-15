@@ -46,7 +46,7 @@ describe('ExamReview', () => {
     expect(container.textContent).toContain('Time left: 2:30');
     expect(container.textContent).toContain('3 of 5 answered');
     expect(container.textContent).toContain(
-      'On test day, you would not be able to move on to the next module until time expires. Here you can submit now or keep working. Answers cannot be changed after you submit.',
+      'You can submit now or keep working until time runs out. Answers cannot be changed after you submit.',
     );
 
     await act(async () => {

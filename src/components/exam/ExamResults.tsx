@@ -87,6 +87,7 @@ export function ExamResults({
         onItemToggle={onItemToggle}
         onBack={onBack}
         backLabel="Done"
+        heading="Questions and explanations"
         onMySkills={onMySkills}
       />
     </div>

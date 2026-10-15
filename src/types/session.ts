@@ -291,6 +291,8 @@ export interface DrillReportProps {
   onBack: () => void;
   /** Label for the back button, e.g. "Done" after a drill or "Back to past drills". */
   backLabel: string;
+  /** Heading of the report. Defaults to "Drill report". */
+  heading?: string;
   onMySkills: () => void;
 }
 

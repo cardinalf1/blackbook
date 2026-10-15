@@ -20,6 +20,7 @@ export function DrillReport({
   onItemToggle,
   onBack,
   backLabel,
+  heading = 'Drill report',
   onMySkills,
 }: DrillReportProps) {
   const [filter, setFilter] = useState<'all' | 'missed' | 'flagged'>('all');
@@ -75,7 +76,7 @@ export function DrillReport({
       <section className="space-y-4 rounded-lg border border-[#27272A] bg-[#121215] p-5">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#27272A] pb-3 sm:pb-4">
           <div>
-            <h2 className="font-mono text-sm font-medium text-zinc-100">Drill report</h2>
+            <h2 className="font-mono text-sm font-medium text-zinc-100">{heading}</h2>
             <p className="mt-0.5 text-xs text-zinc-400">{formattedDate}</p>
           </div>
           <div className="flex items-center gap-2">

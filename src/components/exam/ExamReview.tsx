@@ -36,7 +36,7 @@ export function ExamReview({
 
         {/* Instructions */}
         <p className="text-xs leading-relaxed text-zinc-400">
-          On test day, you would not be able to move on to the next module until time expires. Here you can submit now or keep working. Answers cannot be changed after you submit.
+          You can submit now or keep working until time runs out. Answers cannot be changed after you submit.
         </p>
 
         {/* Summary */}
