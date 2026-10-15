@@ -226,6 +226,7 @@ export function createHandler(deps: AppDeps): (req: Request) => Promise<Response
         await deps.users.clearEvents();
         return json({ ok: true });
       }
+      if (path === '/api/status' && m === 'GET') return json(await deps.users.questionStatus());
       if (path === '/api/data/stats' && m === 'GET') return json(await deps.users.stats());
       if (path === '/api/data/export' && m === 'GET') {
         return json(await deps.users.exportAll(), 200, { 'Content-Disposition': 'attachment; filename="blackbook-data.json"' });

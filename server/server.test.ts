@@ -10,6 +10,7 @@ import { createSanitizer } from '../src/services/normalize/sanitize';
 import { LIMITS } from '../src/services/sync/limits';
 import type { PipelineDeps } from '../src/services/sync/pipeline';
 import type { DownloadProgress } from '../src/types/download';
+import { deriveStatus, shownIds } from '../src/services/browse/status';
 import { createSession, finish } from '../src/services/session/record';
 import type { EventRecord, SessionRecord, StoredAttempt } from '../src/types/session';
 import type { Question } from '../src/types/sat';
@@ -127,6 +128,39 @@ describe('SQLite user store', () => {
     expect(open).toMatchObject({ status: 'in_progress', index: 1, score: null, finishedAt: null });
     expect(open?.progress.q2).toMatchObject({ response: null, activeMs: 700, firstVisitMs: null });
     expect((await store.listAttempts())[0]).toMatchObject({ mode: 'drill', status: 'final', firstVisitMs: 3000, changes: 0, confidence: null });
+  });
+
+  it('status from SQL matches the reference derivation on random histories', async () => {
+    let seed = 7;
+    const rnd = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+    for (let round = 0; round < 5; round++) {
+      const db = openSqlite(join(dir, `st${round}.db`));
+      const store = new SqliteUserStore(db);
+      const qs = Array.from({ length: 12 }, (_, i) => `q${i}`);
+      const sessions: SessionRecord[] = [];
+      for (let k = 0; k < 6; k++) {
+        const ids = qs.filter(() => rnd() < 0.5);
+        if (ids.length === 0) continue;
+        const base = createSession(`s${k}`, 'drill', CONFIG, ids, k);
+        const r = rnd();
+        const s = r < 0.4 ? finish(base, 0, () => true, 100 + k) : r < 0.6 ? { ...base, status: 'abandoned' as const } : base;
+        const list = ids.flatMap((q) => {
+          const x = rnd();
+          if (x < 0.25) return [];
+          return [attempt(`s${k}`, q, { status: x < 0.5 ? 'draft' : 'final', response: x < 0.6 ? '' : 'A', correct: rnd() < 0.5, at: Math.floor(rnd() * 5) })];
+        });
+        await store.saveSession(s, list);
+        sessions.push(s);
+      }
+      const events = qs.filter(() => rnd() < 0.3).map((q, n) => ({ id: `ev${n}`, sessionId: 's0', mode: 'drill' as const, questionId: q, type: 'question_shown' as const, ts: n, monoMs: n, pageId: 'p', seq: n, payload: { index: 0, visit: 1 } }));
+      await store.appendEvents(events);
+      for (const q of qs) if (rnd() < 0.15) await store.setFlag(q, true);
+      const reference = deriveStatus(await store.listAttempts(), await store.listSessions(), shownIds(await store.listEvents()), await store.listFlags());
+      expect(await store.questionStatus()).toEqual(reference);
+    }
   });
 
   it('keeps the event log append-only', async () => {

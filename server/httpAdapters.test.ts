@@ -177,6 +177,31 @@ describe.each([
     expect(await attempts.listEvents()).toEqual([]);
     expect(await attempts.listAttempts()).toHaveLength(1); // answers stay
   });
+
+  it('status: seen from showings or answers, done from final answers, results only from finished sessions', async () => {
+    const { attempts } = await make();
+    // s1 finished: a correct, b wrong (draft only, so not done), c cleared.
+    const s1 = finish(createSession('s1', 'drill', CONFIG, ['a', 'b', 'c'], 1), 0, () => true, 50);
+    await attempts.saveSession(s1, [
+      stored('s1', 'a', { status: 'final', correct: true, at: 20 }),
+      stored('s1', 'b', { status: 'draft', correct: false, at: 21 }),
+      stored('s1', 'c', { status: 'draft', response: '', correct: false, at: 22 }),
+    ]);
+    // s2 still in progress: a answered wrong and final. Must not change a's last result.
+    await attempts.saveSession(session('s2', 2), [stored('s2', 'a', { status: 'final', correct: false, at: 99 })]);
+    // d only shown, e only flagged.
+    await attempts.appendEvents([{ ...event('e1', 's2', 5, 0), questionId: 'd', type: 'question_shown', payload: { index: 0, visit: 1 } }]);
+    await attempts.setFlag('e', true);
+    const got = await attempts.questionStatus();
+    expect(got).toEqual([
+      { questionId: 'a', seen: true, done: true, attempts: 2, lastResult: 'correct', flagged: false },
+      { questionId: 'b', seen: true, done: false, attempts: 0, lastResult: null, flagged: false },
+      { questionId: 'c', seen: true, done: false, attempts: 0, lastResult: null, flagged: false },
+      { questionId: 'd', seen: true, done: false, attempts: 0, lastResult: null, flagged: false },
+      // A flag alone does not count as seen (the showing may have been deleted with the telemetry).
+      { questionId: 'e', seen: false, done: false, attempts: 0, lastResult: null, flagged: true },
+    ]);
+  });
 });
 
 describe('api client errors', () => {

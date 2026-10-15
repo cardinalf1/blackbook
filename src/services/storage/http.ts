@@ -1,5 +1,6 @@
 // Storage adapters backed by the local server. Same contracts as the in-memory stores.
 
+import type { QuestionStatus } from '../../types/browse';
 import type { FlagRecord } from '../../types/drill';
 import type { EventRecord, SessionRecord, StoredAttempt, TelemetryStats, UserDataExport } from '../../types/session';
 import type { Question } from '../../types/sat';
@@ -90,6 +91,10 @@ export class HttpAttemptStore implements AttemptStore, TelemetryStore {
 
   async exportAll(): Promise<UserDataExport> {
     return this.api.request<UserDataExport>('/api/data/export');
+  }
+
+  async questionStatus(): Promise<QuestionStatus[]> {
+    return this.api.request<QuestionStatus[]>('/api/status');
   }
 
   async clearAll(): Promise<void> {

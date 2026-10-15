@@ -6,6 +6,7 @@
 
 import { isSessionV1, upgradeSession, upgradeSessionV1 } from '../src/services/session/upgrade';
 import type { AttemptStore, SessionFilter, TelemetryStore } from '../src/services/storage/attemptTypes';
+import type { QuestionStatus } from '../src/types/browse';
 import type { FlagRecord } from '../src/types/drill';
 import type { EventRecord, EventType, SessionRecord, StoredAttempt, TelemetryStats, UserDataExport } from '../src/types/session';
 import { transaction, type SqlDb, type SqlParam } from './sql';
@@ -213,6 +214,34 @@ const toEvent = (r: EventRow): EventRecord => ({
   payload: JSON.parse(r.payload) as EventRecord['payload'],
 });
 
+/**
+ * Status per question in one query; the same rules as deriveStatus in src/services/browse/status.ts.
+ * Correctness comes only from finished sessions.
+ */
+const STATUS_SQL = `
+WITH ids AS (
+  SELECT question_id AS q FROM events WHERE type = 'question_shown' AND question_id IS NOT NULL
+  UNION SELECT question_id FROM attempts
+  UNION SELECT question_id FROM flags
+),
+done AS (
+  SELECT question_id AS q, COUNT(*) AS n FROM attempts WHERE status = 'final' AND response <> '' GROUP BY question_id
+),
+last AS (
+  SELECT a.question_id AS q, a.correct AS correct,
+         ROW_NUMBER() OVER (PARTITION BY a.question_id ORDER BY a.at DESC, a.id DESC) AS rn
+  FROM attempts a JOIN sessions s ON s.id = a.session_id
+  WHERE a.status = 'final' AND a.response <> '' AND s.status = 'finished'
+)
+SELECT ids.q AS question_id,
+       (EXISTS (SELECT 1 FROM events e WHERE e.question_id = ids.q AND e.type = 'question_shown')
+        OR EXISTS (SELECT 1 FROM attempts a WHERE a.question_id = ids.q)) AS seen,
+       COALESCE(done.n, 0) AS attempts,
+       (SELECT correct FROM last WHERE last.q = ids.q AND last.rn = 1) AS last_correct,
+       EXISTS (SELECT 1 FROM flags f WHERE f.question_id = ids.q) AS flagged
+FROM ids LEFT JOIN done ON done.q = ids.q
+ORDER BY ids.q`;
+
 /** Rough bytes per event row: the text columns plus four 8-byte numbers. Excludes index pages. */
 const EVENT_BYTES_SQL = `SELECT COUNT(*) AS n, COALESCE(SUM(
   LENGTH(id) + LENGTH(session_id) + LENGTH(mode) + COALESCE(LENGTH(question_id), 0) + LENGTH(type) +
@@ -348,6 +377,19 @@ export class SqliteUserStore implements AttemptStore, TelemetryStore {
       attempts: await this.listAttempts(),
       events: await this.listEvents(),
     };
+  }
+
+  async questionStatus(): Promise<QuestionStatus[]> {
+    return this.db
+      .all<{ question_id: string; seen: number; attempts: number; last_correct: number | null; flagged: number }>(STATUS_SQL)
+      .map((r) => ({
+        questionId: r.question_id,
+        seen: Number(r.seen) === 1,
+        done: Number(r.attempts) > 0,
+        attempts: Number(r.attempts),
+        lastResult: r.last_correct === null ? null : Number(r.last_correct) === 1 ? 'correct' : 'incorrect',
+        flagged: Number(r.flagged) === 1,
+      }));
   }
 
   async clearAll(): Promise<void> {

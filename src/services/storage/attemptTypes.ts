@@ -1,3 +1,4 @@
+import type { QuestionStatus } from '../../types/browse';
 import type { FlagRecord } from '../../types/drill';
 import type {
   EventRecord,
@@ -34,6 +35,9 @@ export interface AttemptStore {
   /** "Flag for later" across sessions. A session's own flags live in its record. */
   setFlag(questionId: string, flagged: boolean): Promise<void>;
   listFlags(): Promise<FlagRecord[]>;
+
+  /** Seen, done, attempts, last result and flag per question, derived in one pass (see browse/status). */
+  questionStatus(): Promise<QuestionStatus[]>;
 
   /** Removes sessions, attempts, flags and events. */
   clearAll(): Promise<void>;
