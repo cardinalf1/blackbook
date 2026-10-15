@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DrillReportProps } from '../../types/session';
 import { formatDuration } from '../../utils/formatDuration';
+import { MistakeReviewPanel } from '../mistakes/MistakeReviewPanel';
 import { QuestionHtml } from '../QuestionHtml';
 
 const DIFFICULTY_LABELS: Record<string, string> = {
@@ -218,6 +219,9 @@ export function DrillReport({
         </section>
       </div>
 
+      {/* Mistake review panel */}
+      <MistakeReviewPanel report={report} source={report.mode === 'exam' ? 'exam' : 'drill'} />
+
       {/* Filter buttons and Questions list */}
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -256,7 +260,8 @@ export function DrillReport({
               const isOpen = openIds.has(item.questionId);
               const difficultyLabel = DIFFICULTY_LABELS[item.difficulty] ?? item.difficulty;
               const hasDiffFirstVisit =
-                item.firstVisitMs !== null && formatDuration(item.firstVisitMs) !== formatDuration(item.activeMs);
+                item.firstVisitMs !== null &&
+                formatDuration(item.firstVisitMs) !== formatDuration(item.activeMs);
 
               return (
                 <div
@@ -409,11 +414,13 @@ export function DrillReport({
                             <h4 className="mb-2 font-mono text-xs uppercase tracking-wider text-zinc-400">
                               Explanation
                             </h4>
-                            {item.question.answer.kind === 'mcq' && item.question.answer.keyOrigin === 'rationale' && (
-                              <p className="mb-2 text-xs text-amber-400">
-                                The answer key for this older question was read from its explanation text.
-                              </p>
-                            )}
+                            {item.question.answer.kind === 'mcq' &&
+                              item.question.answer.keyOrigin === 'rationale' && (
+                                <p className="mb-2 text-xs text-amber-400">
+                                  The answer key for this older question was read from its
+                                  explanation text.
+                                </p>
+                              )}
                             <QuestionHtml
                               html={item.question.rationaleHtml}
                               className="text-zinc-300"

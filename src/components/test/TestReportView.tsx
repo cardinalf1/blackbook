@@ -3,6 +3,7 @@ import type { Section } from '../../types/sat';
 import type { BreakdownRow, ReportItem } from '../../types/session';
 import type { TestModuleReport, TestReport, TestReportProps } from '../../types/test';
 import { formatDuration } from '../../utils/formatDuration';
+import { MistakeReviewPanel } from '../mistakes/MistakeReviewPanel';
 import { QuestionHtml } from '../QuestionHtml';
 
 const SECTION_LABELS: Record<Section, string> = {
@@ -142,16 +143,15 @@ function QuestionItemView({
 }) {
   const difficultyLabel = DIFFICULTY_LABELS[item.difficulty] ?? item.difficulty;
   const hasDiffFirstVisit =
-    item.firstVisitMs !== null && formatDuration(item.firstVisitMs) !== formatDuration(item.activeMs);
+    item.firstVisitMs !== null &&
+    formatDuration(item.firstVisitMs) !== formatDuration(item.activeMs);
 
   return (
-    <div className="rounded-lg border border-[#27272A] bg-[#121215] p-4 text-xs transition-colors">
+    <div className="rounded-lg border border-[#27272A] bg-[#0A0A0C] p-4 text-xs transition-colors">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono font-semibold text-zinc-300">
-              {item.index + 1}
-            </span>
+            <span className="font-mono font-semibold text-zinc-300">{item.index + 1}</span>
             <span className="font-mono text-zinc-400">#{item.displayId}</span>
             <span className="text-zinc-500">•</span>
             <span className="text-zinc-200">{item.skill}</span>
@@ -183,9 +183,7 @@ function QuestionItemView({
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-zinc-400">
             <div className="flex items-center gap-1.5">
               <span>Your answer:</span>
-              <span className="font-mono font-medium text-zinc-200">
-                {item.response ?? '—'}
-              </span>
+              <span className="font-mono font-medium text-zinc-200">{item.response ?? '—'}</span>
               {item.response === null && (
                 <span className="rounded border border-zinc-700 bg-zinc-800 px-1.5 py-0.5 font-mono text-[10px] text-zinc-300">
                   Unanswered
@@ -194,24 +192,18 @@ function QuestionItemView({
             </div>
             <div className="flex items-center gap-1.5">
               <span>Correct answer:</span>
-              <span className="font-mono font-medium text-zinc-200">
-                {item.correctAnswer}
-              </span>
+              <span className="font-mono font-medium text-zinc-200">{item.correctAnswer}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span>Time:</span>
-              <span className="font-mono text-zinc-300">
-                {formatDuration(item.activeMs)}
-              </span>
+              <span className="font-mono text-zinc-300">{formatDuration(item.activeMs)}</span>
               {hasDiffFirstVisit && (
                 <span className="text-zinc-500">
                   (first visit {formatDuration(item.firstVisitMs as number)})
                 </span>
               )}
             </div>
-            {item.changes > 0 && (
-              <span className="text-zinc-400">changed {item.changes}×</span>
-            )}
+            {item.changes > 0 && <span className="text-zinc-400">changed {item.changes}×</span>}
           </div>
         </div>
 
@@ -229,16 +221,11 @@ function QuestionItemView({
       {isOpen && (
         <div className="mt-4 border-t border-[#27272A] pt-4">
           {item.question === null ? (
-            <p className="text-zinc-400">
-              This question is no longer in your question bank.
-            </p>
+            <p className="text-zinc-400">This question is no longer in your question bank.</p>
           ) : (
             <div className="space-y-4">
               {item.question.stimulusHtml && (
-                <QuestionHtml
-                  html={item.question.stimulusHtml}
-                  className="text-zinc-300"
-                />
+                <QuestionHtml html={item.question.stimulusHtml} className="text-zinc-300" />
               )}
               <QuestionHtml html={item.question.stemHtml} className="text-zinc-100" />
 
@@ -246,18 +233,16 @@ function QuestionItemView({
                 <div className="space-y-2">
                   {item.question.answer.choices.map((choice, i) => {
                     const letter =
-                      (['A', 'B', 'C', 'D'] as const)[i] ??
-                      String.fromCharCode(65 + i);
+                      (['A', 'B', 'C', 'D'] as const)[i] ?? String.fromCharCode(65 + i);
                     const isCorrect =
                       item.question?.answer.kind === 'mcq' &&
                       item.question.answer.correct === letter;
                     const isUserPick = item.response === letter;
                     const isWrongPick = isUserPick && !isCorrect;
 
-                    let borderClass = 'border-[#27272A] bg-[#0A0A0C] text-zinc-300';
+                    let borderClass = 'border-[#27272A] bg-[#121215] text-zinc-300';
                     if (isCorrect) {
-                      borderClass =
-                        'border-emerald-600 bg-emerald-950/20 text-zinc-100';
+                      borderClass = 'border-emerald-600 bg-emerald-950/20 text-zinc-100';
                     } else if (isWrongPick) {
                       borderClass = 'border-red-600 bg-red-950/20 text-zinc-100';
                     }
@@ -267,9 +252,7 @@ function QuestionItemView({
                         key={letter}
                         className={`flex items-start gap-2.5 rounded-md border p-3 ${borderClass}`}
                       >
-                        <span className="font-mono font-semibold text-zinc-400">
-                          {letter}.
-                        </span>
+                        <span className="font-mono font-semibold text-zinc-400">{letter}.</span>
                         <QuestionHtml html={choice} className="flex-1" />
                       </div>
                     );
@@ -278,10 +261,8 @@ function QuestionItemView({
               )}
 
               {item.question.answer.kind === 'spr' && (
-                <div className="rounded-md border border-[#27272A] bg-[#0A0A0C] p-3 text-zinc-300">
-                  <span className="font-semibold text-zinc-200">
-                    Accepted answers:{' '}
-                  </span>
+                <div className="rounded-md border border-[#27272A] bg-[#121215] p-3 text-zinc-300">
+                  <span className="font-semibold text-zinc-200">Accepted answers: </span>
                   <span className="font-mono text-zinc-100">
                     {item.question.answer.accepted.join(', ')}
                   </span>
@@ -289,18 +270,16 @@ function QuestionItemView({
               )}
 
               <div className="border-t border-[#27272A] pt-3">
-                <h4 className="mb-2 font-mono text-xs uppercase tracking-wider text-zinc-400">
+                <h5 className="mb-2 font-mono text-xs uppercase tracking-wider text-zinc-400">
                   Explanation
-                </h4>
-                {item.question.answer.kind === 'mcq' && item.question.answer.keyOrigin === 'rationale' && (
-                  <p className="mb-2 text-xs text-amber-400">
-                    The answer key for this older question was read from its explanation text.
-                  </p>
-                )}
-                <QuestionHtml
-                  html={item.question.rationaleHtml}
-                  className="text-zinc-300"
-                />
+                </h5>
+                {item.question.answer.kind === 'mcq' &&
+                  item.question.answer.keyOrigin === 'rationale' && (
+                    <p className="mb-2 text-xs text-amber-400">
+                      The answer key for this older question was read from its explanation text.
+                    </p>
+                  )}
+                <QuestionHtml html={item.question.rationaleHtml} className="text-zinc-300" />
               </div>
             </div>
           )}
@@ -363,7 +342,7 @@ function ModuleReportView({
                   : 'not resumed';
               return (
                 <li key={idx} className="font-mono text-xs text-amber-300/90">
-                  {timeStr} · {pause.reason} · {durationStr}
+                  {timeStr} • {pause.reason} • {durationStr}
                 </li>
               );
             })}
@@ -373,10 +352,13 @@ function ModuleReportView({
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
         <div className="font-mono text-zinc-300">
-          Time used: {formatDuration(module.timeUsedMs)} of {formatDuration(module.timeLimitMs)} ·{' '}
+          Time used: {formatDuration(module.timeUsedMs)} of {formatDuration(module.timeLimitMs)} •{' '}
           {formatDuration(module.timeLeftMs)} left
         </div>
       </div>
+
+      {/* Mistake review panel */}
+      <MistakeReviewPanel report={module.report} source="exam" />
 
       {/* Filter and questions list */}
       <div className="space-y-3 pt-2">
