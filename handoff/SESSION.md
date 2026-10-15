@@ -2,6 +2,23 @@
 
 Read this first in a new session, after AGENTS.md and CLAUDE.md. Updated by Claude at the end of each session or milestone. No College Board content in this file.
 
+## Morning report: Phase 2d (2026-10-15, unattended)
+
+**Done and committed** on `claude/phase2d-browse-drafts`, tag `phase2d-done`. Nothing pushed. Details, decisions and what I could not verify are in `handoff/RUN-REPORT.md` (Phase 2d section).
+
+- **In progress list.** The home screen and Past drills list every unfinished drill and single question, with answers so far, time, last activity, Resume and Discard. Discard asks first, and discarded sessions are kept as abandoned.
+- **Browse status.** Every question shows Unseen, Seen or Done, times attempted, and the last result (from finished sessions only). Filters show counts. "Random question" prefers unseen questions.
+- **Practice from Browse.** Clicking a question practices it as a one-question session with the same rules: nothing is revealed until Done, then you get the report. Coming back keeps your filters, page and scroll.
+- **Scripts.** `bun scripts/status-check.ts` cross-checks status against the raw records and prints timings. `bun scripts/inspect-sessions.ts` lists the newest sessions.
+
+**To test it** (`bun run dev`, open the printed link):
+1. Start a 20-question drill, answer 5, close the tab. Open the link again: "In progress" lists it as "5 of 20 answered". Resume, and you are back on question 5 with your answers. Finish it, leaving some unanswered.
+2. Browse: set a few filters, go to page 2, scroll down, click a question. Answer it, press Done, read the report, then press "Back to browse". Filters, page and scroll are as you left them. Set Status to Done to find the question: it shows Done with its result.
+3. Set Status to Seen: the questions you skipped in step 1 are listed there, but not under Done.
+4. Start a 3-question drill, answer question 1, press Next, then "Save and exit". In Browse that question shows Done with "—" as the result, because the drill is unfinished.
+5. Press Random question a few times. Then try Discard in the In progress list: it asks first.
+6. Run `bun scripts/status-check.ts`. It should end with "Status cross-check passed".
+
 ## Phase 2d: draft investigation (step 1, before any fix)
 
 **Reproduction on the Phase 2c code** (20-question drill, 5 answered; data read with `bun scripts/inspect-sessions.ts` after each exit):

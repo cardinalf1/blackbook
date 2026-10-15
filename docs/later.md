@@ -43,3 +43,6 @@ One line per idea, grouped by phase (AGENTS.md rule 8).
 - Drill report: close (and stop timing) an open explanation when a filter hides its row.
 - Data page: show where the data folder is and offer to open it.
 - Telemetry: a dev-only switch to turn the logger off, for A/B latency checks.
+- Home "Step through 20 random questions" still reveals answers at once and is not logged; replace it with Browse practice or remove it.
+- QuestionView's old drill props are unused since Phase 2c; remove them.
+- Browse: remember filters across reloads.
