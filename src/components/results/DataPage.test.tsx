@@ -341,7 +341,7 @@ describe('DataPage', () => {
     const alertdialog = container.querySelector('[role="alertdialog"]');
     expect(alertdialog).not.toBeNull();
     expect(alertdialog?.textContent).toContain(
-      'Delete every session, answer, flag and event. The question bank stays. This cannot be undone.',
+      'Delete every session, answer, flag, event and mistake tag. The question bank stays. This cannot be undone.',
     );
 
     const confirmBtn = Array.from(alertdialog?.querySelectorAll('button') ?? []).find(

@@ -552,7 +552,7 @@ export function DataPage({
               <div>
                 <h4 className="text-xs font-semibold text-zinc-200">Delete all progress</h4>
                 <p className="mt-0.5 text-xs text-zinc-400">
-                  Delete every session, answer, flag and event.
+                  Delete every session, answer, flag, event and mistake tag.
                 </p>
               </div>
               {confirming !== 'deleteAll' && (
@@ -574,7 +574,7 @@ export function DataPage({
                 className="mt-4 rounded-md border border-red-900/60 bg-[#121215] p-3.5"
               >
                 <p className="text-xs text-zinc-300">
-                  Delete every session, answer, flag and event. The question bank stays. This cannot be undone.
+                  Delete every session, answer, flag, event and mistake tag. The question bank stays. This cannot be undone.
                 </p>
                 {busyAction === 'deleteAll' && (
                   <p className="mt-2 text-xs font-medium text-zinc-400">Working...</p>
