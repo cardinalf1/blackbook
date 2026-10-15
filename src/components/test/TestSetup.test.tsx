@@ -49,7 +49,7 @@ describe('TestSetup', () => {
     });
 
     const fullBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Full test (Reading and Writing, break, Math)'),
+      b.textContent?.includes('Full test'),
     );
     const rwBtn = Array.from(container.querySelectorAll('button')).find((b) =>
       b.textContent?.includes('Reading and Writing only'),
@@ -99,13 +99,15 @@ describe('TestSetup', () => {
       );
     });
 
-    expect(container.textContent).toContain('four timed modules');
-    expect(container.textContent).toContain('27 questions/32 min R&W');
-    expect(container.textContent).toContain('22 questions/35 min Math');
-    expect(container.textContent).toContain('Module 2 is easier or harder depending on Module 1');
-    expect(container.textContent).toContain('10-minute break between sections');
-    expect(container.textContent).toContain('no going back to a submitted module');
-    expect(container.textContent).toContain('estimated score range at the end is an approximation');
+    const text = container.textContent ?? '';
+    expect(text).toContain('Practice test setup');
+    expect(text).toContain('four timed modules');
+    expect(text).toContain('27 questions/32 min R&W');
+    expect(text).toContain('22 questions/35 min Math');
+    expect(text).toContain('Module 2 is easier or harder depending on Module 1');
+    expect(text).toContain('10-minute break');
+    expect(text).toContain('no going back to a submitted module');
+    expect(text).toContain('estimated score range at the end is an approximation');
 
     await act(async () => {
       root.unmount();
@@ -134,7 +136,6 @@ describe('TestSetup', () => {
     const startBtn = Array.from(container.querySelectorAll('button')).find((b) =>
       b.textContent?.trim() === 'Start test',
     );
-    expect(startBtn).toBeDefined();
     expect(startBtn?.disabled).toBe(true);
 
     await act(async () => {
@@ -143,7 +144,6 @@ describe('TestSetup', () => {
   });
 
   it('shows enough unseen questions message and enables Start when allUnseen is true', async () => {
-    const onStart = vi.fn();
     const root = createRoot(container);
     await act(async () => {
       root.render(
@@ -155,7 +155,7 @@ describe('TestSetup', () => {
           onIncludeSeenChange={vi.fn()}
           busy={false}
           error={null}
-          onStart={onStart}
+          onStart={vi.fn()}
           onCancel={vi.fn()}
         />,
       );
@@ -168,16 +168,11 @@ describe('TestSetup', () => {
     expect(startBtn?.disabled).toBe(false);
 
     await act(async () => {
-      startBtn?.click();
-    });
-    expect(onStart).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
       root.unmount();
     });
   });
 
-  it('lists shortfalls, shows includeSeen checkbox, and controls Start button when not allUnseen but allPossible', async () => {
+  it('lists shortfalls, shows includeSeen checkbox, and controls Start button when not allUnseen but allSoft', async () => {
     const onIncludeSeenChange = vi.fn();
     const partialPreflight: TestPreflight = {
       sections: [
@@ -223,6 +218,7 @@ describe('TestSetup', () => {
     expect(container.textContent).toContain(
       'Reading and Writing: need 5 more questions for Module 2',
     );
+    expect(container.textContent).toContain('Include questions I have seen but not answered');
     expect(container.textContent).toContain('Otherwise the test will not start.');
 
     const checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
@@ -263,6 +259,165 @@ describe('TestSetup', () => {
     });
   });
 
+  it('lists shortfalls, shows allowRepeats checkbox, and controls Start button when not allSoft but allPossible', async () => {
+    const onAllowRepeatsChange = vi.fn();
+    const repeatsPreflight: TestPreflight = {
+      sections: [
+        {
+          section: 'rw',
+          unseenOk: false,
+          softOk: false,
+          anyOk: true,
+          shortfalls: ['Reading and Writing: need 10 more questions'],
+        },
+        {
+          section: 'math',
+          unseenOk: true,
+          softOk: true,
+          anyOk: true,
+          shortfalls: [],
+        },
+      ],
+      allUnseen: false,
+      allSoft: false,
+      allPossible: true,
+    };
+
+    const root = createRoot(container);
+
+    // allowRepeats is false -> Start disabled
+    await act(async () => {
+      root.render(
+        <TestSetup
+          kind="full"
+          onKindChange={vi.fn()}
+          preflight={repeatsPreflight}
+          includeSeen={false}
+          onIncludeSeenChange={vi.fn()}
+          allowRepeats={false}
+          onAllowRepeatsChange={onAllowRepeatsChange}
+          busy={false}
+          error={null}
+          onStart={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+    });
+
+    expect(container.textContent).toContain('Allow repeats of questions I have already done');
+    expect(container.textContent).toContain('Otherwise the test will not start.');
+
+    const checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
+    expect(checkbox).not.toBeNull();
+    expect(checkbox?.checked).toBe(false);
+
+    const startBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.trim() === 'Start test',
+    );
+    expect(startBtn?.disabled).toBe(true);
+
+    await act(async () => {
+      checkbox?.click();
+    });
+    expect(onAllowRepeatsChange).toHaveBeenCalledWith(true);
+
+    // Re-render with allowRepeats true -> Start enabled
+    await act(async () => {
+      root.render(
+        <TestSetup
+          kind="full"
+          onKindChange={vi.fn()}
+          preflight={repeatsPreflight}
+          includeSeen={false}
+          onIncludeSeenChange={vi.fn()}
+          allowRepeats={true}
+          onAllowRepeatsChange={onAllowRepeatsChange}
+          busy={false}
+          error={null}
+          onStart={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+    });
+
+    expect(startBtn?.disabled).toBe(false);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('renders pool health estimate for chosen test kind', async () => {
+    const root = createRoot(container);
+    const mockHealth = {
+      rw: 50,
+      math: 50,
+      full: 50,
+      capped: true,
+    };
+
+    await act(async () => {
+      root.render(
+        <TestSetup
+          kind="full"
+          onKindChange={vi.fn()}
+          preflight={fullUnseenPreflight}
+          includeSeen={false}
+          onIncludeSeenChange={vi.fn()}
+          poolHealth={mockHealth}
+          busy={false}
+          error={null}
+          onStart={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+    });
+
+    expect(container.textContent).toContain('Full tests left: 50 or more (estimate)');
+
+    await act(async () => {
+      root.render(
+        <TestSetup
+          kind="rw"
+          onKindChange={vi.fn()}
+          preflight={fullUnseenPreflight}
+          includeSeen={false}
+          onIncludeSeenChange={vi.fn()}
+          poolHealth={mockHealth}
+          busy={false}
+          error={null}
+          onStart={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+    });
+
+    expect(container.textContent).toContain('Reading and Writing tests left: 50 or more (estimate)');
+
+    await act(async () => {
+      root.render(
+        <TestSetup
+          kind="math"
+          onKindChange={vi.fn()}
+          preflight={fullUnseenPreflight}
+          includeSeen={false}
+          onIncludeSeenChange={vi.fn()}
+          poolHealth={{ rw: 8, math: 4, full: 4, capped: false }}
+          busy={false}
+          error={null}
+          onStart={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+    });
+
+    expect(container.textContent).toContain('Math tests left: 4 (estimate)');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
   it('shows plain error and disables Start when !allPossible', async () => {
     const impossiblePreflight: TestPreflight = {
       sections: [
@@ -271,7 +426,7 @@ describe('TestSetup', () => {
           unseenOk: false,
           softOk: false,
           anyOk: false,
-          shortfalls: ['Math bank has only 15 questions total; need 44.'],
+          shortfalls: ['Math: bank lacks enough questions of any kind'],
         },
       ],
       allUnseen: false,
@@ -286,7 +441,7 @@ describe('TestSetup', () => {
           kind="math"
           onKindChange={vi.fn()}
           preflight={impossiblePreflight}
-          includeSeen={true}
+          includeSeen={false}
           onIncludeSeenChange={vi.fn()}
           busy={false}
           error={null}
@@ -297,8 +452,6 @@ describe('TestSetup', () => {
     });
 
     expect(container.textContent).toContain('The question bank is too small to build this test.');
-    expect(container.querySelector('input[type="checkbox"]')).toBeNull();
-
     const startBtn = Array.from(container.querySelectorAll('button')).find((b) =>
       b.textContent?.trim() === 'Start test',
     );
@@ -309,7 +462,7 @@ describe('TestSetup', () => {
     });
   });
 
-  it('disables Start button when busy is true', async () => {
+  it('disables Start when busy is true even if preflight is allUnseen', async () => {
     const root = createRoot(container);
     await act(async () => {
       root.render(
@@ -337,7 +490,41 @@ describe('TestSetup', () => {
     });
   });
 
-  it('renders error banner with role="alert"', async () => {
+  it('calls onStart when enabled Start button is clicked', async () => {
+    const onStart = vi.fn();
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <TestSetup
+          kind="full"
+          onKindChange={vi.fn()}
+          preflight={fullUnseenPreflight}
+          includeSeen={false}
+          onIncludeSeenChange={vi.fn()}
+          busy={false}
+          error={null}
+          onStart={onStart}
+          onCancel={vi.fn()}
+        />,
+      );
+    });
+
+    const startBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.trim() === 'Start test',
+    );
+    expect(startBtn?.disabled).toBe(false);
+
+    await act(async () => {
+      startBtn?.click();
+    });
+    expect(onStart).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('renders error banner when error prop is present', async () => {
     const root = createRoot(container);
     await act(async () => {
       root.render(

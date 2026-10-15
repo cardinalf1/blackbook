@@ -16,6 +16,7 @@ import { questionStore, type BankMeta } from './services/storage';
 import { startTelemetry } from './services/telemetry';
 import { drillStore, useDrill } from './stores/drillStore';
 import type { Question } from './types/sat';
+import { loadPoolHealth, loadRetryState, startRetryNow, type PoolHealthView, type RetryState } from './services/retry/load';
 
 const PRACTICE_SIZE = 20;
 /** Tells the local program a Blackbook page is still open, so it does not shut down when idle. */
@@ -40,18 +41,30 @@ function sample<T>(items: readonly T[], n: number): T[] {
   return a.slice(0, n);
 }
 
+function formatPoolEstimate(n: number): string {
+  return n >= 50 ? '50 or more' : String(n);
+}
+
 export default function App() {
   const [view, setView] = useState<View>({ kind: 'loading' });
   const [error, setError] = useState<string | null>(null);
+  const [retryState, setRetryState] = useState<RetryState | null>(null);
+  const [poolHealth, setPoolHealth] = useState<PoolHealthView | null>(null);
 
   const loadHome = useCallback(async () => {
     setError(null);
     try {
       await initApiAuth();
       startTelemetry();
-      const [meta, count] = await Promise.all([questionStore.getMeta(), questionStore.count(), drillStore.getState().init()]).then(
-        ([m, c]) => [m, c] as const,
-      );
+      const [meta, count, retry, health] = await Promise.all([
+        questionStore.getMeta(),
+        questionStore.count(),
+        loadRetryState().catch(() => null),
+        loadPoolHealth().catch(() => null),
+        drillStore.getState().init(),
+      ]);
+      setRetryState(retry);
+      setPoolHealth(health);
       setView({ kind: 'home', meta, count });
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
@@ -91,6 +104,17 @@ export default function App() {
     setView({ kind: 'practice', questions: sample(all, PRACTICE_SIZE), index: 0 });
   };
 
+  const handleStartRetry = async () => {
+    try {
+      await startRetryNow();
+      const session = drillStore.getState().session;
+      if (session) setView({ kind: 'drill', startAt: 'play' });
+      else setError(drillStore.getState().error ?? 'Could not start retry session.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-6">
       <header className="flex items-baseline justify-between">
@@ -113,6 +137,33 @@ export default function App() {
 
       {view.kind === 'home' && (
         <>
+          {retryState && retryState.dueCount > 0 && (
+            <section className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[#27272A] bg-[#121215] p-5">
+              <div>
+                <div className="text-sm font-medium text-zinc-100">
+                  {retryState.dueCount} questions due for retry
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleStartRetry()}
+                className="rounded-md bg-zinc-100 px-4 py-1.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+              >
+                Start retry
+              </button>
+            </section>
+          )}
+
+          {retryState && retryState.dueCount === 0 && retryState.queue.length > 0 && (
+            <p className="text-xs text-zinc-500">No retries due</p>
+          )}
+
+          {poolHealth && (
+            <p className="text-xs text-zinc-400">
+              Full tests left: {formatPoolEstimate(poolHealth.fresh.full)}, Reading and Writing: {formatPoolEstimate(poolHealth.fresh.rw)}, Math: {formatPoolEstimate(poolHealth.fresh.math)} (estimate)
+            </p>
+          )}
+
           {view.count > 0 && view.meta && (
             <section className="flex flex-wrap items-center gap-4 rounded-lg border border-[#27272A] bg-[#121215] p-5">
               <div className="text-sm">

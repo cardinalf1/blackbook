@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { applyFilters, filterCounts } from '../services/browse/filter';
+import { tierOf } from '../services/eligibility/eligibility';
 import {
   BROWSE_PAGE_SIZE,
   DEFAULT_BROWSE_FILTERS,
@@ -345,6 +346,15 @@ export function QuestionBrowser({ rows, state, onStateChange, onOpen, onRandom }
                     <td className="px-3 py-2.5">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="font-mono text-zinc-200">#{row.displayId}</span>
+                        <span
+                          className={`rounded border px-1.5 py-0.5 font-mono text-[10px] ${
+                            tierOf(row) === 'fresh' || tierOf(row) === 'soft'
+                              ? 'border-zinc-700 bg-zinc-800/60 text-zinc-300'
+                              : 'border-zinc-800 bg-zinc-900/60 text-zinc-500'
+                          }`}
+                        >
+                          {tierOf(row) === 'fresh' || tierOf(row) === 'soft' ? 'In exam pool' : 'Used'}
+                        </span>
                         {row.flagged && (
                           <span className="rounded border border-amber-800/60 bg-amber-950/60 px-1.5 py-0.5 font-mono text-[10px] text-amber-300">
                             Flagged

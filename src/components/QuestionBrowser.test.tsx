@@ -442,4 +442,93 @@ describe('QuestionBrowser', () => {
       page: 0,
     });
   });
+
+  it('renders exam pool marker "In exam pool" for fresh/soft rows and "Used" for consumed rows', async () => {
+    const testRows: BrowseRow[] = [
+      {
+        id: 'q-fresh',
+        displayId: '101',
+        section: 'rw',
+        domainCode: 'd1',
+        domain: 'Domain 1',
+        skillCode: 's1',
+        skill: 'Skill 1',
+        difficulty: 'E',
+        format: 'mcq',
+        source: 'digital',
+        active: true,
+        status: 'unseen',
+        examShown: false,
+        attempts: 0,
+        lastResult: null,
+        flagged: false,
+      },
+      {
+        id: 'q-soft',
+        displayId: '102',
+        section: 'rw',
+        domainCode: 'd1',
+        domain: 'Domain 1',
+        skillCode: 's1',
+        skill: 'Skill 1',
+        difficulty: 'M',
+        format: 'mcq',
+        source: 'digital',
+        active: true,
+        status: 'seen',
+        examShown: false,
+        attempts: 0,
+        lastResult: null,
+        flagged: false,
+      },
+      {
+        id: 'q-consumed-done',
+        displayId: '103',
+        section: 'math',
+        domainCode: 'd2',
+        domain: 'Domain 2',
+        skillCode: 's2',
+        skill: 'Skill 2',
+        difficulty: 'H',
+        format: 'spr',
+        source: 'digital',
+        active: true,
+        status: 'done',
+        examShown: false,
+        attempts: 1,
+        lastResult: 'correct',
+        flagged: false,
+      },
+      {
+        id: 'q-consumed-exam',
+        displayId: '104',
+        section: 'math',
+        domainCode: 'd2',
+        domain: 'Domain 2',
+        skillCode: 's2',
+        skill: 'Skill 2',
+        difficulty: 'H',
+        format: 'mcq',
+        source: 'digital',
+        active: true,
+        status: 'unseen',
+        examShown: true,
+        attempts: 0,
+        lastResult: null,
+        flagged: false,
+      },
+    ];
+
+    await renderBrowser({}, testRows);
+
+    const poolBadges = Array.from(container.querySelectorAll('span')).filter(
+      (s) => s.textContent?.trim() === 'In exam pool',
+    );
+    const usedBadges = Array.from(container.querySelectorAll('span')).filter(
+      (s) => s.textContent?.trim() === 'Used',
+    );
+
+    expect(poolBadges.length).toBe(2);
+    expect(usedBadges.length).toBe(2);
+  });
 });
