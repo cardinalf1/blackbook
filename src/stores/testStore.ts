@@ -164,7 +164,9 @@ export function createTestStore(deps: TestDeps): StoreApi<TestStore> {
         if (isOver(test)) {
           const modules = await moduleData(sessions.filter((s) => s.status === 'finished'), keyOfSession(c));
           const estimate = computeEstimate(test.routing, modules);
-          c = await save({ ...c, status: 'finished', finishedAt: now(), test: { ...test, estimate } });
+          const score = modules.reduce((a, m) => ({ correct: a.correct + m.report.score.correct, total: a.total + m.report.score.total }), { correct: 0, total: 0 });
+          const totalActiveMs = modules.reduce((a, m) => a + m.report.totalActiveMs, 0);
+          c = await save({ ...c, status: 'finished', finishedAt: now(), score, totalActiveMs, test: { ...test, estimate } });
           log(c, 'test_finished', { kind: test.kind, paused: test.paused });
           return c;
         }

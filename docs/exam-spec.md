@@ -53,3 +53,12 @@ What the practice exam module copies from the real test, where each number comes
 12. **The reference sheet** lists the standard geometry formulas as plain text written for Blackbook, not a copy of any official sheet's layout or image.
 13. **Student-produced response input:** only digits, `.`, `/` and `-` can be typed. `-` only as the first character. Up to 5 characters, or 6 when the first is `-`.
 14. **Keyboard:** the arrow keys Left and Right act as Back and Next when focus is not in a text field.
+
+## Full test and break (Phase 4)
+
+- **Sequence.** Reading and Writing Module 1, Module 2, a break, then Math Module 1 and Module 2. ASSUMED to match the real app; the module lengths are verified (above), the sequence and break are not read from a source in this repo.
+- **Break.** ASSUMED: 10 minutes, counted down from a saved absolute deadline, ending early on request or by itself at zero, and with no way back to a submitted module. The real app's break behavior (length, whether it can be skipped, what is shown) is **not verified** here.
+- **Module 2.** Assembled when module 1 is submitted. The easier and harder variants differ only in their difficulty mix; the mixes are assumptions (`TIER_MIX` in `src/config/scoringConfig.ts`).
+- **No question twice.** A test never repeats a question. Before it starts, the setup screen checks that module 1 and both possible module 2s of each section can be built from unseen questions, and offers seen questions only on request.
+- **Emergency pause.** Applies to each module. Using it in any module marks the whole test as paused in the results. Not an official feature (see item 7 above).
+- Scoring and routing: see `docs/scoring-spec.md`.

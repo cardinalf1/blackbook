@@ -87,24 +87,46 @@ export function filtersLabel(session: SessionRecord, facets: readonly QuestionFa
   return parts.join(' · ');
 }
 
+const TEST_KIND_LABEL = { full: 'Full test', rw: 'Reading and Writing section', math: 'Math section' } as const;
+
 export function kindLabel(session: SessionRecord): string {
+  if (session.test) return TEST_KIND_LABEL[session.test.kind];
   if (session.mode === 'exam') return 'Exam module';
   return session.source === 'browse' ? 'Single question' : 'Drill';
+}
+
+/** Modules of a test belong to its container record and are not listed on their own. */
+const standalone = (s: SessionRecord) => s.exam?.testId === undefined;
+
+function testProgress(s: SessionRecord): string {
+  const t = s.test;
+  if (!t) return '';
+  const modules = t.steps.filter((x) => x.type === 'module').length;
+  const step = t.steps[t.stepIndex];
+  if (step?.type === 'break') return 'On the break';
+  const done = t.steps.slice(0, t.stepIndex).filter((x) => x.type === 'module').length;
+  return `Module ${Math.min(done + 1, modules)} of ${modules}`;
+}
+
+function testSectionLabel(s: SessionRecord): string {
+  const k = s.test?.kind;
+  return k === 'full' ? 'Reading and Writing, Math' : k ? SECTION_LABEL[k] : SECTION_LABEL[s.config.section];
 }
 
 /** Unfinished sessions for the In progress list, newest activity first. */
 export function inProgressRows(sessions: readonly SessionRecord[], facets: readonly QuestionFacet[]): InProgressRow[] {
   return sessions
-    .filter((s) => s.status === 'in_progress')
+    .filter((s) => s.status === 'in_progress' && standalone(s))
     .map((s) => ({
       id: s.id,
       kindLabel: kindLabel(s),
-      sectionLabel: SECTION_LABEL[s.config.section],
-      filtersLabel: filtersLabel(s, facets),
+      sectionLabel: s.test ? testSectionLabel(s) : SECTION_LABEL[s.config.section],
+      filtersLabel: s.test ? (s.test.paused ? 'Emergency pause used' : 'Timed, adaptive second module') : filtersLabel(s, facets),
       answered: s.queueIds.filter((id) => s.progress[id]?.response != null).length,
       total: s.queueIds.length,
       activeMs: s.totalActiveMs,
       lastActivityAt: s.lastActivityAt,
+      ...(s.test ? { progressLabel: testProgress(s), isTest: true } : {}),
     }))
     .sort((a, b) => b.lastActivityAt - a.lastActivityAt);
 }
@@ -112,16 +134,17 @@ export function inProgressRows(sessions: readonly SessionRecord[], facets: reado
 /** Finished sessions only, newest finish first. */
 export function pastSessionRows(sessions: readonly SessionRecord[], facets: readonly QuestionFacet[]): PastSessionRow[] {
   return sessions
-    .filter((s) => s.status === 'finished')
+    .filter((s) => s.status === 'finished' && standalone(s))
     .map((s) => ({
       id: s.id,
       finishedAt: s.finishedAt ?? s.lastActivityAt,
-      sectionLabel: SECTION_LABEL[s.config.section],
-      filtersLabel: filtersLabel(s, facets),
+      sectionLabel: s.test ? testSectionLabel(s) : SECTION_LABEL[s.config.section],
+      filtersLabel: s.test ? (s.test.paused ? 'Emergency pause used' : 'Timed, adaptive second module') : filtersLabel(s, facets),
       kindLabel: kindLabel(s),
       correct: s.score?.correct ?? 0,
       total: s.score?.total ?? s.queueIds.length,
       totalActiveMs: s.totalActiveMs,
+      ...(s.test ? { isTest: true } : {}),
     }))
     .sort((a, b) => b.finishedAt - a.finishedAt);
 }

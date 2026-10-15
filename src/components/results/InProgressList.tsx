@@ -84,7 +84,7 @@ export function InProgressList({ rows, onResume, onDiscard }: InProgressListProp
                   <span className="text-zinc-400">{row.filtersLabel}</span>
                   <span className="text-zinc-600">·</span>
                   <span className="font-mono text-zinc-300">
-                    {row.answered} of {row.total} answered
+                    {row.progressLabel ?? `${row.answered} of ${row.total} answered`}
                   </span>
                   <span className="text-zinc-600">·</span>
                   <span className="font-mono text-zinc-400">
@@ -100,7 +100,7 @@ export function InProgressList({ rows, onResume, onDiscard }: InProgressListProp
                   <button
                     type="button"
                     onClick={() => onResume(row.id)}
-                    aria-label={`Resume ${row.kindLabel}, ${row.answered} of ${row.total} answered`}
+                    aria-label={`Resume ${row.kindLabel}, ${row.progressLabel ?? `${row.answered} of ${row.total} answered`}`}
                     disabled={isBusy}
                     className="rounded-md bg-zinc-100 px-3.5 py-1.5 text-xs font-semibold text-zinc-950 transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 disabled:opacity-50"
                   >

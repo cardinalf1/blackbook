@@ -46,3 +46,5 @@ One line per idea, grouped by phase (AGENTS.md rule 8).
 - Home "Step through 20 random questions" still reveals answers at once and is not logged; replace it with Browse practice or remove it.
 - QuestionView's old drill props are unused since Phase 2c; remove them.
 - Browse: remember filters across reloads.
+- Calibration: let a user record their official scores next to test results, so the score estimate's conversion could be fitted. Needs enough points to mean anything.
+- Full test: a "directions" screen before each module like the real app.

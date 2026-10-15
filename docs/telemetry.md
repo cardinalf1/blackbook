@@ -101,6 +101,21 @@ Exam events have `mode: exam`. All the question, choice, flag and navigation eve
 | `finish_clicked` | `{unanswered, flagged}` | Submit pressed on the review page |
 | `session_finished` | `{correct, total, totalActiveMs}` | The module is submitted, by you or by the timer (the session record says which) |
 
+### Full tests and section runs (Phase 4)
+
+Logged on the test's container record (its `sessionId` is the test id, mode `exam`), by the test store only. They are written at transitions between modules and never while a module clock is running or on its screen.
+
+| Type | Payload | When |
+|---|---|---|
+| `test_started` | `{kind, includeSeen}` | A full test or section run is built; `kind` is `full`, `rw` or `math` |
+| `test_module_started` | `{key, tier}` | The user starts a module (`rw1`, `rw2`, `math1`, `math2`); `tier` is `routing`, `easier` or `harder` |
+| `test_module_submitted` | `{key, by}` | A module ended, by the user or the timer |
+| `test_routed` | `{section, route, weightedFraction, threshold, configVersion}` | Routing was decided after module 1 |
+| `test_break_started` | `{durationMs}` | The break between sections begins |
+| `test_break_ended` | `{early, usedMs}` | The break ended, early by the user or by running out |
+| `test_finished` | `{kind, paused}` | The last module is in; the estimate is stored |
+| `test_abandoned` | `{}` | The test was discarded |
+
 The timer never waits on the logger: the countdown is recomputed from the saved deadline, and logging only appends to memory.
 
 ## Delivery

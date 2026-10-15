@@ -254,6 +254,8 @@ export interface PastSessionRow {
   correct: number;
   total: number;
   totalActiveMs: number;
+  /** A full test or section run: opens the test report instead of a drill report. */
+  isTest?: boolean;
 }
 
 // ---- Props contracts. Screens are thin: all logic arrives through these props. ----
@@ -333,6 +335,10 @@ export interface InProgressRow {
   activeMs: number;
   /** Epoch ms of the last change. */
   lastActivityAt: number;
+  /** Replaces "X of Y answered" when set, e.g. for a full test: "Module 2 of 4". */
+  progressLabel?: string;
+  /** A full test or section run: Resume opens the test, Discard abandons the test and its open module. */
+  isTest?: boolean;
 }
 
 export interface InProgressListProps {
