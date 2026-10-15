@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { applyFilters, buildRows, pickRandom } from '../../services/browse/filter';
-import { attemptStore, questionStore } from '../../services/storage';
+import { applyFilters, pickRandom } from '../../services/browse/filter';
+import { loadRows } from '../../services/browse/rows';
 import { drillStore, useDrill } from '../../stores/drillStore';
 import { DEFAULT_BROWSE_FILTERS, type BrowseRow, type BrowseViewState } from '../../types/browse';
-import type { Question } from '../../types/sat';
 import { PlayScreen, ReportScreen } from '../drill/DrillFlow';
 import { QuestionBrowser } from '../QuestionBrowser';
 
@@ -11,16 +10,6 @@ import { QuestionBrowser } from '../QuestionBrowser';
 // finds the same filters, page and scroll position.
 let savedState: BrowseViewState = { filters: DEFAULT_BROWSE_FILTERS, page: 0 };
 let savedScroll = 0;
-/** The bank part of the rows, read once per imported bank (the whole bank is about 35 MB). */
-let bankCache: { key: string; questions: Question[] } | null = null;
-
-async function loadRows(): Promise<BrowseRow[]> {
-  const meta = await questionStore.getMeta();
-  const key = meta ? `${meta.importedAt}:${meta.count}` : 'empty';
-  if (bankCache?.key !== key) bankCache = { key, questions: await questionStore.query({}) };
-  return buildRows(bankCache.questions, await attemptStore.questionStatus());
-}
-
 type Mode = { kind: 'list' } | { kind: 'practice' } | { kind: 'report'; sessionId: string };
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
