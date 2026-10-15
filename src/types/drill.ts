@@ -18,6 +18,11 @@ export interface DrillConfig {
   liveOnly: boolean;
   /** Ask guess / unsure / sure after each answer. Off when missing. */
   askConfidence?: boolean;
+  /**
+   * Serve exactly these questions in this order (oldest miss first, from the Study next screen),
+   * in place of choosing by the filters above. Ids missing from the bank are dropped.
+   */
+  questionIds?: string[];
 }
 
 /** The slice of a question the setup screen needs to count and list options. No content. */

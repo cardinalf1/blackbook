@@ -4,7 +4,9 @@
 import { DOWNLOAD_ENABLED } from '../src/config';
 import { importBankText } from '../src/services/import/importBank';
 import type { Sanitizer } from '../src/services/normalize/sanitize';
+import { filterFromParams } from '../src/services/analytics/filter';
 import type { AttemptStore, SessionFilter, TelemetryStore } from '../src/services/storage/attemptTypes';
+import type { AnalyticsStore } from '../src/types/analytics';
 import type { QuestionQuery } from '../src/services/storage/types';
 import type { DownloadProgress, DownloadScopeChoice } from '../src/types/download';
 import { DIFFICULTIES, SECTIONS, type Difficulty, type Section } from '../src/types/sat';
@@ -18,6 +20,8 @@ export interface AppDeps {
   security: SecurityConfig;
   bank: DiskBankStore;
   users: AttemptStore & TelemetryStore;
+  /** Summaries computed in SQL. Absent in tests that do not need them. */
+  analytics?: AnalyticsStore;
   downloads: DownloadManager;
   sanitize: Sanitizer;
   dataFolder: string;
@@ -234,6 +238,29 @@ export function createHandler(deps: AppDeps): (req: Request) => Promise<Response
       if (path === '/api/user-data' && m === 'DELETE') {
         await deps.users.clearAll();
         return json({ ok: true });
+      }
+
+      // ---- analytics (summaries only; raw events never leave the server) ----
+      if (path.startsWith('/api/analytics/') && m === 'GET') {
+        if (!deps.analytics) return problem(404, 'Not found.');
+        const a = deps.analytics;
+        const f = filterFromParams(url.searchParams);
+        const what = path.slice('/api/analytics/'.length);
+        if (what === 'overview') return json(await a.overview(f));
+        if (what === 'skills') return json(await a.skills(f));
+        if (what === 'skill') {
+          const code = url.searchParams.get('skillCode');
+          return code ? json(await a.skillDetail(f, code)) : problem(400, 'Missing skill.');
+        }
+        if (what === 'misses') {
+          const section = url.searchParams.get('limitSection');
+          const codes = (url.searchParams.get('skillCodes') ?? '').split(',').filter((c) => c !== '');
+          return json(await a.misses(f, { section: SECTIONS.includes(section as Section) ? (section as Section) : undefined, skillCodes: codes }));
+        }
+        if (what === 'timing') return json(await a.timing(f));
+        if (what === 'behavior') return json(await a.behavior(f));
+        if (what === 'tests') return json(await a.tests(f));
+        return problem(404, 'Not found.');
       }
 
       // ---- download ----

@@ -16,6 +16,7 @@ import { FsDetailCache } from './files';
 import { createIdleMonitor } from './idle';
 import { openSqlite } from './sqlBun';
 import { SqliteUserStore } from './userDb';
+import { SqlAnalytics } from './analytics';
 
 export const DEFAULT_PORT = 47821;
 export const DEV_UI_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000'];
@@ -59,7 +60,9 @@ async function main(): Promise<void> {
   const { window } = new JSDOM('');
   const pipelineWindow = window as unknown as PipelineDeps['window'];
   const bank = new DiskBankStore(join(dataFolder, 'bank.json'));
-  const users = new SqliteUserStore(openSqlite(join(dataFolder, 'user.db')));
+  const db = openSqlite(join(dataFolder, 'user.db'));
+  const users = new SqliteUserStore(db);
+  const analytics = new SqlAnalytics(db, { load: () => bank.analyticsMeta() });
   const cache = new FsDetailCache(join(dataFolder, 'raw'));
   const downloads = new DownloadManager({ bank, cache, window: pipelineWindow, fetch: (i, init) => fetch(i, init), dataFolder });
   await downloads.refreshCacheSize();
@@ -88,6 +91,7 @@ async function main(): Promise<void> {
     },
     bank,
     users,
+    analytics,
     downloads,
     sanitize: createSanitizer(window as unknown as Parameters<typeof createSanitizer>[0]),
     dataFolder,

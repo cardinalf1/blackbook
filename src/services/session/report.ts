@@ -77,6 +77,7 @@ export function buildReport(
 /** "Algebra · 2 skills · Hard · live only", worded from the setup filters. */
 export function filtersLabel(session: SessionRecord, facets: readonly QuestionFacet[]): string {
   const c = session.config;
+  if (c.questionIds) return 'Missed questions, oldest first';
   const parts: string[] = [];
   if (c.domainCode === 'all') parts.push('All domains');
   else parts.push(facets.find((f) => f.domainCode === c.domainCode)?.domain ?? c.domainCode);

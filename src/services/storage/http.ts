@@ -3,7 +3,9 @@
 import type { QuestionStatus } from '../../types/browse';
 import type { FlagRecord } from '../../types/drill';
 import type { EventRecord, SessionRecord, StoredAttempt, TelemetryStats, UserDataExport } from '../../types/session';
-import type { Question } from '../../types/sat';
+import type { Question, Section } from '../../types/sat';
+import type { AnalyticsFilter, AnalyticsStore, BehaviorSummary, MissRow, OverviewSummary, SkillDetail, SkillsSummary, TestHistory, TimingSummary } from '../../types/analytics';
+import { filterToParams } from '../analytics/filter';
 import { ApiError, type ApiClient } from '../api/client';
 import type { AttemptStore, SessionFilter, TelemetryStore } from './attemptTypes';
 import type { BankMeta, QuestionQuery, QuestionStore } from './types';
@@ -99,5 +101,40 @@ export class HttpAttemptStore implements AttemptStore, TelemetryStore {
 
   async clearAll(): Promise<void> {
     await this.api.request('/api/user-data', { method: 'DELETE' });
+  }
+}
+
+export class HttpAnalyticsStore implements AnalyticsStore {
+  constructor(private readonly api: ApiClient) {}
+
+  private get<T>(what: string, f: AnalyticsFilter, extra: Record<string, string> = {}): Promise<T> {
+    const params = filterToParams(f);
+    for (const [k, v] of Object.entries(extra)) params.set(k, v);
+    return this.api.request<T>(`/api/analytics/${what}?${params.toString()}`);
+  }
+
+  overview(f: AnalyticsFilter) {
+    return this.get<OverviewSummary>('overview', f);
+  }
+  skills(f: AnalyticsFilter) {
+    return this.get<SkillsSummary>('skills', f);
+  }
+  skillDetail(f: AnalyticsFilter, skillCode: string) {
+    return this.get<SkillDetail>('skill', f, { skillCode });
+  }
+  misses(f: AnalyticsFilter, limit: { skillCodes?: readonly string[]; section?: Section } = {}) {
+    const extra: Record<string, string> = {};
+    if (limit.section) extra.limitSection = limit.section;
+    if (limit.skillCodes && limit.skillCodes.length > 0) extra.skillCodes = limit.skillCodes.join(',');
+    return this.get<MissRow[]>('misses', f, extra);
+  }
+  timing(f: AnalyticsFilter) {
+    return this.get<TimingSummary>('timing', f);
+  }
+  behavior(f: AnalyticsFilter) {
+    return this.get<BehaviorSummary>('behavior', f);
+  }
+  tests(f: AnalyticsFilter) {
+    return this.get<TestHistory>('tests', f);
   }
 }

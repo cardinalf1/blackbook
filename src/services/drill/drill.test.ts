@@ -199,3 +199,12 @@ describe('countableAttempts', () => {
     expect(countableAttempts(list, sessions, 'exam').map((a) => a.at)).toEqual([6]);
   });
 });
+
+describe('selectQuestionIds with pinned question ids (review of misses)', () => {
+  it('serves exactly the pinned ids in order, drops unknown ones, and respects the count', () => {
+    const facets = makeFacets();
+    const [a, b, c] = [facets[0]?.id as string, facets[1]?.id as string, facets[2]?.id as string];
+    const config: DrillConfig = { section: 'rw', domainCode: 'all', skillCodes: [], difficulties: [], count: 2, liveOnly: false, questionIds: [c, 'gone', a, b] };
+    expect(selectQuestionIds(facets, config, [], () => 0.5)).toEqual([c, a]);
+  });
+});

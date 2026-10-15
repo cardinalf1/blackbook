@@ -102,6 +102,18 @@ export const MIGRATIONS: readonly Migration[] = [
       db.run('UPDATE sessions SET data = ?, source = ? WHERE id = ?', JSON.stringify(s), s.source, row.id);
     }
   },
+  // 4: Phase 5 analytics. Columns that let SQL filter by test and pause without parsing JSON per row,
+  // and indexes for the event scans. Generated columns are computed from `data`, so nothing is rewritten.
+  `
+  ALTER TABLE sessions ADD COLUMN test_id TEXT GENERATED ALWAYS AS (json_extract(data, '$.exam.testId')) VIRTUAL;
+  ALTER TABLE sessions ADD COLUMN test_kind TEXT GENERATED ALWAYS AS (json_extract(data, '$.test.kind')) VIRTUAL;
+  ALTER TABLE sessions ADD COLUMN test_paused INTEGER GENERATED ALWAYS AS (COALESCE(json_extract(data, '$.test.paused'), 0)) VIRTUAL;
+  ALTER TABLE sessions ADD COLUMN exam_paused INTEGER GENERATED ALWAYS AS (COALESCE(json_array_length(json_extract(data, '$.exam.pauses')), 0) > 0) VIRTUAL;
+  CREATE INDEX sessions_test ON sessions (test_id);
+  CREATE INDEX sessions_finished ON sessions (status, finished_at);
+  CREATE INDEX events_type ON events (type, session_id, question_id);
+  CREATE INDEX attempts_status ON attempts (status, session_id, question_id);
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

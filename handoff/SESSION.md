@@ -2,6 +2,20 @@
 
 Read this first in a new session, after AGENTS.md and CLAUDE.md. Updated by Claude at the end of each session or milestone. No College Board content in this file.
 
+## Phase 5 plan (unattended run, 2026-10-16)
+
+Branch `claude/phase5-analytics` from `phase4-done`. Gates were green at the start; no BUGS.md existed.
+
+1. **Config and types (me):** `src/config/analyticsConfig.ts` (Wilson z, low-confidence N, rush and stuck percentiles, baseline minimum, ranking weights) and `src/types/analytics.ts` (filters, summaries, screen props).
+2. **Server aggregation (me):** migration 4 (generated columns on sessions, indexes), `server/analytics.ts` running SQL over a temp `qmeta` table built from the bank, routes under `/api/analytics/*`, HTTP adapter.
+3. **Oracle and checks (me):** brute-force recomputation (`src/services/analytics/brute.ts`), a deterministic synthetic dataset, a Vitest equality test, `scripts/analytics-check.ts` (real and synthetic data) and timings.
+4. **Ranking (me):** `src/services/analytics/rank.ts` with tests (1 of 1 against 18 of 20).
+5. **Launch wiring (me):** `DrillConfig.questionIds` for the misses-first drill; an analytics view in App.
+6. **Screens (Gemini, up to 3 writers, disjoint files):** Overview and Skills; charts, Timing, Behavior and Test history; Study next. I review every diff.
+7. **Browser check, docs, report, tag `phase5-done`.**
+
+---
+
 ## Morning report: Phase 4 (2026-10-16, unattended)
 
 **Done and committed** on `claude/phase4-full-test`, tag `phase4-done`. Nothing pushed. Phase 5 not started. Full report, decisions and what I could not verify are at the top of `handoff/RUN-REPORT.md`.

@@ -4,6 +4,7 @@
 import { readFile, rm } from 'node:fs/promises';
 import { matchesQuery, type BankMeta, type ProgressFn, type QuestionQuery, type WritableQuestionStore } from '../src/services/storage/types';
 import type { Question, SkippedQuestion } from '../src/types/sat';
+import { toMetaRow, type QuestionMetaRow } from './analytics';
 import { writeAtomic } from './files';
 
 export const BANK_FILE_VERSION = 1;
@@ -82,6 +83,16 @@ export class DiskBankStore implements WritableQuestionStore {
   async query(query: QuestionQuery): Promise<Question[]> {
     return (await this.load()).questions.filter((q) => matchesQuery(q, query));
   }
+
+  /** Question facts for analytics (no content), with a signature that changes whenever the bank does. */
+  async analyticsMeta(): Promise<{ signature: string; rows: QuestionMetaRow[] }> {
+    const loaded = await this.load();
+    const signature = `${loaded.meta.fetchedAt}|${loaded.meta.importedAt}|${loaded.questions.length}`;
+    if (this.metaCache?.signature !== signature) this.metaCache = { signature, rows: loaded.questions.map(toMetaRow) };
+    return this.metaCache;
+  }
+
+  private metaCache: { signature: string; rows: QuestionMetaRow[] } | null = null;
 
   async getMeta(): Promise<BankMeta | null> {
     const loaded = await this.load();

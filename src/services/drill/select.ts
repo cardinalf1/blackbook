@@ -27,6 +27,11 @@ export function selectQuestionIds(
   attempts: readonly StoredAttempt[],
   rng: Rng = Math.random,
 ): string[] {
+  // A pinned list (the Study next review of misses) is served as given: no filters, no shuffling.
+  if (config.questionIds) {
+    const known = new Set(facets.map((f) => f.id));
+    return [...new Set(config.questionIds)].filter((id) => known.has(id)).slice(0, Math.max(0, config.count));
+  }
   const latest = new Map<string, StoredAttempt>();
   for (const a of attempts) {
     const prev = latest.get(a.questionId);
