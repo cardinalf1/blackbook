@@ -1,3 +1,61 @@
+# Morning report: Phase 5 (analytics dashboard, 2026-10-16, unattended)
+
+## Status
+
+**Phase 5 is done** on branch `claude/phase5-analytics`, tag `phase5-done`. Nothing is pushed. Final gates: typecheck clean, 71 test files and 561 tests passing, `bun run sync` exit 0, no `data/`, `fixtures/` or `.env` files tracked. There was no `handoff/BUGS.md`.
+
+Gemini wrote the six screens, the filter bar and three chart components in three worktrees; I reviewed each branch before merging. Aggregation, ranking, baselines, the oracle, the check script and the launch wiring are mine.
+
+## What you can do now
+
+Home has an **Analytics** button with six tabs and a filter bar (date range, kind, section, exclude paused tests, exclude single-question sessions):
+Overview, Skills (sortable, filterable, click a skill for its sessions and missed questions with rationale), Timing and pacing, Behavior, Test history, Study next. Definitions are in `docs/analytics.md`.
+
+## Definition of done
+
+| Item | Status |
+|---|---|
+| typecheck, tests, sync | Met (561 tests) |
+| BUGS.md items fixed | Not applicable, no file |
+| Cross-check on real and synthetic data | Met. `bun scripts/analytics-check.ts` and `--synthetic` both print "Cross-check passed" over 12 filter combinations plus one skill detail |
+| Query timings | Met. Synthetic set of 5,064 answers and 203,602 events: median 3 to 77 ms per summary, slowest single call 123 ms (target 300). The timing query was first 376 ms; I fixed it by computing baselines once and replacing correlated event subqueries with joins |
+| Small samples marked, method and parameters on screen, 1-of-1 vs 18-of-20 test | Met (`rank.test.ts`; method note on Study next; "low N" tags) |
+| Study next launches a prefilled drill and a misses-first review | Met, both seen end to end in the browser: the misses drill served 14 questions in exactly the API's oldest-miss-first order; the top-skills drill served 10 questions on 3 skills. I discarded those two test sessions afterwards |
+
+## Decisions I made
+
+- **Question facts for SQL** are copied into a temp table from the bank file whenever it changes; the database never stores question content.
+- **Kinds:** besides drill, single, section run and full test, I added "Practice module" for lone Phase 3 modules.
+- **Mixed rates:** every screen shows drill and exam apart. Study next pools them for ranking only and says so in `docs/analytics.md`.
+- **Baselines ignore the filters** (all finished answers, per mode, section and difficulty), so a narrow date range cannot move a threshold. A group under 20 answers is never flagged.
+- **Swap counts** use direct choice replacements on multiple-choice questions (typed answers excluded); "answers changed" uses the stored change count.
+- **Last five minutes** counts questions first answered after the five-minute alert event.
+- **Ranking:** Wilson lower bound (z 1.2816); skills under 5 answers get a fixed 0.45 plus an unseen bonus. These numbers are choices, all in `src/config/analyticsConfig.ts`.
+- **Misses** are questions whose latest finished answer was wrong; review drills carry `DrillConfig.questionIds`, one drill per section, `liveOnly` off.
+- **Charts** are hand-written SVG; no dependency added.
+
+## What I could not verify
+
+- Visual quality: I saw the Overview at low resolution and read the other screens as text. Spacing, contrast and chart appearance are unchecked, and Test history and the exam-pacing views had no data in your account (no finished tests), so they were seen empty only. The synthetic set exercises them in tests, not in a browser.
+- Everything on your real data is based on only 74 answers.
+- Windows only.
+
+## Quota or tool problems
+
+None. Gemini finished all three tasks. Shell quoting broke several of my edits and I redid them with the file tools.
+
+## Exact steps to test it yourself
+
+1. `bun run dev`, open the printed link, click **Analytics**. Overview shows Drills and Exam modules side by side, each with its N.
+2. Skills: sort by Weakest first, type in the filter, click a skill, press Show question on a missed one.
+3. Timing and pacing: thresholds appear only for groups with 20 or more answers; until then it says "not enough data".
+4. Behavior: answer-change counts and net effect; confidence rows appear only if you drilled with confidence on.
+5. Test history: after finishing two practice tests, range bars appear; a scoring config change would show the version warning.
+6. Study next: press "Review my misses in ..." and "Drill top skills in ...". Discard the sessions from In progress afterwards if you do not want them.
+7. `bun scripts/analytics-check.ts` and `bun scripts/analytics-check.ts --synthetic` print the cross-check and timings.
+
+---
+
 # Morning report: Phase 4 (full practice test, 2026-10-16, unattended)
 
 ## Status
