@@ -71,8 +71,23 @@ async function memoryStores() {
 
 const q = (id: string, over: Partial<Question> = {}): Question => ({ ...(fx.syntheticQuestions[0] as Question), id, ...over });
 const CONFIG = { section: 'math' as const, domainCode: 'all', skillCodes: [], difficulties: [], count: 2, liveOnly: true };
-const session = (id: string, startedAt: number, mode: SessionRecord['mode'] = 'drill'): SessionRecord =>
-  createSession(id, mode, CONFIG, ['a', 'b'], startedAt);
+const session = (id: string, startedAt: number, mode: SessionRecord['mode'] = 'drill'): SessionRecord => {
+  const s = createSession(id, mode, CONFIG, ['a', 'b'], startedAt);
+  if (mode !== 'exam') return s;
+  return {
+    ...s,
+    exam: {
+      module: { section: 'math', moduleNumber: 1, tier: 'routing' },
+      timer: { durationMs: 35 * 60_000, deadlineAt: startedAt + 35 * 60_000, pausedRemainingMs: null },
+      pauses: [],
+      phase: 'in_progress',
+      submittedBy: null,
+      timerHidden: false,
+      fiveMinuteAlertShown: false,
+      assemblyNotes: [],
+    },
+  };
+};
 const stored = (sessionId: string, questionId: string, over: Partial<StoredAttempt> = {}): StoredAttempt => ({
   id: `${sessionId}:${questionId}`,
   sessionId,
