@@ -1,5 +1,5 @@
-// Upgrades a stored session from the Phase 2 shape (version 1, graded on submit) to version 2.
-// Used once by the database migration, and tested on its own.
+// Upgrades stored sessions to the current record. Version 1 is the Phase 2 shape (graded on
+// submit); version 2 is Phase 2c (no `source`). Used by the database migrations, tested on its own.
 
 import type { DrillConfig } from '../../types/drill';
 import type { ChoiceLetter } from '../../types/sat';
@@ -51,6 +51,7 @@ export function upgradeSessionV1(v1: SessionRecordV1): SessionRecord {
     version: SESSION_RECORD_VERSION,
     id: v1.id,
     mode: 'drill',
+    source: 'drill',
     config: v1.config,
     queueIds: [...v1.queueIds],
     index: v1.index,
@@ -63,4 +64,17 @@ export function upgradeSessionV1(v1: SessionRecordV1): SessionRecord {
     totalActiveMs: Object.values(progress).reduce((s, p) => s + p.activeMs, 0),
     askConfidence: false,
   };
+}
+
+/** Version 2 (Phase 2c) had no `source`; every session then came from the drill setup. */
+export function upgradeSessionV2(v2: Omit<SessionRecord, 'version' | 'source'> & { version: 2 }): SessionRecord {
+  return { ...v2, version: SESSION_RECORD_VERSION, source: 'drill' };
+}
+
+/** Brings any stored session (version 1, 2 or current) to the current shape. */
+export function upgradeSession(raw: unknown): SessionRecord {
+  if (isSessionV1(raw)) return upgradeSessionV1(raw);
+  const r = raw as { version?: number };
+  if (r.version === 2) return upgradeSessionV2(raw as Omit<SessionRecord, 'version' | 'source'> & { version: 2 });
+  return raw as SessionRecord;
 }

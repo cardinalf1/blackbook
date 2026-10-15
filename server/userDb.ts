@@ -4,7 +4,7 @@
 // Schema version lives in SQLite's `PRAGMA user_version`. Each migration runs in its own
 // transaction and bumps the version; a database written by a newer app is refused, not guessed at.
 
-import { isSessionV1, upgradeSessionV1 } from '../src/services/session/upgrade';
+import { isSessionV1, upgradeSession, upgradeSessionV1 } from '../src/services/session/upgrade';
 import type { AttemptStore, SessionFilter, TelemetryStore } from '../src/services/storage/attemptTypes';
 import type { FlagRecord } from '../src/types/drill';
 import type { EventRecord, EventType, SessionRecord, StoredAttempt, TelemetryStats, UserDataExport } from '../src/types/session';
@@ -93,6 +93,14 @@ export const MIGRATIONS: readonly Migration[] = [
         BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;
     `);
   },
+  // 3: Phase 2d. Sessions record where they were started (drill setup, Browse, exam).
+  (db) => {
+    db.exec(`ALTER TABLE sessions ADD COLUMN source TEXT NOT NULL DEFAULT 'drill' CHECK (source IN ('drill', 'browse', 'exam'))`);
+    for (const row of db.all<{ id: string; data: string }>('SELECT id, data FROM sessions')) {
+      const s = upgradeSession(JSON.parse(row.data) as unknown);
+      db.run('UPDATE sessions SET data = ?, source = ? WHERE id = ?', JSON.stringify(s), s.source, row.id);
+    }
+  },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
@@ -118,6 +126,23 @@ export function migrate(db: SqlDb, migrations: readonly Migration[] = MIGRATIONS
 }
 
 function insertSession(db: SqlDb, table: 'sessions' | 'sessions_v2', s: SessionRecord): void {
+  if (table === 'sessions') {
+    db.run(
+      `INSERT INTO sessions (id, mode, source, status, started_at, finished_at, last_activity_at, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (id) DO UPDATE SET mode = excluded.mode, source = excluded.source, status = excluded.status, started_at = excluded.started_at,
+         finished_at = excluded.finished_at, last_activity_at = excluded.last_activity_at, data = excluded.data`,
+      s.id,
+      s.mode,
+      s.source,
+      s.status,
+      s.startedAt,
+      s.finishedAt,
+      s.lastActivityAt,
+      JSON.stringify(s),
+    );
+    return;
+  }
+  // Migration 2 only: the version 2 table, before migration 3 added the source column.
   db.run(
     `INSERT INTO ${table} (id, mode, status, started_at, finished_at, last_activity_at, data) VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (id) DO UPDATE SET mode = excluded.mode, status = excluded.status, started_at = excluded.started_at,

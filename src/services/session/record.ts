@@ -9,6 +9,7 @@ import {
   type Confidence,
   type QuestionProgress,
   type SessionMode,
+  type SessionSource,
   type SessionRecord,
   type StoredAttempt,
 } from '../../types/session';
@@ -32,6 +33,7 @@ export function createSession(
   config: DrillConfig,
   queueIds: readonly string[],
   now: number,
+  source: SessionSource = mode === 'exam' ? 'exam' : 'drill',
 ): SessionRecord {
   const progress: Record<string, QuestionProgress> = {};
   for (const q of queueIds) progress[q] = blank();
@@ -41,6 +43,7 @@ export function createSession(
     version: SESSION_RECORD_VERSION,
     id,
     mode,
+    source,
     config,
     queueIds: [...queueIds],
     index: 0,

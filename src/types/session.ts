@@ -2,15 +2,18 @@
 // exam module). Feedback is deferred: nothing about correctness reaches the screen until the
 // session is finished. Records hold question ids only, never question content.
 
+import type { ReactNode } from 'react';
 import type { DrillConfig } from './drill';
 import type { ChoiceLetter, Difficulty, Question, Section } from './sat';
 
 export type SessionMode = 'drill' | 'exam';
+/** Where a session was started: a drill setup, one question picked in Browse, or an exam module. */
+export type SessionSource = 'drill' | 'browse' | 'exam';
 export type SessionStatus = 'in_progress' | 'finished' | 'abandoned';
 export type Confidence = 'guess' | 'unsure' | 'sure';
 export const CONFIDENCE_LEVELS: readonly Confidence[] = ['guess', 'unsure', 'sure'];
 
-export const SESSION_RECORD_VERSION = 2;
+export const SESSION_RECORD_VERSION = 3;
 
 /** Where the user is on one question of a session. */
 export interface QuestionProgress {
@@ -39,6 +42,7 @@ export interface SessionRecord {
   version: typeof SESSION_RECORD_VERSION;
   id: string;
   mode: SessionMode;
+  source: SessionSource;
   /** The filters the session was built from. */
   config: DrillConfig;
   /** Question ids in the order asked. Fixed when the session starts. */
@@ -288,8 +292,33 @@ export interface DrillReportProps {
 export interface PastDrillsProps {
   /** Newest first. */
   rows: readonly PastSessionRow[];
+  /** The In progress list, shown above the finished sessions when given. */
+  inProgressSlot?: ReactNode;
   onOpen: (sessionId: string) => void;
   onBack: () => void;
+}
+
+/** A row in the In progress list. Labels are already worded for display. */
+export interface InProgressRow {
+  id: string;
+  /** "Drill", "Single question" or "Exam module". */
+  kindLabel: string;
+  sectionLabel: string;
+  filtersLabel: string;
+  answered: number;
+  total: number;
+  /** Active time so far. */
+  activeMs: number;
+  /** Epoch ms of the last change. */
+  lastActivityAt: number;
+}
+
+export interface InProgressListProps {
+  /** Newest activity first. When empty the list renders nothing at all. */
+  rows: readonly InProgressRow[];
+  onResume: (sessionId: string) => void;
+  /** Called only after the user confirms. Resolves when done, rejects with a readable message. */
+  onDiscard: (sessionId: string) => Promise<void>;
 }
 
 export interface DataPageProps {

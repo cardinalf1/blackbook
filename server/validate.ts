@@ -66,6 +66,7 @@ const EVENT_TYPES: Record<EventType, true> = {
 
 export function parseSession(v: unknown): SessionRecord | null {
   if (!isObj(v) || v.version !== SESSION_RECORD_VERSION || !isStr(v.id) || !isMode(v.mode)) return null;
+  if (v.source !== 'drill' && v.source !== 'browse' && v.source !== 'exam') return null;
   if (v.status !== 'in_progress' && v.status !== 'finished' && v.status !== 'abandoned') return null;
   if (!isObj(v.config) || !Array.isArray(v.queueIds) || !v.queueIds.every(isStr) || v.queueIds.length > 500) return null;
   if (!isNum(v.index) || v.index < 0 || (v.queueIds.length > 0 && v.index >= v.queueIds.length)) return null;

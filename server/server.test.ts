@@ -121,7 +121,7 @@ describe('SQLite user store', () => {
     const store = new SqliteUserStore(db);
     expect(schemaVersion(db)).toBe(MIGRATIONS.length);
     const done = await store.getSession('old-done');
-    expect(done).toMatchObject({ version: 2, mode: 'drill', status: 'finished', finishedAt: 300, score: { correct: 1, total: 2 }, totalActiveMs: 7000 });
+    expect(done).toMatchObject({ version: 3, source: 'drill', mode: 'drill', status: 'finished', finishedAt: 300, score: { correct: 1, total: 2 }, totalActiveMs: 7000 });
     expect(done?.progress.q2).toMatchObject({ response: 'B', struck: ['C'], activeMs: 4000, firstVisitMs: 4000, visits: 1 });
     const open = await store.getSession('old-open');
     expect(open).toMatchObject({ status: 'in_progress', index: 1, score: null, finishedAt: null });

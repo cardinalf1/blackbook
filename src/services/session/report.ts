@@ -3,7 +3,7 @@
 
 import type { QuestionFacet } from '../../types/drill';
 import type { Question } from '../../types/sat';
-import type { BreakdownRow, PastSessionRow, ReportItem, SessionRecord, SessionReport, StoredAttempt } from '../../types/session';
+import type { BreakdownRow, InProgressRow, PastSessionRow, ReportItem, SessionRecord, SessionReport, StoredAttempt } from '../../types/session';
 import { isCorrect } from '../answers';
 
 const SECTION_LABEL = { rw: 'Reading and Writing', math: 'Math' } as const;
@@ -88,7 +88,25 @@ export function filtersLabel(session: SessionRecord, facets: readonly QuestionFa
 }
 
 export function kindLabel(session: SessionRecord): string {
-  return session.mode === 'exam' ? 'Exam module' : 'Drill';
+  if (session.mode === 'exam') return 'Exam module';
+  return session.source === 'browse' ? 'Single question' : 'Drill';
+}
+
+/** Unfinished sessions for the In progress list, newest activity first. */
+export function inProgressRows(sessions: readonly SessionRecord[], facets: readonly QuestionFacet[]): InProgressRow[] {
+  return sessions
+    .filter((s) => s.status === 'in_progress')
+    .map((s) => ({
+      id: s.id,
+      kindLabel: kindLabel(s),
+      sectionLabel: SECTION_LABEL[s.config.section],
+      filtersLabel: filtersLabel(s, facets),
+      answered: s.queueIds.filter((id) => s.progress[id]?.response != null).length,
+      total: s.queueIds.length,
+      activeMs: s.totalActiveMs,
+      lastActivityAt: s.lastActivityAt,
+    }))
+    .sort((a, b) => b.lastActivityAt - a.lastActivityAt);
 }
 
 /** Finished sessions only, newest finish first. */
