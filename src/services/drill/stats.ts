@@ -1,13 +1,20 @@
-// Aggregations over stored attempts: per-skill accuracy and the end-of-session summary.
+// Aggregations over stored attempts: which attempts count, and per-skill accuracy.
 
-import {
-  MIN_TRUSTED_ATTEMPTS,
-  type Attempt,
-  type QuestionFacet,
-  type SessionRecord,
-  type SessionSummary,
-  type SkillStatRow,
-} from '../../types/drill';
+import { MIN_TRUSTED_ATTEMPTS, type QuestionFacet, type SkillStatRow } from '../../types/drill';
+import type { SessionMode, SessionRecord, StoredAttempt } from '../../types/session';
+
+/**
+ * The attempts that statistics may use: final answers in finished sessions of one mode. Drafts,
+ * unfinished and discarded sessions never count, and drill and exam results are kept apart.
+ */
+export function countableAttempts(
+  attempts: readonly StoredAttempt[],
+  sessions: readonly SessionRecord[],
+  mode: SessionMode,
+): StoredAttempt[] {
+  const finished = new Set(sessions.filter((s) => s.status === 'finished' && s.mode === mode).map((s) => s.id));
+  return attempts.filter((a) => a.status === 'final' && a.mode === mode && a.response !== '' && finished.has(a.sessionId));
+}
 
 export interface SkillStats {
   rows: SkillStatRow[];
@@ -16,7 +23,7 @@ export interface SkillStats {
 }
 
 /** Every attempt counts, including repeats of the same question. Sorted weakest (lowest accuracy) first. */
-export function computeSkillStats(attempts: readonly Attempt[], facets: readonly QuestionFacet[]): SkillStats {
+export function computeSkillStats(attempts: readonly StoredAttempt[], facets: readonly QuestionFacet[]): SkillStats {
   const byId = new Map(facets.map((f) => [f.id, f]));
   const acc = new Map<string, { f: QuestionFacet; attempts: number; correct: number; timeMs: number }>();
   let unattributed = 0;
@@ -45,23 +52,4 @@ export function computeSkillStats(attempts: readonly Attempt[], facets: readonly
   }));
   rows.sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts || a.skill.localeCompare(b.skill));
   return { rows, unattributed };
-}
-
-/** Summary of the questions answered so far in a session, in the order they were asked. */
-export function summarizeSession(
-  session: SessionRecord,
-  displayInfo: ReadonlyMap<string, { displayId: string; skill: string }>,
-): SessionSummary {
-  const items = session.queueIds.flatMap((id) => {
-    const a = session.answered[id];
-    if (!a) return [];
-    const info = displayInfo.get(id);
-    return [{ questionId: id, displayId: info?.displayId ?? id, skill: info?.skill ?? '', correct: a.correct, timeMs: a.timeMs }];
-  });
-  return {
-    total: items.length,
-    correct: items.filter((i) => i.correct).length,
-    totalTimeMs: items.reduce((s, i) => s + i.timeMs, 0),
-    items,
-  };
 }

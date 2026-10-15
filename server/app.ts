@@ -4,19 +4,20 @@
 import { DOWNLOAD_ENABLED } from '../src/config';
 import { importBankText } from '../src/services/import/importBank';
 import type { Sanitizer } from '../src/services/normalize/sanitize';
-import type { AttemptStore } from '../src/services/storage/attemptTypes';
+import type { AttemptStore, SessionFilter, TelemetryStore } from '../src/services/storage/attemptTypes';
 import type { QuestionQuery } from '../src/services/storage/types';
-import type { Attempt, SessionRecord } from '../src/types/drill';
 import type { DownloadProgress, DownloadScopeChoice } from '../src/types/download';
 import { DIFFICULTIES, SECTIONS, type Difficulty, type Section } from '../src/types/sat';
 import type { DiskBankStore } from './bankStore';
 import type { DownloadManager } from './download';
+import { ClosedSessionError } from './userDb';
+import { isObj, parseAttempt, parseEvent, parseSession } from './validate';
 import { checkHostAndOrigin, checkRequest, sameSecret, sessionCookie, type SecurityConfig } from './security';
 
 export interface AppDeps {
   security: SecurityConfig;
   bank: DiskBankStore;
-  users: AttemptStore;
+  users: AttemptStore & TelemetryStore;
   downloads: DownloadManager;
   sanitize: Sanitizer;
   dataFolder: string;
@@ -27,6 +28,8 @@ export interface AppDeps {
 }
 
 const MAX_IMPORT_BYTES = 200 * 1024 * 1024;
+const MAX_EVENT_BATCH = 5000;
+const MAX_EVENT_BYTES = 2 * 1024 * 1024;
 
 function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -43,26 +46,6 @@ async function readJson(req: Request): Promise<unknown> {
   } catch {
     return undefined;
   }
-}
-
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length < 500;
-const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-
-function parseAttempt(v: unknown): Attempt | null {
-  if (!isObj(v)) return null;
-  const { id, questionId, response, correct, timeMs, sessionId, at } = v;
-  if (!isStr(id) || !isStr(questionId) || typeof response !== 'string' || response.length > 100) return null;
-  if (typeof correct !== 'boolean' || !isNum(timeMs) || timeMs < 0 || !isStr(sessionId) || !isNum(at)) return null;
-  return { id, questionId, response, correct, timeMs, sessionId, at };
-}
-
-function parseSession(v: unknown): SessionRecord | null {
-  if (!isObj(v)) return null;
-  if (!isStr(v.id) || (v.status !== 'active' && v.status !== 'finished') || !isNum(v.startedAt) || !isNum(v.index)) return null;
-  if (!Array.isArray(v.queueIds) || !v.queueIds.every(isStr) || !isObj(v.answered) || !isObj(v.struck) || !isObj(v.config)) return null;
-  if (!isNum(v.currentElapsedMs)) return null;
-  return v as unknown as SessionRecord;
 }
 
 function parseScope(v: unknown): DownloadScopeChoice | null {
@@ -190,14 +173,7 @@ export function createHandler(deps: AppDeps): (req: Request) => Promise<Response
 
       // ---- user data ----
       if (path === '/api/attempts' && m === 'GET') {
-        const sessionId = url.searchParams.get('sessionId');
-        return json(sessionId ? await deps.users.attemptsForSession(sessionId) : await deps.users.listAttempts());
-      }
-      if (path === '/api/attempts' && m === 'POST') {
-        const a = parseAttempt(await readJson(req));
-        if (!a) return problem(400, 'Malformed attempt.');
-        await deps.users.addAttempt(a);
-        return json({ ok: true });
+        return json(await deps.users.listAttempts(url.searchParams.get('sessionId') ?? undefined));
       }
       if (path === '/api/flags' && m === 'GET') return json(await deps.users.listFlags());
       if (path.startsWith('/api/flags/') && m === 'PUT') {
@@ -206,20 +182,53 @@ export function createHandler(deps: AppDeps): (req: Request) => Promise<Response
         await deps.users.setFlag(decodeURIComponent(path.slice('/api/flags/'.length)), body.flagged);
         return json({ ok: true });
       }
-      if (path === '/api/sessions/active' && m === 'GET') return json(await deps.users.getActiveSession());
+      if (path === '/api/sessions' && m === 'GET') {
+        const filter: SessionFilter = {};
+        const status = url.searchParams.get('status');
+        const mode = url.searchParams.get('mode');
+        if (status === 'in_progress' || status === 'finished' || status === 'abandoned') filter.status = status;
+        if (mode === 'drill' || mode === 'exam') filter.mode = mode;
+        return json(await deps.users.listSessions(filter));
+      }
       if (path.startsWith('/api/sessions/')) {
         const id = decodeURIComponent(path.slice('/api/sessions/'.length));
         if (m === 'GET') return json(await deps.users.getSession(id));
-        if (m === 'DELETE') {
-          await deps.users.deleteSession(id);
-          return json({ ok: true });
-        }
         if (m === 'PUT') {
-          const s = parseSession(await readJson(req));
+          const body = await readJson(req);
+          if (!isObj(body)) return problem(400, 'Malformed session.');
+          const s = parseSession(body.session);
           if (!s || s.id !== id) return problem(400, 'Malformed session.');
-          await deps.users.saveSession(s);
+          const raw = body.attempts ?? [];
+          if (!Array.isArray(raw) || raw.length > 500) return problem(400, 'Malformed attempts.');
+          const attempts = raw.map(parseAttempt);
+          if (attempts.some((a) => a === null || a.sessionId !== id || a.mode !== s.mode)) return problem(400, 'Malformed attempts.');
+          try {
+            await deps.users.saveSession(s, attempts as NonNullable<(typeof attempts)[number]>[]);
+          } catch (e) {
+            if (e instanceof ClosedSessionError) return problem(409, e.message);
+            throw e;
+          }
           return json({ ok: true });
         }
+      }
+      if (path === '/api/events' && m === 'POST') {
+        const length = Number(req.headers.get('content-length') ?? '0');
+        if (length > MAX_EVENT_BYTES) return problem(413, 'Too many events in one request.');
+        const body = await readJson(req);
+        if (!isObj(body) || !Array.isArray(body.events) || body.events.length > MAX_EVENT_BATCH) return problem(400, 'Malformed events.');
+        const events = body.events.map(parseEvent);
+        if (events.some((e) => e === null)) return problem(400, 'Malformed events.');
+        await deps.users.appendEvents(events as NonNullable<(typeof events)[number]>[]);
+        return json({ ok: true, stored: events.length });
+      }
+      if (path === '/api/events' && m === 'GET') return json(await deps.users.listEvents(url.searchParams.get('sessionId') ?? undefined));
+      if (path === '/api/events' && m === 'DELETE') {
+        await deps.users.clearEvents();
+        return json({ ok: true });
+      }
+      if (path === '/api/data/stats' && m === 'GET') return json(await deps.users.stats());
+      if (path === '/api/data/export' && m === 'GET') {
+        return json(await deps.users.exportAll(), 200, { 'Content-Disposition': 'attachment; filename="blackbook-data.json"' });
       }
       if (path === '/api/user-data' && m === 'DELETE') {
         await deps.users.clearAll();

@@ -25,10 +25,8 @@ export function DrillReport({
   const [filter, setFilter] = useState<'all' | 'missed' | 'flagged'>('all');
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
 
+  // The open set, current even between renders (two quick clicks must both count).
   const openRef = useRef(openIds);
-  useEffect(() => {
-    openRef.current = openIds;
-  }, [openIds]);
 
   const onItemToggleRef = useRef(onItemToggle);
   useEffect(() => {
@@ -43,18 +41,16 @@ export function DrillReport({
     };
   }, []);
 
+  // The callback runs outside the state updater: React may run updaters twice (StrictMode),
+  // which would log every open and close twice.
   const toggleRow = (questionId: string) => {
-    setOpenIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(questionId)) {
-        next.delete(questionId);
-        onItemToggle(questionId, false);
-      } else {
-        next.add(questionId);
-        onItemToggle(questionId, true);
-      }
-      return next;
-    });
+    const next = new Set(openRef.current);
+    const opening = !next.has(questionId);
+    if (opening) next.add(questionId);
+    else next.delete(questionId);
+    openRef.current = next;
+    setOpenIds(next);
+    onItemToggle(questionId, opening);
   };
 
   const { correct, total } = report.score;
@@ -412,6 +408,11 @@ export function DrillReport({
                             <h4 className="mb-2 font-mono text-xs uppercase tracking-wider text-zinc-400">
                               Explanation
                             </h4>
+                            {item.question.answer.kind === 'mcq' && item.question.answer.keyOrigin === 'rationale' && (
+                              <p className="mb-2 text-xs text-amber-400">
+                                The answer key for this older question was read from its explanation text.
+                              </p>
+                            )}
                             <QuestionHtml
                               html={item.question.rationaleHtml}
                               className="text-zinc-300"

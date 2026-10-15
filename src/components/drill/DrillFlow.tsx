@@ -1,37 +1,60 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useAttentionTelemetry } from '../../hooks/useAttentionTelemetry';
+import { useFocusTimer } from '../../hooks/useFocusTimer';
 import { loadFacets } from '../../services/drill/facetCache';
 import { buildTaxonomy } from '../../services/drill/facets';
-import { computeSkillStats, summarizeSession } from '../../services/drill/stats';
-import { attemptStore, questionStore } from '../../services/storage';
+import { computeSkillStats, countableAttempts } from '../../services/drill/stats';
+import { buildReport, pastSessionRows } from '../../services/session/report';
+import { currentQuestionId, finishCheck, progressOf } from '../../services/session/record';
+import { attemptStore, questionStore, telemetryStore } from '../../services/storage';
+import { telemetry } from '../../services/telemetry';
 import { drillStore, useDrill } from '../../stores/drillStore';
 import type { DrillConfig, QuestionFacet, SkillStatRow } from '../../types/drill';
-import { QuestionView } from '../QuestionView';
-import { DrillResults } from '../results/DrillResults';
+import type { Question } from '../../types/sat';
+import type { PastSessionRow, SessionRecord, SessionReport, TelemetryStats } from '../../types/session';
+import { DataPage } from '../results/DataPage';
+import { DrillReport } from '../results/DrillReport';
 import { MySkills } from '../results/MySkills';
+import { PastDrills } from '../results/PastDrills';
+import { DrillPlay } from './DrillPlay';
 import { DrillSetup } from './DrillSetup';
+import { FinishConfirm } from './FinishConfirm';
 
-type Step = { kind: 'setup' } | { kind: 'play' } | { kind: 'review'; questionId: string } | { kind: 'skills' };
+export type DrillStart = 'setup' | 'play' | 'skills' | 'past' | 'data';
+
+type Step =
+  | { kind: 'setup' }
+  | { kind: 'play' }
+  | { kind: 'skills'; back: Step | null }
+  | { kind: 'past' }
+  | { kind: 'data' }
+  | { kind: 'report'; sessionId: string; from: 'drill' | 'past' };
+
+const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+function Notice({ children, error = false }: { children: ReactNode; error?: boolean }) {
+  return error ? (
+    <div className="rounded-lg border border-red-900/50 bg-[#121215] p-5 text-sm text-red-400" role="alert">
+      {children}
+    </div>
+  ) : (
+    <div className="rounded-lg border border-[#27272A] bg-[#121215] p-6 text-center text-sm text-zinc-400">{children}</div>
+  );
+}
 
 /**
- * Setup, the question loop, results, review and the skills table. State lives in the drill store;
- * this component only chooses which screen to show.
+ * Setup, the question loop, the report, Past drills, the Data page and the skills table. Session
+ * state lives in the drill store; this component chooses the screen and loads what it shows.
  */
-export function DrillFlow({ onExit, startAt }: { onExit: () => void; startAt: 'setup' | 'play' | 'skills' }) {
-  const session = useDrill((s) => s.session);
+export function DrillFlow({ onExit, startAt }: { onExit: () => void; startAt: DrillStart }) {
   const error = useDrill((s) => s.error);
-  const [step, setStep] = useState<Step>({ kind: startAt });
+  const [step, setStep] = useState<Step>(startAt === 'skills' ? { kind: 'skills', back: null } : { kind: startAt });
   const [facets, setFacets] = useState<QuestionFacet[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadFacets(questionStore).then(setFacets, (e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)));
+    loadFacets(questionStore).then(setFacets, (e: unknown) => setLoadError(msg(e)));
   }, []);
-
-  const exit = useCallback(() => {
-    // Refuses while an answer is not saved yet; the screen then shows the Retry banner.
-    if (!drillStore.getState().close()) return;
-    onExit();
-  }, [onExit]);
 
   const start = async (config: DrillConfig) => {
     if (!facets) return;
@@ -39,158 +62,265 @@ export function DrillFlow({ onExit, startAt }: { onExit: () => void; startAt: 's
     if (drillStore.getState().session) setStep({ kind: 'play' });
   };
 
-  if (loadError) return <div className="rounded-lg border border-red-900/50 bg-[#121215] p-5 text-sm text-red-400" role="alert">Could not read the question bank: {loadError}</div>;
-  if (!facets) return <div className="rounded-lg border border-[#27272A] bg-[#121215] p-6 text-center text-sm text-zinc-400">Loading...</div>;
+  const leaveFinished = useCallback(() => {
+    drillStore.getState().closeFinished();
+    onExit();
+  }, [onExit]);
 
-  const banner = error && (
-    <div className="rounded-lg border border-red-900/50 bg-[#121215] p-4 text-sm text-red-400" role="alert">
-      {error}
+  if (loadError) return <Notice error>Could not read the question bank: {loadError}</Notice>;
+  if (!facets) return <Notice>Loading...</Notice>;
+
+  const banner = error && <Notice error>{error}</Notice>;
+
+  switch (step.kind) {
+    case 'setup':
+      return (
+        <div className="space-y-3">
+          {banner}
+          <DrillSetup taxonomy={buildTaxonomy(facets)} facets={facets} onStart={(c) => void start(c)} onCancel={onExit} />
+        </div>
+      );
+    case 'skills':
+      return <SkillsScreen facets={facets} onBack={step.back ? () => setStep(step.back as Step) : onExit} />;
+    case 'past':
+      return <PastScreen facets={facets} onOpen={(sessionId) => setStep({ kind: 'report', sessionId, from: 'past' })} onBack={onExit} />;
+    case 'data':
+      return <DataScreen onBack={onExit} />;
+    case 'report':
+      return (
+        <ReportScreen
+          sessionId={step.sessionId}
+          backLabel={step.from === 'drill' ? 'Done' : 'Back to past drills'}
+          onBack={step.from === 'drill' ? leaveFinished : () => setStep({ kind: 'past' })}
+          onMySkills={() => setStep({ kind: 'skills', back: step })}
+        />
+      );
+    case 'play':
+      return <PlayScreen onExit={onExit} onFinished={(sessionId) => setStep({ kind: 'report', sessionId, from: 'drill' })} />;
+  }
+}
+
+function PlayScreen({ onExit, onFinished }: { onExit: () => void; onFinished: (sessionId: string) => void }) {
+  const session = useDrill((s) => s.session);
+  const questions = useDrill((s) => s.questions);
+  const error = useDrill((s) => s.error);
+
+  useEffect(() => {
+    if (session?.status === 'finished') onFinished(session.id);
+  }, [session?.status, session?.id, onFinished]);
+
+  if (!session) return <Notice>No drill is running.</Notice>;
+  if (session.status !== 'in_progress') return <Notice>Loading your report...</Notice>;
+  const id = currentQuestionId(session);
+  const question = id === null ? undefined : questions[id];
+  if (id === null || !question) return <Notice error>This question is missing from the bank.</Notice>;
+
+  return (
+    <div className="space-y-3">
+      {error && <Notice error>{error}</Notice>}
+      {/* Keyed by question: a new visit starts a new focus timer. */}
+      <PlayQuestion key={`${session.id}:${id}`} session={session} question={question} onExit={onExit} />
     </div>
   );
-
-  if (step.kind === 'setup') {
-    return (
-      <div className="space-y-3">
-        {banner}
-        <DrillSetup taxonomy={buildTaxonomy(facets)} facets={facets} onStart={(c) => void start(c)} onCancel={exit} />
-      </div>
-    );
-  }
-
-  if (step.kind === 'skills') {
-    return <SkillsScreen facets={facets} onBack={session?.status === 'finished' ? () => setStep({ kind: 'play' }) : exit} />;
-  }
-
-  if (!session) return <div className="rounded-lg border border-[#27272A] bg-[#121215] p-6 text-center text-sm text-zinc-400">No drill is running.</div>;
-
-  if (step.kind === 'review') {
-    return <ReviewScreen questionId={step.questionId} onBack={() => setStep({ kind: 'play' })} />;
-  }
-
-  if (session.status === 'finished') {
-    return <ResultsScreen onReview={(questionId) => setStep({ kind: 'review', questionId })} onDone={exit} onMySkills={() => setStep({ kind: 'skills' })} />;
-  }
-
-  return <PlayScreen onExit={exit} />;
 }
 
-function PlayScreen({ onExit }: { onExit: () => void }) {
-  const session = useDrill((s) => s.session);
-  const questions = useDrill((s) => s.questions);
-  const flags = useDrill((s) => s.flags);
-  const error = useDrill((s) => s.error);
-  const unsaved = useDrill((s) => s.unsaved);
+function PlayQuestion({ session, question, onExit }: { session: SessionRecord; question: Question; onExit: () => void }) {
   const saveError = useDrill((s) => s.saveError);
-  const [retrying, setRetrying] = useState(false);
-  if (!session) return null;
-
-  const id = session.queueIds[session.index];
-  const question = id === undefined ? undefined : questions[id];
-  if (!id || !question) return <div className="rounded-lg border border-red-900/50 bg-[#121215] p-4 text-sm text-red-400" role="alert">This question is missing from the bank.</div>;
-
-  const answered = session.answered[id];
-  const last = session.index === session.queueIds.length - 1;
+  const [navigating, setNavigating] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const actions = drillStore.getState();
+  const p = progressOf(session, question.id);
+
+  const readTime = useFocusTimer({ baseMs: p.activeMs, active: true, onElapsed: (ms) => actions.saveElapsed(ms) });
+  useAttentionTelemetry({ sessionId: session.id, mode: session.mode, questionId: question.id });
+
+  useEffect(() => {
+    drillStore.getState().shown();
+    const onHide = () => drillStore.getState().unloading(readTime());
+    window.addEventListener('pagehide', onHide);
+    return () => window.removeEventListener('pagehide', onHide);
+  }, [readTime]);
+
+  const nav = async (fn: () => Promise<boolean>) => {
+    setNavigating(true);
+    try {
+      return await fn();
+    } finally {
+      setNavigating(false);
+    }
+  };
+  const last = session.index === session.queueIds.length - 1;
+  const check = finishCheck(session);
 
   return (
-    <section className="space-y-4">
-      <nav className="flex flex-wrap items-center justify-between gap-3 text-sm">
-        <button
-          type="button"
-          onClick={onExit}
-          className="rounded px-1.5 py-0.5 text-zinc-400 transition-colors hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-        >
-          Save and exit
-        </button>
-        <span className="font-mono text-xs text-zinc-400">
-          {session.index + 1} / {session.queueIds.length}
-        </span>
-      </nav>
-      {saveError && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-red-900/50 bg-[#121215] p-4 text-sm text-red-400" role="alert">
-          <span className="min-w-0 flex-1">{saveError}</span>
-          <button
-            type="button"
-            disabled={retrying}
-            onClick={() => {
-              setRetrying(true);
-              void actions.retrySave().finally(() => setRetrying(false));
-            }}
-            className="rounded-md bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-900 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-          >
-            {retrying ? 'Retrying...' : 'Retry'}
-          </button>
-        </div>
-      )}
-      {error && !saveError && (
-        <div className="rounded-lg border border-red-900/50 bg-[#121215] p-4 text-sm text-red-400" role="alert">
-          {error}
-        </div>
-      )}
-      <QuestionView
-        key={id}
+    <>
+      <DrillPlay
         question={question}
-        drill={{
-          answered: answered ? { response: answered.response, correct: answered.correct } : undefined,
-          struck: session.struck[id] ?? [],
-          onStrike: (letter) => void actions.strike(letter),
-          flagged: flags[id] === true,
-          onToggleFlag: () => void actions.toggleFlag(id),
-          initialElapsedMs: session.currentElapsedMs,
-          onElapsed: (ms) => void actions.saveElapsed(ms),
-          onSubmit: (response, timeMs) => void actions.submit(response, timeMs),
-          onNext: () => void actions.next(),
-          nextLabel: unsaved ? 'Saving...' : last ? 'Finish' : 'Next',
-          nextDisabled: unsaved !== null,
+        index={session.index}
+        total={session.queueIds.length}
+        response={p.response}
+        onSelect={(r) => actions.select(r)}
+        struck={p.struck}
+        onStrike={(l) => actions.strike(l)}
+        flagged={p.flagged}
+        onToggleFlag={() => actions.toggleFlag()}
+        askConfidence={session.askConfidence}
+        confidence={p.confidence}
+        onRate={(r) => actions.rate(r)}
+        onBack={() => void nav(() => actions.go('back', session.index - 1, readTime()))}
+        onNext={() => {
+          if (!last) {
+            void nav(() => actions.go('next', session.index + 1, readTime()));
+            return;
+          }
+          actions.finishClicked();
+          setConfirming(true);
+        }}
+        // Each answer is saved in the background; navigation itself waits for the save, so the
+        // buttons only show "Saving..." while a move is actually waiting.
+        saving={navigating}
+        saveError={saveError}
+        onRetry={() => void actions.retrySave()}
+        onExit={() => {
+          void nav(() => actions.exit(readTime())).then((ok) => {
+            if (ok) onExit();
+          });
         }}
       />
-    </section>
+      {confirming && (
+        <FinishConfirm
+          unanswered={check.unanswered}
+          flagged={check.flagged}
+          busy={navigating}
+          onCancel={() => {
+            actions.finishCancelled();
+            setConfirming(false);
+          }}
+          onGoTo={(n) => {
+            setConfirming(false);
+            void nav(() => actions.go('jump', n - 1, readTime()));
+          }}
+          onConfirm={() => {
+            void nav(() => actions.finish(readTime())).then((ok) => {
+              if (!ok) setConfirming(false);
+            });
+          }}
+        />
+      )}
+    </>
   );
 }
 
-function ResultsScreen(props: { onReview: (id: string) => void; onDone: () => void; onMySkills: () => void }) {
-  const session = useDrill((s) => s.session);
-  const questions = useDrill((s) => s.questions);
-  const summary = useMemo(() => {
-    if (!session) return null;
-    const info = new Map(Object.values(questions).map((q) => [q.id, { displayId: q.displayId, skill: q.skill }]));
-    return summarizeSession(session, info);
-  }, [session, questions]);
-  if (!summary) return null;
-  return <DrillResults summary={summary} {...props} />;
+function ReportScreen(props: { sessionId: string; backLabel: string; onBack: () => void; onMySkills: () => void }) {
+  const { sessionId } = props;
+  const [report, setReport] = useState<SessionReport | null>(null);
+  const [session, setSession] = useState<SessionRecord | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const opened = useRef<Map<string, number>>(new Map());
+  const logged = useRef(false);
+
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const s = await attemptStore.getSession(sessionId);
+      if (!s || s.status !== 'finished') throw new Error('This drill is not finished.');
+      const [found, attempts] = await Promise.all([Promise.all(s.queueIds.map((id) => questionStore.get(id))), attemptStore.listAttempts(sessionId)]);
+      const questions = new Map<string, Question>();
+      for (const q of found) if (q) questions.set(q.id, q);
+      if (!live) return;
+      setSession(s);
+      setReport(buildReport(s, questions, attempts));
+      if (!logged.current) {
+        logged.current = true;
+        telemetry.log('report_opened', { sessionId: s.id, mode: s.mode, questionId: null }, {});
+      }
+    })().catch((e: unknown) => {
+      if (live) setError(msg(e));
+    });
+    return () => {
+      live = false;
+    };
+  }, [sessionId]);
+
+  if (error) return <Notice error>Could not open the report: {error}</Notice>;
+  if (!report || !session) return <Notice>Loading...</Notice>;
+
+  return (
+    <DrillReport
+      report={report}
+      backLabel={props.backLabel}
+      onBack={props.onBack}
+      onMySkills={props.onMySkills}
+      onItemToggle={(questionId, open) => {
+        const ctx = { sessionId: session.id, mode: session.mode, questionId };
+        if (open) {
+          opened.current.set(questionId, performance.now());
+          telemetry.log('rationale_viewed', ctx, {});
+          return;
+        }
+        const since = opened.current.get(questionId);
+        if (since === undefined) return;
+        opened.current.delete(questionId);
+        telemetry.log('report_item_time', ctx, { dwellMs: Math.round(performance.now() - since) });
+      }}
+    />
+  );
 }
 
-function ReviewScreen({ questionId, onBack }: { questionId: string; onBack: () => void }) {
-  const session = useDrill((s) => s.session);
-  const question = useDrill((s) => s.questions[questionId]);
-  const answered = session?.answered[questionId];
-  if (!question || !answered) return null;
+function PastScreen({ facets, onOpen, onBack }: { facets: QuestionFacet[]; onOpen: (id: string) => void; onBack: () => void }) {
+  const [rows, setRows] = useState<PastSessionRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    attemptStore.listSessions({ status: 'finished' }).then(
+      (sessions) => setRows(pastSessionRows(sessions, facets)),
+      (e: unknown) => setError(msg(e)),
+    );
+  }, [facets]);
+  if (error) return <Notice error>Could not read your past drills: {error}</Notice>;
+  if (!rows) return <Notice>Loading...</Notice>;
+  return <PastDrills rows={rows} onOpen={onOpen} onBack={onBack} />;
+}
+
+function DataScreen({ onBack }: { onBack: () => void }) {
+  const [stats, setStats] = useState<TelemetryStats | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  const refresh = useCallback(() => {
+    telemetryStore.stats().then(
+      (s) => {
+        setStats(s);
+        setStatsError(null);
+      },
+      (e: unknown) => setStatsError(`Could not read your data: ${msg(e)}`),
+    );
+  }, []);
+  useEffect(refresh, [refresh]);
+
   return (
-    <section className="space-y-4">
-      <nav className="flex items-center gap-3 text-sm">
-        <button
-          type="button"
-          onClick={onBack}
-          className="rounded px-1.5 py-0.5 text-zinc-400 transition-colors hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-        >
-          Back to results
-        </button>
-      </nav>
-      <QuestionView
-        key={questionId}
-        question={question}
-        drill={{
-          answered: { response: answered.response, correct: answered.correct },
-          struck: [],
-          onStrike: () => undefined,
-          flagged: false,
-          onToggleFlag: () => undefined,
-          initialElapsedMs: 0,
-          onElapsed: () => undefined,
-          onSubmit: () => undefined,
-        }}
-      />
-    </section>
+    <DataPage
+      stats={stats}
+      statsError={statsError}
+      onBack={onBack}
+      onExport={async () => {
+        await telemetry.flush();
+        const data = await telemetryStore.exportAll();
+        const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `blackbook-data-${data.exportedAt.slice(0, 10)}.json`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      }}
+      onDeleteTelemetry={async () => {
+        await telemetry.flush();
+        await telemetryStore.clearEvents();
+        refresh();
+      }}
+      onDeleteAll={async () => {
+        await attemptStore.clearAll();
+        await drillStore.getState().init();
+        refresh();
+      }}
+    />
   );
 }
 
@@ -198,12 +328,12 @@ function SkillsScreen({ facets, onBack }: { facets: QuestionFacet[]; onBack: () 
   const [data, setData] = useState<{ rows: SkillStatRow[]; unattributed: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    attemptStore.listAttempts().then(
-      (attempts) => setData(computeSkillStats(attempts, facets)),
-      (e: unknown) => setError(e instanceof Error ? e.message : String(e)),
+    Promise.all([attemptStore.listAttempts(), attemptStore.listSessions()]).then(
+      ([attempts, sessions]) => setData(computeSkillStats(countableAttempts(attempts, sessions, 'drill'), facets)),
+      (e: unknown) => setError(msg(e)),
     );
   }, [facets]);
-  if (error) return <div className="rounded-lg border border-red-900/50 bg-[#121215] p-5 text-sm text-red-400" role="alert">Could not read your attempts: {error}</div>;
-  if (!data) return <div className="rounded-lg border border-[#27272A] bg-[#121215] p-6 text-center text-sm text-zinc-400">Loading...</div>;
+  if (error) return <Notice error>Could not read your attempts: {error}</Notice>;
+  if (!data) return <Notice>Loading...</Notice>;
   return <MySkills rows={data.rows} unattributed={data.unattributed} onBack={onBack} />;
 }

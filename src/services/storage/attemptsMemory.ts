@@ -1,22 +1,40 @@
-import type { Attempt, FlagRecord, SessionRecord } from '../../types/drill';
-import type { AttemptStore } from './attemptTypes';
+import type { FlagRecord } from '../../types/drill';
+import type { EventRecord, SessionRecord, StoredAttempt, TelemetryStats, UserDataExport } from '../../types/session';
+import type { AttemptStore, SessionFilter, TelemetryStore } from './attemptTypes';
 
-/** In-memory AttemptStore for tests. Same contract as the IndexedDB store. */
-export class MemoryAttemptStore implements AttemptStore {
-  private attempts = new Map<string, Attempt>();
+/** In-memory user store for tests. Same contracts as the SQLite store behind the local server. */
+export class MemoryAttemptStore implements AttemptStore, TelemetryStore {
+  private attempts = new Map<string, StoredAttempt>();
   private flags = new Map<string, FlagRecord>();
   private sessions = new Map<string, SessionRecord>();
+  private events = new Map<string, EventRecord>();
 
-  async addAttempt(attempt: Attempt): Promise<void> {
-    this.attempts.set(attempt.id, structuredClone(attempt));
+  async saveSession(session: SessionRecord, attempts: readonly StoredAttempt[] = []): Promise<void> {
+    const prev = this.sessions.get(session.id);
+    if (prev && prev.status !== 'in_progress' && JSON.stringify(prev) !== JSON.stringify(session)) {
+      throw new Error('This session is already finished or discarded and cannot be changed.');
+    }
+    this.sessions.set(session.id, structuredClone(session));
+    for (const a of attempts) this.attempts.set(a.id, structuredClone(a));
   }
 
-  async listAttempts(): Promise<Attempt[]> {
-    return structuredClone([...this.attempts.values()]);
+  async getSession(id: string): Promise<SessionRecord | null> {
+    const s = this.sessions.get(id);
+    return s ? structuredClone(s) : null;
   }
 
-  async attemptsForSession(sessionId: string): Promise<Attempt[]> {
-    return structuredClone([...this.attempts.values()].filter((a) => a.sessionId === sessionId));
+  async listSessions(filter: SessionFilter = {}): Promise<SessionRecord[]> {
+    const list = [...this.sessions.values()].filter(
+      (s) => (filter.status === undefined || s.status === filter.status) && (filter.mode === undefined || s.mode === filter.mode),
+    );
+    list.sort((a, b) => b.startedAt - a.startedAt);
+    return structuredClone(list);
+  }
+
+  async listAttempts(sessionId?: string): Promise<StoredAttempt[]> {
+    const list = [...this.attempts.values()].filter((a) => sessionId === undefined || a.sessionId === sessionId);
+    list.sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
+    return structuredClone(list);
   }
 
   async setFlag(questionId: string, flagged: boolean): Promise<void> {
@@ -28,28 +46,44 @@ export class MemoryAttemptStore implements AttemptStore {
     return [...this.flags.values()];
   }
 
-  async saveSession(session: SessionRecord): Promise<void> {
-    this.sessions.set(session.id, structuredClone(session));
+  async appendEvents(events: readonly EventRecord[]): Promise<void> {
+    for (const e of events) if (!this.events.has(e.id)) this.events.set(e.id, structuredClone(e));
   }
 
-  async getActiveSession(): Promise<SessionRecord | null> {
-    const active = [...this.sessions.values()].filter((s) => s.status === 'active');
-    active.sort((a, b) => b.startedAt - a.startedAt);
-    return active[0] ? structuredClone(active[0]) : null;
+  async listEvents(sessionId?: string): Promise<EventRecord[]> {
+    const list = [...this.events.values()].filter((e) => sessionId === undefined || e.sessionId === sessionId);
+    list.sort((a, b) => a.ts - b.ts || a.pageId.localeCompare(b.pageId) || a.seq - b.seq);
+    return structuredClone(list);
   }
 
-  async getSession(id: string): Promise<SessionRecord | null> {
-    const s = this.sessions.get(id);
-    return s ? structuredClone(s) : null;
+  async clearEvents(): Promise<void> {
+    this.events.clear();
   }
 
-  async deleteSession(id: string): Promise<void> {
-    this.sessions.delete(id);
+  async stats(): Promise<TelemetryStats> {
+    let eventBytes = 0;
+    for (const e of this.events.values()) {
+      eventBytes += e.id.length + e.sessionId.length + e.mode.length + (e.questionId?.length ?? 0) + e.type.length;
+      eventBytes += e.pageId.length + JSON.stringify(e.payload).length + 32;
+    }
+    return { events: this.events.size, eventBytes, sessions: this.sessions.size, attempts: this.attempts.size };
+  }
+
+  async exportAll(): Promise<UserDataExport> {
+    return {
+      app: 'blackbook',
+      exportedAt: new Date().toISOString(),
+      schemaVersion: 0,
+      sessions: await this.listSessions(),
+      attempts: await this.listAttempts(),
+      events: await this.listEvents(),
+    };
   }
 
   async clearAll(): Promise<void> {
     this.attempts.clear();
     this.flags.clear();
     this.sessions.clear();
+    this.events.clear();
   }
 }

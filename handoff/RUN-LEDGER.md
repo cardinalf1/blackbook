@@ -3,6 +3,6 @@
 Read this and `git log` first when resuming. Do not restart a phase.
 
 - Current phase: 2c (branch `claude/phase2c-telemetry`, from 2b537b8)
-- Current step: 1, interfaces
-- Last commit: 9ace59b fix(sync): reading a large local cache is progress, not a stall
-- Next step: commit the Phase 2c interfaces (src/types/session.ts, docs/telemetry.md), then launch the 2 Gemini writers
+- Current step: 7 done (storage, logger, metrics, store, wiring, both Gemini branches merged)
+- Last commit: see `git log -1` (feat(2c): deferred feedback, session records, event log)
+- Next step: 8, verification: telemetry-check script, browser run (20-question drill, reload/resume, server killed mid-drill, export, delete telemetry), event-log size report, then morning report, tag phase2c-done, RUN-REPORT section

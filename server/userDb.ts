@@ -1,15 +1,21 @@
-// User data on disk: attempts, flags and drill sessions in SQLite. Implements the same
-// AttemptStore contract the app uses, so the HTTP adapter is a thin pass-through.
+// User data on disk: sessions, attempts, flags and the event log in SQLite. Implements the same
+// store contracts the app uses, so the HTTP adapter is a thin pass-through.
 //
 // Schema version lives in SQLite's `PRAGMA user_version`. Each migration runs in its own
 // transaction and bumps the version; a database written by a newer app is refused, not guessed at.
 
-import type { AttemptStore } from '../src/services/storage/attemptTypes';
-import type { Attempt, FlagRecord, SessionRecord } from '../src/types/drill';
-import { transaction, type SqlDb } from './sql';
+import { isSessionV1, upgradeSessionV1 } from '../src/services/session/upgrade';
+import type { AttemptStore, SessionFilter, TelemetryStore } from '../src/services/storage/attemptTypes';
+import type { FlagRecord } from '../src/types/drill';
+import type { EventRecord, EventType, SessionRecord, StoredAttempt, TelemetryStats, UserDataExport } from '../src/types/session';
+import { transaction, type SqlDb, type SqlParam } from './sql';
+
+/** SQL text, or a function for steps SQL alone cannot do (rewriting stored JSON). */
+export type Migration = string | ((db: SqlDb) => void);
 
 /** Index i upgrades the schema from version i to i + 1. Append only; never edit a shipped one. */
-export const MIGRATIONS: readonly string[] = [
+export const MIGRATIONS: readonly Migration[] = [
+  // 1: Phase 2 drill data.
   `
   CREATE TABLE sessions (
     id TEXT PRIMARY KEY,
@@ -37,6 +43,56 @@ export const MIGRATIONS: readonly string[] = [
     at INTEGER NOT NULL
   );
   `,
+  // 2: Phase 2c. Session statuses and mode, draft attempts, the event log.
+  (db) => {
+    db.exec(`
+      CREATE TABLE sessions_v2 (
+        id TEXT PRIMARY KEY,
+        mode TEXT NOT NULL CHECK (mode IN ('drill', 'exam')),
+        status TEXT NOT NULL CHECK (status IN ('in_progress', 'finished', 'abandoned')),
+        started_at INTEGER NOT NULL,
+        finished_at INTEGER,
+        last_activity_at INTEGER NOT NULL,
+        data TEXT NOT NULL
+      );
+    `);
+    for (const row of db.all<{ data: string }>('SELECT data FROM sessions')) {
+      const raw = JSON.parse(row.data) as unknown;
+      const s = isSessionV1(raw) ? upgradeSessionV1(raw) : (raw as SessionRecord);
+      insertSession(db, 'sessions_v2', s);
+    }
+    db.exec(`
+      DROP TABLE sessions;
+      ALTER TABLE sessions_v2 RENAME TO sessions;
+      CREATE INDEX sessions_status ON sessions (status, mode, started_at);
+
+      -- Phase 2 attempts were graded on submit and asked once, so they are final, single-visit.
+      ALTER TABLE attempts ADD COLUMN mode TEXT NOT NULL DEFAULT 'drill' CHECK (mode IN ('drill', 'exam'));
+      ALTER TABLE attempts ADD COLUMN status TEXT NOT NULL DEFAULT 'final' CHECK (status IN ('draft', 'final'));
+      ALTER TABLE attempts ADD COLUMN first_visit_ms INTEGER;
+      ALTER TABLE attempts ADD COLUMN changes INTEGER NOT NULL DEFAULT 0 CHECK (changes >= 0);
+      ALTER TABLE attempts ADD COLUMN confidence TEXT CHECK (confidence IN ('guess', 'unsure', 'sure'));
+      UPDATE attempts SET first_visit_ms = time_ms;
+
+      CREATE TABLE events (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        mode TEXT NOT NULL CHECK (mode IN ('drill', 'exam')),
+        question_id TEXT,
+        type TEXT NOT NULL,
+        ts INTEGER NOT NULL,
+        mono_ms REAL NOT NULL,
+        page_id TEXT NOT NULL,
+        seq INTEGER NOT NULL,
+        payload TEXT NOT NULL
+      );
+      CREATE INDEX events_session ON events (session_id, ts, seq);
+      CREATE INDEX events_question ON events (question_id);
+      -- Append-only: rows can be deleted (Delete telemetry) but never changed.
+      CREATE TRIGGER events_append_only BEFORE UPDATE ON events
+        BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;
+    `);
+  },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
@@ -45,67 +101,166 @@ export function schemaVersion(db: SqlDb): number {
   return db.get<{ user_version: number }>('PRAGMA user_version')?.user_version ?? 0;
 }
 
-/** Brings the database up to SCHEMA_VERSION. Throws if it was written by a newer version. */
-export function migrate(db: SqlDb, migrations: readonly string[] = MIGRATIONS): void {
+/** Brings the database up to the latest version. Throws if it was written by a newer version. */
+export function migrate(db: SqlDb, migrations: readonly Migration[] = MIGRATIONS): void {
   const current = schemaVersion(db);
   if (current > migrations.length) {
     throw new Error(`This data was saved by a newer version of Blackbook (schema ${current}). Update Blackbook to open it.`);
   }
   for (let v = current; v < migrations.length; v++) {
     transaction(db, () => {
-      db.exec(migrations[v] as string);
+      const m = migrations[v] as Migration;
+      if (typeof m === 'string') db.exec(m);
+      else m(db);
       db.exec(`PRAGMA user_version = ${v + 1}`);
     });
   }
+}
+
+function insertSession(db: SqlDb, table: 'sessions' | 'sessions_v2', s: SessionRecord): void {
+  db.run(
+    `INSERT INTO ${table} (id, mode, status, started_at, finished_at, last_activity_at, data) VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (id) DO UPDATE SET mode = excluded.mode, status = excluded.status, started_at = excluded.started_at,
+       finished_at = excluded.finished_at, last_activity_at = excluded.last_activity_at, data = excluded.data`,
+    s.id,
+    s.mode,
+    s.status,
+    s.startedAt,
+    s.finishedAt,
+    s.lastActivityAt,
+    JSON.stringify(s),
+  );
 }
 
 interface AttemptRow {
   id: string;
   question_id: string;
   session_id: string;
+  mode: string;
+  status: string;
   response: string;
   correct: number;
   time_ms: number;
+  first_visit_ms: number | null;
+  changes: number;
+  confidence: string | null;
   at: number;
 }
 
-const toAttempt = (r: AttemptRow): Attempt => ({
+const toAttempt = (r: AttemptRow): StoredAttempt => ({
   id: r.id,
-  questionId: r.question_id,
   sessionId: r.session_id,
+  questionId: r.question_id,
+  mode: r.mode as StoredAttempt['mode'],
+  status: r.status as StoredAttempt['status'],
   response: r.response,
   correct: r.correct === 1,
   timeMs: r.time_ms,
+  firstVisitMs: r.first_visit_ms,
+  changes: r.changes,
+  confidence: r.confidence as StoredAttempt['confidence'],
   at: r.at,
 });
 
-export class SqliteUserStore implements AttemptStore {
+interface EventRow {
+  id: string;
+  session_id: string;
+  mode: string;
+  question_id: string | null;
+  type: string;
+  ts: number;
+  mono_ms: number;
+  page_id: string;
+  seq: number;
+  payload: string;
+}
+
+const toEvent = (r: EventRow): EventRecord => ({
+  id: r.id,
+  sessionId: r.session_id,
+  mode: r.mode as EventRecord['mode'],
+  questionId: r.question_id,
+  type: r.type as EventType,
+  ts: r.ts,
+  monoMs: r.mono_ms,
+  pageId: r.page_id,
+  seq: r.seq,
+  payload: JSON.parse(r.payload) as EventRecord['payload'],
+});
+
+/** Rough bytes per event row: the text columns plus four 8-byte numbers. Excludes index pages. */
+const EVENT_BYTES_SQL = `SELECT COUNT(*) AS n, COALESCE(SUM(
+  LENGTH(id) + LENGTH(session_id) + LENGTH(mode) + COALESCE(LENGTH(question_id), 0) + LENGTH(type) +
+  LENGTH(page_id) + LENGTH(payload) + 32), 0) AS bytes FROM events`;
+
+export class ClosedSessionError extends Error {
+  constructor() {
+    super('This session is already finished or discarded and cannot be changed.');
+    this.name = 'ClosedSessionError';
+  }
+}
+
+export class SqliteUserStore implements AttemptStore, TelemetryStore {
   constructor(private readonly db: SqlDb) {
     migrate(db);
   }
 
-  async addAttempt(a: Attempt): Promise<void> {
-    transaction(this.db, () =>
-      this.db.run(
-        `INSERT INTO attempts (id, question_id, session_id, response, correct, time_ms, at) VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (id) DO UPDATE SET response = excluded.response, correct = excluded.correct, time_ms = excluded.time_ms, at = excluded.at`,
-        a.id,
-        a.questionId,
-        a.sessionId,
-        a.response,
-        a.correct ? 1 : 0,
-        Math.max(0, Math.round(a.timeMs)),
-        a.at,
-      ),
-    );
+  async saveSession(s: SessionRecord, attempts: readonly StoredAttempt[] = []): Promise<void> {
+    transaction(this.db, () => {
+      // A finished or abandoned session is closed for good. Resending the identical record (a retry
+      // whose first reply was lost) is fine; anything else is refused.
+      const prev = this.db.get<{ status: string; data: string }>('SELECT status, data FROM sessions WHERE id = ?', s.id);
+      if (prev && prev.status !== 'in_progress' && prev.data !== JSON.stringify(s)) throw new ClosedSessionError();
+      insertSession(this.db, 'sessions', s);
+      for (const a of attempts) {
+        this.db.run(
+          `INSERT INTO attempts (id, question_id, session_id, mode, status, response, correct, time_ms, first_visit_ms, changes, confidence, at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET status = excluded.status, response = excluded.response, correct = excluded.correct,
+             time_ms = excluded.time_ms, first_visit_ms = excluded.first_visit_ms, changes = excluded.changes,
+             confidence = excluded.confidence, at = excluded.at`,
+          a.id,
+          a.questionId,
+          a.sessionId,
+          a.mode,
+          a.status,
+          a.response,
+          a.correct ? 1 : 0,
+          Math.max(0, Math.round(a.timeMs)),
+          a.firstVisitMs === null ? null : Math.max(0, Math.round(a.firstVisitMs)),
+          a.changes,
+          a.confidence,
+          a.at,
+        );
+      }
+    });
   }
 
-  async listAttempts(): Promise<Attempt[]> {
-    return this.db.all<AttemptRow>('SELECT * FROM attempts ORDER BY at').map(toAttempt);
+  async getSession(id: string): Promise<SessionRecord | null> {
+    const r = this.db.get<{ data: string }>('SELECT data FROM sessions WHERE id = ?', id);
+    return r ? (JSON.parse(r.data) as SessionRecord) : null;
   }
 
-  async attemptsForSession(sessionId: string): Promise<Attempt[]> {
-    return this.db.all<AttemptRow>('SELECT * FROM attempts WHERE session_id = ? ORDER BY at', sessionId).map(toAttempt);
+  async listSessions(filter: SessionFilter = {}): Promise<SessionRecord[]> {
+    const where: string[] = [];
+    const params: SqlParam[] = [];
+    if (filter.status) {
+      where.push('status = ?');
+      params.push(filter.status);
+    }
+    if (filter.mode) {
+      where.push('mode = ?');
+      params.push(filter.mode);
+    }
+    const sql = `SELECT data FROM sessions ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY started_at DESC`;
+    return this.db.all<{ data: string }>(sql, ...params).map((r) => JSON.parse(r.data) as SessionRecord);
+  }
+
+  async listAttempts(sessionId?: string): Promise<StoredAttempt[]> {
+    const rows = sessionId
+      ? this.db.all<AttemptRow>('SELECT * FROM attempts WHERE session_id = ? ORDER BY at, id', sessionId)
+      : this.db.all<AttemptRow>('SELECT * FROM attempts ORDER BY at, id');
+    return rows.map(toAttempt);
   }
 
   async setFlag(questionId: string, flagged: boolean): Promise<void> {
@@ -119,31 +274,55 @@ export class SqliteUserStore implements AttemptStore {
     return this.db.all<{ question_id: string; at: number }>('SELECT * FROM flags ORDER BY at').map((r) => ({ questionId: r.question_id, at: r.at }));
   }
 
-  async saveSession(s: SessionRecord): Promise<void> {
-    transaction(this.db, () =>
-      this.db.run(
-        `INSERT INTO sessions (id, status, started_at, data) VALUES (?, ?, ?, ?)
-         ON CONFLICT (id) DO UPDATE SET status = excluded.status, started_at = excluded.started_at, data = excluded.data`,
-        s.id,
-        s.status,
-        s.startedAt,
-        JSON.stringify(s),
-      ),
-    );
+  async appendEvents(events: readonly EventRecord[]): Promise<void> {
+    if (events.length === 0) return;
+    transaction(this.db, () => {
+      for (const e of events) {
+        this.db.run(
+          `INSERT OR IGNORE INTO events (id, session_id, mode, question_id, type, ts, mono_ms, page_id, seq, payload)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          e.id,
+          e.sessionId,
+          e.mode,
+          e.questionId,
+          e.type,
+          e.ts,
+          e.monoMs,
+          e.pageId,
+          e.seq,
+          JSON.stringify(e.payload),
+        );
+      }
+    });
   }
 
-  async getActiveSession(): Promise<SessionRecord | null> {
-    const r = this.db.get<{ data: string }>("SELECT data FROM sessions WHERE status = 'active' ORDER BY started_at DESC LIMIT 1");
-    return r ? (JSON.parse(r.data) as SessionRecord) : null;
+  async listEvents(sessionId?: string): Promise<EventRecord[]> {
+    const order = 'ORDER BY ts, page_id, seq';
+    const rows = sessionId
+      ? this.db.all<EventRow>(`SELECT * FROM events WHERE session_id = ? ${order}`, sessionId)
+      : this.db.all<EventRow>(`SELECT * FROM events ${order}`);
+    return rows.map(toEvent);
   }
 
-  async getSession(id: string): Promise<SessionRecord | null> {
-    const r = this.db.get<{ data: string }>('SELECT data FROM sessions WHERE id = ?', id);
-    return r ? (JSON.parse(r.data) as SessionRecord) : null;
+  async clearEvents(): Promise<void> {
+    transaction(this.db, () => this.db.run('DELETE FROM events'));
   }
 
-  async deleteSession(id: string): Promise<void> {
-    transaction(this.db, () => this.db.run('DELETE FROM sessions WHERE id = ?', id));
+  async stats(): Promise<TelemetryStats> {
+    const ev = this.db.get<{ n: number; bytes: number }>(EVENT_BYTES_SQL) ?? { n: 0, bytes: 0 };
+    const count = (table: 'sessions' | 'attempts') => this.db.get<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`)?.n ?? 0;
+    return { events: Number(ev.n), eventBytes: Number(ev.bytes), sessions: Number(count('sessions')), attempts: Number(count('attempts')) };
+  }
+
+  async exportAll(): Promise<UserDataExport> {
+    return {
+      app: 'blackbook',
+      exportedAt: new Date().toISOString(),
+      schemaVersion: SCHEMA_VERSION,
+      sessions: await this.listSessions(),
+      attempts: await this.listAttempts(),
+      events: await this.listEvents(),
+    };
   }
 
   async clearAll(): Promise<void> {
@@ -151,6 +330,7 @@ export class SqliteUserStore implements AttemptStore {
       this.db.run('DELETE FROM attempts');
       this.db.run('DELETE FROM flags');
       this.db.run('DELETE FROM sessions');
+      this.db.run('DELETE FROM events');
     });
   }
 }

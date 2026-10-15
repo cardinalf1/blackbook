@@ -1,6 +1,7 @@
 // Picks the questions for a drill session. Pure: attempts and randomness come in as arguments.
 
-import type { Attempt, DrillConfig, QuestionFacet } from '../../types/drill';
+import type { DrillConfig, QuestionFacet } from '../../types/drill';
+import type { StoredAttempt } from '../../types/session';
 import { matchingFacets } from './facets';
 
 export type Rng = () => number;
@@ -23,18 +24,18 @@ function shuffle<T>(items: readonly T[], rng: Rng): T[] {
 export function selectQuestionIds(
   facets: readonly QuestionFacet[],
   config: DrillConfig,
-  attempts: readonly Attempt[],
+  attempts: readonly StoredAttempt[],
   rng: Rng = Math.random,
 ): string[] {
-  const latest = new Map<string, Attempt>();
+  const latest = new Map<string, StoredAttempt>();
   for (const a of attempts) {
     const prev = latest.get(a.questionId);
     if (!prev || a.at > prev.at) latest.set(a.questionId, a);
   }
 
   const unseen: string[] = [];
-  const wrong: Attempt[] = [];
-  const right: Attempt[] = [];
+  const wrong: StoredAttempt[] = [];
+  const right: StoredAttempt[] = [];
   for (const f of matchingFacets(facets, config)) {
     const last = latest.get(f.id);
     if (!last) unseen.push(f.id);
@@ -42,6 +43,6 @@ export function selectQuestionIds(
   }
 
   // Equal timestamps are shuffled first so the (stable) sort leaves their order random.
-  const byAge = (list: Attempt[]) => shuffle(list, rng).sort((a, b) => a.at - b.at).map((a) => a.questionId);
+  const byAge = (list: StoredAttempt[]) => shuffle(list, rng).sort((a, b) => a.at - b.at).map((a) => a.questionId);
   return [...shuffle(unseen, rng), ...byAge(wrong), ...byAge(right)].slice(0, Math.max(0, config.count));
 }

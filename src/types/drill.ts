@@ -1,7 +1,7 @@
-// Types for drill mode (Phase 2): configuration, stored user data, derived statistics and the
-// props contracts that UI screens are built against. Question content lives in sat.ts.
+// Types for drill mode: configuration, facets, derived statistics and the props contracts the
+// setup and skills screens are built against. Sessions, attempts and telemetry are in session.ts.
 
-import type { ChoiceLetter, Difficulty, Section } from './sat';
+import type { Difficulty, Section } from './sat';
 
 /** What the user chose on the setup screen. Empty skillCodes means every skill in the domain. */
 export interface DrillConfig {
@@ -50,63 +50,9 @@ export interface TaxonomySection {
   domains: TaxonomyDomain[];
 }
 
-/** One answered question, as stored. Keyed by question id only so it survives bank re-imports. */
-export interface Attempt {
-  /** `${sessionId}:${questionId}`. One attempt per question per session. */
-  id: string;
-  questionId: string;
-  /** Choice letter for multiple choice, the typed text for student-produced response. */
-  response: string;
-  correct: boolean;
-  /** Focus time with the question visible, in milliseconds. */
-  timeMs: number;
-  sessionId: string;
-  /** Epoch ms when submitted. */
-  at: number;
-}
-
 export interface FlagRecord {
   questionId: string;
   at: number;
-}
-
-export type AnsweredEntry = Pick<Attempt, 'response' | 'correct' | 'timeMs' | 'at'>;
-
-export type SessionStatus = 'active' | 'finished';
-
-/** A drill session, saved after every action so a closed tab can resume. */
-export interface SessionRecord {
-  id: string;
-  config: DrillConfig;
-  /** Question ids in the order they are asked. Fixed when the session starts. */
-  queueIds: string[];
-  /** Index of the question on screen. */
-  index: number;
-  startedAt: number;
-  status: SessionStatus;
-  /** Answered questions by id, so feedback can be shown again after a resume. */
-  answered: Record<string, AnsweredEntry>;
-  /** Struck-out choices by question id. */
-  struck: Record<string, ChoiceLetter[]>;
-  /** Focus time already spent on the unanswered question at `index`. */
-  currentElapsedMs: number;
-}
-
-/** Per-question line in an end-of-session summary. */
-export interface SummaryItem {
-  questionId: string;
-  displayId: string;
-  skill: string;
-  correct: boolean;
-  timeMs: number;
-}
-
-export interface SessionSummary {
-  total: number;
-  correct: number;
-  totalTimeMs: number;
-  /** In the order asked. */
-  items: SummaryItem[];
 }
 
 export interface SkillStatRow {
@@ -133,14 +79,6 @@ export interface DrillSetupProps {
   /** Called with a config whose count is already capped (see capCount in services/drill/facets). */
   onStart: (config: DrillConfig) => void;
   onCancel: () => void;
-}
-
-export interface DrillResultsProps {
-  summary: SessionSummary;
-  /** Opens the question with its explanation. */
-  onReview: (questionId: string) => void;
-  onDone: () => void;
-  onMySkills: () => void;
 }
 
 export interface MySkillsProps {

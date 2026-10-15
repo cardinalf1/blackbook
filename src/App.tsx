@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { DownloadController } from './components/download/DownloadController';
-import { DrillFlow } from './components/drill/DrillFlow';
+import { DrillFlow, type DrillStart } from './components/drill/DrillFlow';
 import { ImportPanel } from './components/ImportPanel';
 import { QuestionBrowser } from './components/QuestionBrowser';
 import { QuestionView } from './components/QuestionView';
 import { DOWNLOAD_ENABLED } from './config';
 import { api, ApiError, initApiAuth } from './services/api/client';
 import { questionStore, type BankMeta } from './services/storage';
+import { answeredCount } from './services/session/record';
+import { startTelemetry } from './services/telemetry';
 import { drillStore, useDrill } from './stores/drillStore';
 import type { Question } from './types/sat';
 
@@ -19,7 +21,7 @@ type View =
   | { kind: 'home'; meta: BankMeta | null; count: number }
   | { kind: 'practice'; questions: Question[]; index: number }
   | { kind: 'browse' }
-  | { kind: 'drill'; startAt: 'setup' | 'play' | 'skills' };
+  | { kind: 'drill'; startAt: DrillStart };
 
 function sample<T>(items: readonly T[], n: number): T[] {
   const a = [...items];
@@ -33,12 +35,13 @@ function sample<T>(items: readonly T[], n: number): T[] {
 export default function App() {
   const [view, setView] = useState<View>({ kind: 'loading' });
   const [error, setError] = useState<string | null>(null);
-  const resumable = useDrill((s) => s.resumable);
+  const resumable = useDrill((s) => s.inProgress[0] ?? null);
 
   const loadHome = useCallback(async () => {
     setError(null);
     try {
       await initApiAuth();
+      startTelemetry();
       const [meta, count] = await Promise.all([questionStore.getMeta(), questionStore.count(), drillStore.getState().init()]).then(
         ([m, c]) => [m, c] as const,
       );
@@ -115,6 +118,20 @@ export default function App() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setView({ kind: 'drill', startAt: 'past' })}
+                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
+                >
+                  Past drills
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setView({ kind: 'drill', startAt: 'data' })}
+                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
+                >
+                  Your data
+                </button>
+                <button
+                  type="button"
                   onClick={() => setView({ kind: 'browse' })}
                   className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
                 >
@@ -133,7 +150,7 @@ export default function App() {
           {resumable && view.count > 0 && (
             <section className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-900/50 bg-amber-950/30 p-4 text-sm text-amber-200">
               <span>
-                You have an unfinished drill ({Object.keys(resumable.answered).length} of {resumable.queueIds.length} answered).
+                You have an unfinished drill ({answeredCount(resumable)} of {resumable.queueIds.length} answered).
               </span>
               <div className="ml-auto flex gap-2">
                 <button
@@ -141,17 +158,23 @@ export default function App() {
                   onClick={() => {
                     void drillStore
                       .getState()
-                      .resume()
-                      .then(() => setView({ kind: 'drill', startAt: 'play' }));
+                      .resume(resumable.id)
+                      .then(() => {
+                        if (drillStore.getState().session) setView({ kind: 'drill', startAt: 'play' });
+                      });
                   }}
-                  className="rounded-md bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-900"
+                  className="rounded-md bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
                 >
                   Resume
                 </button>
                 <button
                   type="button"
-                  onClick={() => void drillStore.getState().discardResumable()}
-                  className="rounded-md border border-[#27272A] px-3 py-1 text-xs text-zinc-200 hover:border-zinc-500"
+                  onClick={() => {
+                    if (window.confirm('Discard this unfinished drill? It is kept as abandoned and will not count toward your skills.')) {
+                      void drillStore.getState().discard(resumable.id);
+                    }
+                  }}
+                  className="rounded-md border border-[#27272A] px-3 py-1 text-xs text-zinc-200 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
                 >
                   Discard
                 </button>

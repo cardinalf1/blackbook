@@ -10,7 +10,8 @@ import { createSanitizer } from '../src/services/normalize/sanitize';
 import { LIMITS } from '../src/services/sync/limits';
 import type { PipelineDeps } from '../src/services/sync/pipeline';
 import type { DownloadProgress } from '../src/types/download';
-import type { Attempt, SessionRecord } from '../src/types/drill';
+import { createSession, finish } from '../src/services/session/record';
+import type { EventRecord, SessionRecord, StoredAttempt } from '../src/types/session';
 import type { Question } from '../src/types/sat';
 import { createHandler } from './app';
 import { DiskBankStore } from './bankStore';
@@ -48,8 +49,13 @@ afterEach(async () => {
 
 const q = (id: string, over: Partial<Question> = {}): Question => ({ ...(fx.syntheticQuestions[0] as Question), id, ...over });
 
-function attempt(id: string, over: Partial<Attempt> = {}): Attempt {
-  return { id, questionId: 'q1', response: 'A', correct: true, timeMs: 1200, sessionId: 's1', at: 1, ...over };
+const CONFIG = { section: 'math' as const, domainCode: 'all', skillCodes: [], difficulties: [], count: 1, liveOnly: true };
+const newSession = (id: string): SessionRecord => createSession(id, 'drill', CONFIG, ['q1'], 1);
+function attempt(sessionId: string, questionId: string, over: Partial<StoredAttempt> = {}): StoredAttempt {
+  return {
+    id: `${sessionId}:${questionId}`, sessionId, questionId, mode: 'drill', status: 'draft', response: 'A', correct: true,
+    timeMs: 1200, firstVisitMs: null, changes: 0, confidence: null, at: 1, ...over,
+  };
 }
 
 describe('SQLite user store', () => {
@@ -65,11 +71,11 @@ describe('SQLite user store', () => {
   it('applies new migrations in order and rolls a failing one back', async () => {
     const db = openSqlite(join(dir, 'm.db'));
     migrate(db, MIGRATIONS);
-    const v2 = [...MIGRATIONS, 'ALTER TABLE flags ADD COLUMN note TEXT;'];
-    migrate(db, v2);
-    expect(schemaVersion(db)).toBe(2);
-    expect(() => migrate(db, [...v2, 'CREATE TABLE ok (a); CREATE TABLE broken ('])).toThrow();
-    expect(schemaVersion(db)).toBe(2);
+    const next = [...MIGRATIONS, 'ALTER TABLE flags ADD COLUMN note TEXT;'];
+    migrate(db, next);
+    expect(schemaVersion(db)).toBe(MIGRATIONS.length + 1);
+    expect(() => migrate(db, [...next, 'CREATE TABLE ok (a); CREATE TABLE broken ('])).toThrow();
+    expect(schemaVersion(db)).toBe(MIGRATIONS.length + 1);
     expect(db.get('SELECT name FROM sqlite_master WHERE name = ?', 'ok')).toBeUndefined();
     db.close();
   });
@@ -81,23 +87,55 @@ describe('SQLite user store', () => {
     db.close();
   });
 
-  it('round-trips attempts, flags and sessions and survives reopening', async () => {
+  it('round-trips sessions, attempts, flags and events and survives reopening', async () => {
     const path = join(dir, 'u.db');
     const store = new SqliteUserStore(openSqlite(path));
-    await store.addAttempt(attempt('s1:q1'));
-    await store.addAttempt(attempt('s1:q1', { correct: false })); // same id: updated, not duplicated
-    await store.addAttempt(attempt('s2:q2', { sessionId: 's2', questionId: 'q2' }));
+    await store.saveSession(newSession('s1'), [attempt('s1', 'q1')]);
+    await store.saveSession(newSession('s1'), [attempt('s1', 'q1', { correct: false, status: 'final' })]); // same id: updated
+    await store.saveSession(newSession('s2'), [attempt('s2', 'q2')]);
     await store.setFlag('q9', true);
-    const session = { id: 's1', status: 'active', startedAt: 5, index: 0, queueIds: ['q1'], answered: {}, struck: {}, currentElapsedMs: 0 } as unknown as SessionRecord;
-    await store.saveSession(session);
+    const ev: EventRecord = { id: 'e1', sessionId: 's1', mode: 'drill', questionId: null, type: 'tab_hidden', ts: 1, monoMs: 2.5, pageId: 'p', seq: 0, payload: {} };
+    await store.appendEvents([ev]);
 
     const again = new SqliteUserStore(openSqlite(path));
     expect(await again.listAttempts()).toHaveLength(2);
-    expect((await again.attemptsForSession('s1'))[0]?.correct).toBe(false);
+    expect((await again.listAttempts('s1'))[0]).toMatchObject({ correct: false, status: 'final' });
     expect((await again.listFlags()).map((f) => f.questionId)).toEqual(['q9']);
-    expect((await again.getActiveSession())?.id).toBe('s1');
-    await again.deleteSession('s1');
-    expect(await again.listAttempts()).toHaveLength(2); // deleting a session never deletes answers
+    expect((await again.listSessions({ status: 'in_progress' })).map((x) => x.id).sort()).toEqual(['s1', 's2']);
+    expect(await again.listEvents()).toEqual([ev]);
+  });
+
+  it('upgrades Phase 2 data: old sessions and attempts survive with the new shape', async () => {
+    const db = openSqlite(join(dir, 'old.db'));
+    migrate(db, MIGRATIONS.slice(0, 1));
+    const v1 = (id: string, status: string, answered: Record<string, unknown>, index: number) =>
+      JSON.stringify({ id, config: CONFIG, queueIds: ['q1', 'q2'], index, startedAt: 100, status, answered, struck: { q2: ['C'] }, currentElapsedMs: 700 });
+    const finishedAnswers = {
+      q1: { response: 'A', correct: true, timeMs: 3000, at: 200 },
+      q2: { response: 'B', correct: false, timeMs: 4000, at: 300 },
+    };
+    db.run('INSERT INTO sessions VALUES (?, ?, ?, ?)', 'old-done', 'finished', 100, v1('old-done', 'finished', finishedAnswers, 1));
+    db.run('INSERT INTO sessions VALUES (?, ?, ?, ?)', 'old-open', 'active', 100, v1('old-open', 'active', { q1: { response: '1/2', correct: true, timeMs: 1000, at: 150 } }, 1));
+    db.run('INSERT INTO attempts VALUES (?, ?, ?, ?, ?, ?, ?)', 'old-done:q1', 'q1', 'old-done', 'A', 1, 3000, 200);
+
+    const store = new SqliteUserStore(db);
+    expect(schemaVersion(db)).toBe(MIGRATIONS.length);
+    const done = await store.getSession('old-done');
+    expect(done).toMatchObject({ version: 2, mode: 'drill', status: 'finished', finishedAt: 300, score: { correct: 1, total: 2 }, totalActiveMs: 7000 });
+    expect(done?.progress.q2).toMatchObject({ response: 'B', struck: ['C'], activeMs: 4000, firstVisitMs: 4000, visits: 1 });
+    const open = await store.getSession('old-open');
+    expect(open).toMatchObject({ status: 'in_progress', index: 1, score: null, finishedAt: null });
+    expect(open?.progress.q2).toMatchObject({ response: null, activeMs: 700, firstVisitMs: null });
+    expect((await store.listAttempts())[0]).toMatchObject({ mode: 'drill', status: 'final', firstVisitMs: 3000, changes: 0, confidence: null });
+  });
+
+  it('keeps the event log append-only', async () => {
+    const db = openSqlite(join(dir, 'e.db'));
+    const store = new SqliteUserStore(db);
+    await store.appendEvents([{ id: 'e1', sessionId: 's', mode: 'drill', questionId: null, type: 'tab_hidden', ts: 1, monoMs: 1, pageId: 'p', seq: 0, payload: {} }]);
+    expect(() => db.run("UPDATE events SET type = 'tab_visible'")).toThrow(/append-only/);
+    await store.clearEvents();
+    expect(await store.listEvents()).toEqual([]);
   });
 
   it('rolls back a transaction that fails part way', async () => {
@@ -228,18 +266,37 @@ describe('local API security', () => {
 });
 
 describe('local API', () => {
-  it('stores attempts, flags and sessions, and rejects malformed input', async () => {
+  it('stores sessions with attempts, flags and events, and rejects malformed input', async () => {
     const { call } = await setup();
-    expect((await call('/api/attempts', { method: 'POST', body: JSON.stringify(attempt('s1:q1')) })).status).toBe(200);
-    expect((await call('/api/attempts', { method: 'POST', body: JSON.stringify({ id: 'x' }) })).status).toBe(400);
-    expect((await call('/api/attempts', { method: 'POST', body: '{not json' })).status).toBe(400);
+    const put = (id: string, body: unknown) => call(`/api/sessions/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    expect((await put('s1', { session: newSession('s1'), attempts: [attempt('s1', 'q1')] })).status).toBe(200);
+    expect((await put('s2', { session: newSession('s1') })).status).toBe(400); // id mismatch
+    expect((await put('s1', { session: { ...newSession('s1'), status: 'active' } })).status).toBe(400);
+    expect((await put('s1', { session: newSession('s1'), attempts: [attempt('other', 'q1')] })).status).toBe(400);
+    expect((await put('s1', { session: newSession('s1'), attempts: [{ ...attempt('s1', 'q1'), status: 'maybe' }] })).status).toBe(400);
+    expect((await call('/api/sessions/s1', { method: 'PUT', body: '{not json' })).status).toBe(400);
     expect(await (await call('/api/attempts?sessionId=s1')).json()).toHaveLength(1);
+    expect(await (await call('/api/sessions?status=in_progress&mode=drill')).json()).toMatchObject([{ id: 's1' }]);
+
+    const done = finish(newSession('s1'), 10, () => true, 5);
+    expect((await put('s1', { session: done })).status).toBe(200);
+    expect((await put('s1', { session: { ...done, totalActiveMs: 99 } })).status).toBe(409);
+
     await call('/api/flags/q7', { method: 'PUT', body: JSON.stringify({ flagged: true }) });
     expect(await (await call('/api/flags')).json()).toMatchObject([{ questionId: 'q7' }]);
-    const s = { id: 's1', status: 'active', startedAt: 1, index: 0, queueIds: ['q1'], answered: {}, struck: {}, currentElapsedMs: 0, config: {} };
-    expect((await call('/api/sessions/s1', { method: 'PUT', body: JSON.stringify(s) })).status).toBe(200);
-    expect((await call('/api/sessions/s2', { method: 'PUT', body: JSON.stringify(s) })).status).toBe(400);
-    expect(await (await call('/api/sessions/active')).json()).toMatchObject({ id: 's1' });
+
+    const ev = { id: 'e1', sessionId: 's1', mode: 'drill', questionId: 'q1', type: 'nav_next', ts: 1, monoMs: 1, pageId: 'p', seq: 0, payload: { from: 0 } };
+    const post = (events: unknown[]) => call('/api/events', { method: 'POST', body: JSON.stringify({ events }) });
+    expect((await post([ev])).status).toBe(200);
+    expect((await post([{ ...ev, type: 'mouse_moved' }])).status).toBe(400);
+    expect((await post([{ ...ev, payload: { x: 'y'.repeat(3000) } }])).status).toBe(400);
+    expect(await (await call('/api/events?sessionId=s1')).json()).toHaveLength(1);
+    expect(await (await call('/api/data/stats')).json()).toMatchObject({ events: 1, sessions: 1, attempts: 1 });
+    const exported = await call('/api/data/export');
+    expect(exported.headers.get('content-disposition')).toContain('blackbook-data.json');
+    expect(await exported.json()).toMatchObject({ app: 'blackbook', sessions: [{ id: 's1' }] });
+    expect((await call('/api/events', { method: 'DELETE' })).status).toBe(200);
+    expect(await (await call('/api/data/stats')).json()).toMatchObject({ events: 0, attempts: 1 });
   });
 
   it('imports a bank file atomically and serves it', async () => {

@@ -1,24 +1,52 @@
-import type { Attempt, FlagRecord, SessionRecord } from '../../types/drill';
+import type { FlagRecord } from '../../types/drill';
+import type {
+  EventRecord,
+  SessionMode,
+  SessionRecord,
+  SessionStatus,
+  StoredAttempt,
+  TelemetryStats,
+  UserDataExport,
+} from '../../types/session';
+
+export interface SessionFilter {
+  status?: SessionStatus;
+  mode?: SessionMode;
+}
 
 /**
- * User data: attempts, flags and drill sessions. Kept apart from the question bank, so replacing
- * the bank never touches it. UI and services use this interface, never IndexedDB (AGENTS.md rule 6).
+ * User data: sessions, attempts, flags and the event log. Kept apart from the question bank, so
+ * replacing the bank never touches it. UI and services use this interface only (AGENTS.md rule 6).
+ * Sessions are never deleted one by one: discarding marks a session abandoned.
  */
 export interface AttemptStore {
-  /** Idempotent on `attempt.id`. */
-  addAttempt(attempt: Attempt): Promise<void>;
-  listAttempts(): Promise<Attempt[]>;
-  attemptsForSession(sessionId: string): Promise<Attempt[]>;
+  /**
+   * Saves a session and the attempts that changed with it, in one transaction: either both are
+   * stored or neither is. Attempts are upserted on `attempt.id`.
+   */
+  saveSession(session: SessionRecord, attempts?: readonly StoredAttempt[]): Promise<void>;
+  getSession(id: string): Promise<SessionRecord | null>;
+  /** Newest started first. */
+  listSessions(filter?: SessionFilter): Promise<SessionRecord[]>;
+  /** Oldest first. */
+  listAttempts(sessionId?: string): Promise<StoredAttempt[]>;
 
+  /** "Flag for later" across sessions. A session's own flags live in its record. */
   setFlag(questionId: string, flagged: boolean): Promise<void>;
   listFlags(): Promise<FlagRecord[]>;
 
-  saveSession(session: SessionRecord): Promise<void>;
-  /** The most recently started session whose status is 'active', if any. */
-  getActiveSession(): Promise<SessionRecord | null>;
-  getSession(id: string): Promise<SessionRecord | null>;
-  deleteSession(id: string): Promise<void>;
-
-  /** Removes attempts, flags and sessions. */
+  /** Removes sessions, attempts, flags and events. */
   clearAll(): Promise<void>;
+}
+
+/** The append-only event log. */
+export interface TelemetryStore {
+  /** Idempotent on `event.id`: sending the same event twice stores it once. */
+  appendEvents(events: readonly EventRecord[], opts?: { keepalive?: boolean }): Promise<void>;
+  /** In logged order (wall time, then page and sequence). All sessions when no id is given. */
+  listEvents(sessionId?: string): Promise<EventRecord[]>;
+  /** Deletes the event log only. Sessions and attempts stay. */
+  clearEvents(): Promise<void>;
+  stats(): Promise<TelemetryStats>;
+  exportAll(): Promise<UserDataExport>;
 }

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { MIN_TRUSTED_ATTEMPTS, type Attempt, type DrillConfig, type QuestionFacet, type SessionRecord } from '../../types/drill';
+import { MIN_TRUSTED_ATTEMPTS, type DrillConfig, type QuestionFacet } from '../../types/drill';
+import type { SessionRecord, StoredAttempt } from '../../types/session';
+import { createSession, finish } from '../session/record';
 import type { Difficulty, Section } from '../../types/sat';
-import { MemoryAttemptStore } from '../storage/attemptsMemory';
 import { buildTaxonomy, capCount, matchingCount } from './facets';
 import { selectQuestionIds } from './select';
-import { computeSkillStats, summarizeSession } from './stats';
+import { computeSkillStats, countableAttempts } from './stats';
 
 // Synthetic facets only: 2 sections x 2 domains x 2 skills x 3 difficulties, every 4th inactive.
 function makeFacets(): QuestionFacet[] {
@@ -46,9 +47,23 @@ function seeded(seed: number) {
 }
 
 let attemptSeq = 0;
-function attempt(questionId: string, correct: boolean, at: number, extra: Partial<Attempt> = {}): Attempt {
+function attempt(questionId: string, correct: boolean, at: number, extra: Partial<StoredAttempt> = {}): StoredAttempt {
   attemptSeq++;
-  return { id: `s:${questionId}:${attemptSeq}`, questionId, response: 'A', correct, timeMs: 1000, sessionId: 's', at, ...extra };
+  return {
+    id: `s:${questionId}:${attemptSeq}`,
+    sessionId: 's',
+    questionId,
+    mode: 'drill',
+    status: 'final',
+    response: 'A',
+    correct,
+    timeMs: 1000,
+    firstVisitMs: 1000,
+    changes: 0,
+    confidence: null,
+    at,
+    ...extra,
+  };
 }
 
 describe('facets', () => {
@@ -124,7 +139,7 @@ describe('selectQuestionIds', () => {
 describe('computeSkillStats', () => {
   it('cross-checks against a brute-force count over random attempts', () => {
     const rng = seeded(42);
-    const attempts: Attempt[] = [];
+    const attempts: StoredAttempt[] = [];
     for (let i = 0; i < 500; i++) {
       const f = facets[Math.floor(rng() * facets.length)] as QuestionFacet;
       attempts.push(attempt(f.id, rng() < 0.6, i, { timeMs: Math.floor(rng() * 90000) }));
@@ -162,63 +177,25 @@ describe('computeSkillStats', () => {
   });
 });
 
-describe('summarizeSession', () => {
-  const session: SessionRecord = {
-    id: 's',
-    config: base,
-    queueIds: ['q1', 'q2', 'q3'],
-    index: 2,
-    startedAt: 0,
-    status: 'active',
-    answered: {
-      q1: { response: 'A', correct: true, timeMs: 1000, at: 1 },
-      q2: { response: 'B', correct: false, timeMs: 3000, at: 2 },
-    },
-    struck: {},
-    currentElapsedMs: 0,
+describe('countableAttempts', () => {
+  const mk = (id: string, mode: SessionRecord['mode'], status: 'in_progress' | 'finished' | 'abandoned'): SessionRecord => {
+    const s = createSession(id, mode, base, ['q1', 'q2'], 0);
+    if (status === 'finished') return finish(s, 0, () => true, 1);
+    return { ...s, status };
   };
+  const sessions = [mk('done', 'drill', 'finished'), mk('open', 'drill', 'in_progress'), mk('gone', 'drill', 'abandoned'), mk('exam', 'exam', 'finished')];
 
-  it('summarizes answered questions in queue order', () => {
-    const info = new Map([['q1', { displayId: 'x1', skill: 'k1' }], ['q2', { displayId: 'x2', skill: 'k2' }]]);
-    const s = summarizeSession(session, info);
-    expect(s.total).toBe(2);
-    expect(s.correct).toBe(1);
-    expect(s.totalTimeMs).toBe(4000);
-    expect(s.items.map((i) => i.displayId)).toEqual(['x1', 'x2']);
-  });
-});
-
-describe('MemoryAttemptStore', () => {
-  it('keeps attempts independent of any question bank and is idempotent on id', async () => {
-    const store = new MemoryAttemptStore();
-    const a = attempt('q1', true, 1, { id: 'fixed' });
-    await store.addAttempt(a);
-    await store.addAttempt({ ...a, correct: false });
-    const all = await store.listAttempts();
-    expect(all).toHaveLength(1);
-    expect(all[0]?.correct).toBe(false);
-    expect(await store.attemptsForSession('s')).toHaveLength(1);
-    expect(await store.attemptsForSession('other')).toHaveLength(0);
-  });
-
-  it('stores flags and returns only the newest active session', async () => {
-    const store = new MemoryAttemptStore();
-    await store.setFlag('q1', true);
-    await store.setFlag('q2', true);
-    await store.setFlag('q1', false);
-    expect((await store.listFlags()).map((f) => f.questionId)).toEqual(['q2']);
-
-    const mk = (id: string, startedAt: number, status: SessionRecord['status']): SessionRecord => ({
-      id, config: base, queueIds: [], index: 0, startedAt, status, answered: {}, struck: {}, currentElapsedMs: 0,
-    });
-    await store.saveSession(mk('old', 1, 'active'));
-    await store.saveSession(mk('new', 2, 'active'));
-    await store.saveSession(mk('done', 3, 'finished'));
-    expect((await store.getActiveSession())?.id).toBe('new');
-    await store.deleteSession('new');
-    expect((await store.getActiveSession())?.id).toBe('old');
-    await store.clearAll();
-    expect(await store.getActiveSession()).toBeNull();
-    expect(await store.listAttempts()).toEqual([]);
+  it('keeps only final, answered drill attempts from finished drill sessions', () => {
+    const list = [
+      attempt('q1', true, 1, { sessionId: 'done' }),
+      attempt('q2', true, 2, { sessionId: 'done', status: 'draft' }),
+      attempt('q2', true, 3, { sessionId: 'done', response: '' }),
+      attempt('q1', true, 4, { sessionId: 'open' }),
+      attempt('q1', true, 5, { sessionId: 'gone' }),
+      attempt('q1', true, 6, { sessionId: 'exam', mode: 'exam' }),
+      attempt('q1', true, 7, { sessionId: 'no-such-session' }),
+    ];
+    expect(countableAttempts(list, sessions, 'drill').map((a) => a.at)).toEqual([1]);
+    expect(countableAttempts(list, sessions, 'exam').map((a) => a.at)).toEqual([6]);
   });
 });

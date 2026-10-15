@@ -8,14 +8,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fx from '../src/services/__fixtures__/synthetic';
 import { ApiError, createApiClient, SERVER_DOWN } from '../src/services/api/client';
 import { createSanitizer } from '../src/services/normalize/sanitize';
-import type { AttemptStore } from '../src/services/storage/attemptTypes';
+import type { AttemptStore, TelemetryStore } from '../src/services/storage/attemptTypes';
 import { MemoryAttemptStore } from '../src/services/storage/attemptsMemory';
 import { HttpAttemptStore, HttpQuestionStore } from '../src/services/storage/http';
 import { MemoryQuestionStore } from '../src/services/storage/memory';
 import type { QuestionStore, WritableQuestionStore } from '../src/services/storage/types';
 import type { PipelineDeps } from '../src/services/sync/pipeline';
-import type { SessionRecord } from '../src/types/drill';
+import { createSession, finish } from '../src/services/session/record';
 import type { Question } from '../src/types/sat';
+import type { EventRecord, SessionRecord, StoredAttempt } from '../src/types/session';
 import { createHandler } from './app';
 import { DiskBankStore } from './bankStore';
 import { DownloadManager } from './download';
@@ -38,7 +39,9 @@ afterEach(async () => {
 const HOST = '127.0.0.1:47821';
 const TOKEN = 'contract-token';
 
-async function httpStores(): Promise<{ questions: QuestionStore; attempts: AttemptStore; bank: WritableQuestionStore }> {
+type UserStores = AttemptStore & TelemetryStore;
+
+async function httpStores(): Promise<{ questions: QuestionStore; attempts: UserStores; bank: WritableQuestionStore }> {
   const bank = new DiskBankStore(join(dir, 'bank.json'));
   db = openSqlite(join(dir, 'user.db'));
   const handler = createHandler({
@@ -63,20 +66,39 @@ async function httpStores(): Promise<{ questions: QuestionStore; attempts: Attem
 
 async function memoryStores() {
   const bank = new MemoryQuestionStore();
-  return { questions: bank as QuestionStore, attempts: new MemoryAttemptStore() as AttemptStore, bank: bank as WritableQuestionStore };
+  return { questions: bank as QuestionStore, attempts: new MemoryAttemptStore() as UserStores, bank: bank as WritableQuestionStore };
 }
 
 const q = (id: string, over: Partial<Question> = {}): Question => ({ ...(fx.syntheticQuestions[0] as Question), id, ...over });
-const session = (id: string, startedAt: number, status: SessionRecord['status'] = 'active'): SessionRecord => ({
+const CONFIG = { section: 'math' as const, domainCode: 'all', skillCodes: [], difficulties: [], count: 2, liveOnly: true };
+const session = (id: string, startedAt: number, mode: SessionRecord['mode'] = 'drill'): SessionRecord =>
+  createSession(id, mode, CONFIG, ['a', 'b'], startedAt);
+const stored = (sessionId: string, questionId: string, over: Partial<StoredAttempt> = {}): StoredAttempt => ({
+  id: `${sessionId}:${questionId}`,
+  sessionId,
+  questionId,
+  mode: 'drill',
+  status: 'draft',
+  response: '1/2',
+  correct: true,
+  timeMs: 900,
+  firstVisitMs: null,
+  changes: 0,
+  confidence: null,
+  at: 10,
+  ...over,
+});
+const event = (id: string, sessionId: string, ts: number, seq: number): EventRecord => ({
   id,
-  config: { section: 'math', domainCode: 'all', skillCodes: [], difficulties: [], count: 1, liveOnly: true },
-  queueIds: ['a'],
-  index: 0,
-  startedAt,
-  status,
-  answered: {},
-  struck: {},
-  currentElapsedMs: 0,
+  sessionId,
+  mode: 'drill',
+  questionId: 'a',
+  type: 'choice_selected',
+  ts,
+  monoMs: seq * 10.5,
+  pageId: 'p',
+  seq,
+  payload: { choice: 'A' },
 });
 
 describe.each([
@@ -99,27 +121,61 @@ describe.each([
     expect(await questions.count()).toBe(0);
   });
 
-  it('attempt store: attempts, flags, sessions, clearAll', async () => {
+  it('user store: a session and its attempts save together, upsert, and list', async () => {
     const { attempts } = await make();
-    const a = { id: 's1:a', questionId: 'a', response: '1/2', correct: true, timeMs: 900, sessionId: 's1', at: 10 };
-    await attempts.addAttempt(a);
-    await attempts.addAttempt({ ...a, correct: false });
-    expect(await attempts.listAttempts()).toEqual([{ ...a, correct: false }]);
-    expect(await attempts.attemptsForSession('other')).toEqual([]);
+    await attempts.saveSession(session('s1', 1), [stored('s1', 'a')]);
+    await attempts.saveSession(session('s1', 1), [stored('s1', 'a', { status: 'final', response: 'B', correct: false, changes: 2, confidence: 'unsure' })]);
+    expect(await attempts.listAttempts()).toEqual([stored('s1', 'a', { status: 'final', response: 'B', correct: false, changes: 2, confidence: 'unsure' })]);
+    expect(await attempts.listAttempts('other')).toEqual([]);
+    await attempts.saveSession(session('s2', 2));
+    await attempts.saveSession(session('x1', 3, 'exam'));
+    expect((await attempts.listSessions()).map((s) => s.id)).toEqual(['x1', 's2', 's1']);
+    expect((await attempts.listSessions({ mode: 'drill', status: 'in_progress' })).map((s) => s.id)).toEqual(['s2', 's1']);
+    expect(await attempts.getSession('s1')).toEqual(session('s1', 1));
+    expect(await attempts.getSession('none')).toBeNull();
+  });
+
+  it('user store: a finished session is closed for good', async () => {
+    const { attempts } = await make();
+    const done = finish(session('s1', 1), 500, () => true, 9);
+    await attempts.saveSession(done);
+    await attempts.saveSession(done); // identical resend
+    await expect(attempts.saveSession({ ...done, status: 'in_progress' })).rejects.toThrow(/cannot be changed/);
+    expect((await attempts.listSessions({ status: 'finished' })).map((s) => s.id)).toEqual(['s1']);
+  });
+
+  it('user store: flags and clearAll', async () => {
+    const { attempts } = await make();
     await attempts.setFlag('a/b c', true);
     expect((await attempts.listFlags()).map((f) => f.questionId)).toEqual(['a/b c']);
     await attempts.setFlag('a/b c', false);
     expect(await attempts.listFlags()).toEqual([]);
-    await attempts.saveSession(session('old', 1));
-    await attempts.saveSession(session('new', 2));
-    await attempts.saveSession(session('done', 3, 'finished'));
-    expect((await attempts.getActiveSession())?.id).toBe('new');
-    expect((await attempts.getSession('done'))?.status).toBe('finished');
-    await attempts.deleteSession('new');
-    expect((await attempts.getActiveSession())?.id).toBe('old');
+    await attempts.saveSession(session('s1', 1), [stored('s1', 'a')]);
+    await attempts.appendEvents([event('e1', 's1', 5, 0)]);
     await attempts.clearAll();
     expect(await attempts.listAttempts()).toEqual([]);
-    expect(await attempts.getActiveSession()).toBeNull();
+    expect(await attempts.listSessions()).toEqual([]);
+    expect(await attempts.listEvents()).toEqual([]);
+  });
+
+  it('event log: append is idempotent on id, ordered, filtered, counted, exported and cleared', async () => {
+    const { attempts } = await make();
+    await attempts.saveSession(session('s1', 1), [stored('s1', 'a')]);
+    await attempts.appendEvents([event('e2', 's1', 20, 1), event('e1', 's1', 10, 0)]);
+    await attempts.appendEvents([event('e1', 's1', 10, 0), event('e3', 's2', 15, 0)], { keepalive: true });
+    expect((await attempts.listEvents()).map((e) => e.id)).toEqual(['e1', 'e3', 'e2']);
+    expect(await attempts.listEvents('s1')).toEqual([event('e1', 's1', 10, 0), event('e2', 's1', 20, 1)]);
+    const stats = await attempts.stats();
+    expect(stats).toMatchObject({ events: 3, sessions: 1, attempts: 1 });
+    expect(stats.eventBytes).toBeGreaterThan(100);
+    const out = await attempts.exportAll();
+    expect(out.app).toBe('blackbook');
+    expect(out.sessions).toHaveLength(1);
+    expect(out.attempts).toHaveLength(1);
+    expect(out.events).toHaveLength(3);
+    await attempts.clearEvents();
+    expect(await attempts.listEvents()).toEqual([]);
+    expect(await attempts.listAttempts()).toHaveLength(1); // answers stay
   });
 });
 
