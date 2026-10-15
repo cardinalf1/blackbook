@@ -2,6 +2,26 @@
 
 Read this first in a new session, after AGENTS.md and CLAUDE.md. Updated by Claude at the end of each session or milestone. No College Board content in this file.
 
+## Morning report: Phase 2c (2026-10-15, unattended)
+
+**Done and committed** on `claude/phase2c-telemetry`, tag `phase2c-done`. Nothing pushed. Full details, decisions and what I could not verify are in `handoff/RUN-REPORT.md` (Phase 2c section).
+
+- Drills give no feedback until Finish. Picking a choice is the answer, Back and Next move freely, and Finish lists unanswered and flagged questions first.
+- Every change is saved at once, as a draft; Next and Finish make answers final. A failed save keeps everything on screen, shows Retry and blocks moving on.
+- Sessions are kept forever, as in progress, finished or abandoned. Past drills lists the finished ones and reopens their reports. Your Phase 2 drill was upgraded and is listed.
+- Every interaction goes into an append-only event log (see `docs/telemetry.md`). `bun scripts/telemetry-check.ts` cross-checks it against the stored answers.
+- The Data page exports everything as JSON (no question text) and can delete the telemetry or all progress.
+- My skills counts only final answers in finished drills.
+
+**To test it** (`bun run dev`, open the printed link):
+1. Start a drill with 20 questions and tick "Ask how sure I am". Answer some, change a few, flag a few, rate some.
+2. Close the tab midway. Open the link again: the home screen offers Resume. Resume puts you on the same question with answers, strike-outs, flags and ratings kept.
+3. Mid-drill, type `k` + Enter in the dev terminal to stop the server, then pick an answer: the red banner appears and Next is blocked. Type `s` + Enter, then press Retry (or wait 5 s) and carry on.
+4. Finish. Check the list of unanswered and flagged questions, confirm, and read the report. Open a few explanations.
+5. Home, then Past drills: the drill is listed and reopens.
+6. Run `bun scripts/telemetry-check.ts` in a second terminal: it ends with "Cross-check passed".
+7. Home, then Your data: Export (check the file), then Delete telemetry. Events go to 0 and attempts stay.
+
 ## Phase 2c plan (unattended run, 2026-10-15)
 
 Branch `claude/phase2c-telemetry` from 2b537b8. Gate fix first: `bun run sync` stopped as "stalled" while reading 3,767 cached files from a cold disk; local reads now count as progress (9ace59b).
