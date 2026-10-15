@@ -140,7 +140,7 @@ export function TimingScreen({ summary, skillName }: TimingScreenProps) {
           <div>
             <h2 className="font-mono text-sm font-semibold text-zinc-100">Mean time per answer</h2>
             <p className="mt-0.5 text-xs text-zinc-400">
-              Average seconds spent per question by difficulty, comparing Drills and Exam modules.
+              Average time per answer (m:ss) by difficulty, over all your finished answers (the date filter does not change it). Drills and exam modules are drawn separately.
             </p>
           </div>
           <div className="flex items-center gap-1 rounded-md border border-[#27272A] bg-[#0A0A0C] p-1 font-mono text-xs">
