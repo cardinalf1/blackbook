@@ -467,3 +467,24 @@ describe('drill store: Phase 2d', () => {
     expect((await attempts.questionStatus()).find((s) => s.questionId === q1)).toMatchObject({ done: true, attempts: 1, lastResult: null });
   });
 });
+
+describe('drill store: retry sessions', () => {
+  it('serves the due questions in the given order as source "retry" with deferred feedback', async () => {
+    const { mk, facets } = await setup();
+    const store = mk();
+    await store.getState().startRetry(['q3', 'q0', 'missing', 'q3'], facets);
+    const s = cur(store);
+    expect(s.source).toBe('retry');
+    expect(s.queueIds).toEqual(['q3', 'q0']);
+    expect(s.score).toBeNull();
+    expect(kindLabel(s)).toBe('Retry');
+  });
+
+  it('says so when none of the due questions are in the bank', async () => {
+    const { mk, facets } = await setup();
+    const store = mk();
+    await store.getState().startRetry(['gone'], facets);
+    expect(store.getState().session).toBeNull();
+    expect(store.getState().error).toMatch(/in the bank/);
+  });
+});
