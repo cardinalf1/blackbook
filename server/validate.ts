@@ -23,7 +23,7 @@ const isConfidence = (v: unknown): v is Confidence | null => v === null || CONFI
 const isResponse = (v: unknown) => typeof v === 'string' && v.length <= 100;
 
 /** Every event type the log accepts. Kept in sync with EventPayloads by the compiler. */
-const EVENT_TYPES: Record<EventType, true> = {
+export const EVENT_TYPES: Record<EventType, true> = {
   session_started: true,
   session_finished: true,
   session_abandoned: true,
