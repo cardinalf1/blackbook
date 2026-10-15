@@ -4,6 +4,7 @@
 
 import type { ReactNode } from 'react';
 import type { DrillConfig } from './drill';
+import type { ExamState } from './exam';
 import type { ChoiceLetter, Difficulty, Question, Section } from './sat';
 
 export type SessionMode = 'drill' | 'exam';
@@ -61,6 +62,8 @@ export interface SessionRecord {
   totalActiveMs: number;
   /** Show the guess / unsure / sure control after each answer. Drill only. */
   askConfidence: boolean;
+  /** Exam modules only (mode 'exam'): timer, pauses, phase. */
+  exam?: ExamState;
 }
 
 /**

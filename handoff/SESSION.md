@@ -2,6 +2,25 @@
 
 Read this first in a new session, after AGENTS.md and CLAUDE.md. Updated by Claude at the end of each session or milestone. No College Board content in this file.
 
+## Phase 3 plan (unattended run, 2026-10-15)
+
+Branch `claude/phase3-exam-shell` from `phase2d-done` (gates green there).
+
+1. **Spec and interfaces (me).**
+   - `docs/exam-spec.md` cites four official sources. Verified: 27 questions in 32 min and 22 in 35 min; domain shares; Reading and Writing domain order; SPR 5/6 characters; auto-submit at zero; no return to a submitted module. It also lists every assumption.
+   - `src/config/examConfig.ts` holds each number, marked verified, derived or assumed.
+   - `src/types/exam.ts` defines the exam state (deadline-based timer, pauses, phase) and the props for every screen. Session records gain an optional `exam`.
+2. **Gemini, 3 writers in worktrees, Medium effort:**
+   - `gemini/exam-nav`: bottom bar and navigator drawer.
+   - `gemini/exam-header`: header with countdown, Hide/Show, the five-minute alert and the pause dialog.
+   - `gemini/exam-panes`: Reading and Writing split pane, Math pane, SPR input (using my `isAllowedSprInput`), reference sheet.
+
+   After those merge, `gemini/exam-review-results` builds the review page and the results layout.
+3. **Timer engine (me, high risk).** `src/services/exam/timer.ts`, pure: remaining time from an absolute deadline, pause and resume, expiry, the five-minute alert. Tests with a fake clock cover a hidden tab, a reload, a deadline passed while closed, pause and resume, and double submit.
+4. **Assembly (me).** `src/services/exam/assemble.ts`, pure: the live set only, domain counts and difficulty thirds from the config, unseen first, no duplicates, plain notes for any shortfall (never padded). Math is multiple choice first with SPR last; Reading and Writing follows the official order.
+5. **State machine and persistence (me).** Exam actions on the existing drill store, reusing its strict save queue and Retry banner. States: setup, in progress, review, submitted. Every transition, answer, strike, flag and move is saved. Attempts have mode `exam`. The timer never waits on telemetry. Exam events go through the 2c logger with mode `exam`. Tests cover seen status (a question never navigated to stays unseen) and Browse hiding results of an unfinished exam.
+6. **Wiring, browser run** (full Reading and Writing and Math modules, resume with the right time, one auto-submit using a dev-only short timer, one pause), the results cross-check with `bun scripts/telemetry-check.ts`, reports, tag.
+
 ## Morning report: Phase 2d (2026-10-15, unattended)
 
 **Done and committed** on `claude/phase2d-browse-drafts`, tag `phase2d-done`. Nothing pushed. Details, decisions and what I could not verify are in `handoff/RUN-REPORT.md` (Phase 2d section).
