@@ -1,23 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { DEV_DURATION_OVERRIDE_KEY, EXAM_MODULES } from '../../config/examConfig';
+import { EXAM_MODULES } from '../../config/examConfig';
 import { loadRows } from '../../services/browse/rows';
 import { assembleModule } from '../../services/exam/assemble';
+import { moduleDurationMs } from '../../services/test/devOverrides';
 import type { BrowseRow } from '../../types/browse';
 import type { AssembledModule, ExamModuleSpec } from '../../types/exam';
 import type { Section } from '../../types/sat';
 import { formatDuration } from '../../utils/formatDuration';
 
 const SECTION_LABEL: Record<Section, string> = { rw: 'Reading and Writing', math: 'Math' };
-
-/** Module time: the real limit, or in a dev build only, a short override for testing auto-submit. */
-export function moduleDurationMs(section: Section): number {
-  if (import.meta.env.DEV) {
-    const raw = window.localStorage.getItem(DEV_DURATION_OVERRIDE_KEY);
-    const seconds = raw === null ? NaN : Number(raw);
-    if (Number.isFinite(seconds) && seconds > 0) return seconds * 1000;
-  }
-  return EXAM_MODULES[section].durationMs;
-}
 
 /** Choose a section, see what was assembled (and any shortfall), then start the clock. */
 export function ExamSetup({ onStart, onCancel }: { onStart: (m: AssembledModule, durationMs: number) => void; onCancel: () => void }) {

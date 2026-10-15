@@ -89,7 +89,7 @@ export interface DrillActions {
 
   // ---- exam modules (mode 'exam') ----
   /** Starts a timed module with already assembled questions. */
-  startExam(spec: ExamModuleSpec, questionIds: readonly string[], durationMs: number, notes: readonly string[]): Promise<void>;
+  startExam(spec: ExamModuleSpec, questionIds: readonly string[], durationMs: number, notes: readonly string[], testId?: string): Promise<void>;
   /** Leaves the current question for the review page. `activeMs` is its total active time. */
   openReview(activeMs: number): void;
   /** Back from the review page to a question (0-based). */
@@ -607,7 +607,7 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
         set({ session: null, questions: {}, saveError: null, saving: false });
       },
 
-      async startExam(spec, questionIds, durationMs, notes) {
+      async startExam(spec, questionIds, durationMs, notes, testId) {
         try {
           if (questionIds.length === 0) {
             set({ error: 'No live questions are available for this module.' });
@@ -624,6 +624,7 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
             timerHidden: false,
             fiveMinuteAlertShown: false,
             assemblyNotes: [...notes],
+            ...(testId !== undefined ? { testId } : {}),
           };
           await begin({ ...createSession(newId(), 'exam', config, questionIds, at, 'exam'), exam });
         } catch (e) {

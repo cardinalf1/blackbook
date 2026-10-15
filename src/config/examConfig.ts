@@ -79,3 +79,5 @@ export const PAUSE_REASONS: readonly string[] = ['Emergency', 'Technical problem
 
 /** Dev only: shorten module time for testing auto-submit. Never applied in a production build. */
 export const DEV_DURATION_OVERRIDE_KEY = 'blackbook.dev.examSeconds';
+/** Dev only: shorten the break between sections for testing. Never applied in a production build. */
+export const DEV_BREAK_OVERRIDE_KEY = 'blackbook.dev.breakSeconds';
