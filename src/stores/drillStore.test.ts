@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { buildRows } from '../services/browse/filter';
 import { toFacet } from '../services/drill/facets';
+import { tierOf } from '../services/eligibility/eligibility';
 import { computeSkillStats, countableAttempts } from '../services/drill/stats';
 import { buildReport, kindLabel } from '../services/session/report';
 import { MemoryAttemptStore } from '../services/storage/attemptsMemory';
@@ -414,6 +416,18 @@ describe('drill store: Phase 2d', () => {
     // It counts toward My skills like any finished drill.
     expect(countableAttempts(await attempts.listAttempts(), await attempts.listSessions(), 'drill')).toHaveLength(1);
     expect(computeSkillStats(countableAttempts(await attempts.listAttempts(), await attempts.listSessions(), 'drill'), facets).rows[0]?.attempts).toBe(1);
+  });
+
+  it('a finished Browse single is consumed for exams (Phase 6 rule, Phase 7 check)', async () => {
+    const { attempts, bank, mk } = await setup();
+    const store = mk();
+    await store.getState().startSingle('q3');
+    store.getState().shown();
+    store.getState().select('B');
+    expect(await store.getState().finish(500)).toBe(true);
+    const rows = buildRows(await bank.query({}), await attempts.questionStatus());
+    expect(tierOf(rows.find((r) => r.id === 'q3') as NonNullable<(typeof rows)[number]>)).toBe('consumed');
+    expect(tierOf(rows.find((r) => r.id === 'q0') as NonNullable<(typeof rows)[number]>)).toBe('fresh');
   });
 
   it('resumes the same drill twice in a row, and leaving and coming back keeps it listed', async () => {

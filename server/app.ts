@@ -7,6 +7,7 @@ import type { Sanitizer } from '../src/services/normalize/sanitize';
 import { filterFromParams } from '../src/services/analytics/filter';
 import type { AttemptStore, SessionFilter, TelemetryStore } from '../src/services/storage/attemptTypes';
 import type { MistakeStore } from '../src/types/mistakes';
+import type { RulesNotesStore } from '../src/types/ai';
 import type { AnalyticsStore } from '../src/types/analytics';
 import type { QuestionQuery } from '../src/services/storage/types';
 import type { DownloadProgress, DownloadScopeChoice } from '../src/types/download';
@@ -15,13 +16,18 @@ import type { DiskBankStore } from './bankStore';
 import type { DownloadManager } from './download';
 import { ClosedSessionError } from './userDb';
 import { BackupError, type BackupManager } from './backups';
-import { isObj, parseAttempt, parseEvent, parseSession, parseTag, type ValidatedUserData } from './validate';
+import { AiError, type AiService } from './ai/service';
+import type { ReportPeriod, WeakDrillRequest } from '../src/types/ai';
+import { RULES_NOTE_MAX } from '../src/types/ai';
+import { isObj, parseAiSettings, parseAttempt, parseEvent, parseSession, parseTag, type ValidatedUserData } from './validate';
 import { checkHostAndOrigin, checkRequest, sameSecret, sessionCookie, type SecurityConfig } from './security';
 
 export interface AppDeps {
   security: SecurityConfig;
   bank: DiskBankStore;
-  users: AttemptStore & TelemetryStore & MistakeStore & { replaceAll(data: ValidatedUserData): Promise<void> };
+  users: AttemptStore & TelemetryStore & MistakeStore & RulesNotesStore & { replaceAll(data: ValidatedUserData): Promise<void> };
+  /** The AI layer. Absent in tests that do not need it. */
+  ai?: AiService;
   /** Snapshots and restore. Absent in tests that do not need them. */
   backups?: BackupManager;
   /** Summaries computed in SQL. Absent in tests that do not need them. */
@@ -247,6 +253,70 @@ export function createHandler(deps: AppDeps): (req: Request) => Promise<Response
         await deps.users.addTag(tag);
         return json({ ok: true });
       }
+      if (path === '/api/rules-notes' && m === 'GET') return json(await deps.users.listNotes());
+      if (path.startsWith('/api/rules-notes/') && m === 'PUT') {
+        const skill = decodeURIComponent(path.slice('/api/rules-notes/'.length));
+        const body = await readJson(req);
+        if (!skill || skill.length > 100 || !isObj(body) || typeof body.text !== 'string' || body.text.length > RULES_NOTE_MAX) return problem(400, 'Malformed note.');
+        await deps.users.setNote(skill, body.text);
+        return json({ ok: true });
+      }
+
+      // ---- AI (the key goes in, never out) ----
+      if (path.startsWith('/api/ai/')) {
+        const ai = deps.ai;
+        if (!ai) return problem(404, 'Not found.');
+        const what = path.slice('/api/ai/'.length);
+        try {
+          if (what === 'status' && m === 'GET') return json(await ai.status());
+          if (what === 'key' && m === 'PUT') {
+            const body = await readJson(req);
+            if (!isObj(body) || typeof body.key !== 'string') return problem(400, 'Paste a key.');
+            return json(await ai.setKey(body.key));
+          }
+          if (what === 'key' && m === 'DELETE') return json(await ai.removeKey());
+          if (what === 'test' && m === 'POST') return json(await ai.testConnection());
+          if (what === 'settings' && m === 'PUT') {
+            const patch = parseAiSettings(await readJson(req), true);
+            if (!patch) return problem(400, 'Malformed settings.');
+            return json(await ai.updateSettings(patch));
+          }
+          const body = m === 'POST' ? await readJson(req) : undefined;
+          const drillReq = (): WeakDrillRequest | null => {
+            if (!isObj(body)) return null;
+            const section: WeakDrillRequest['section'] | null = body.section === 'rw' || body.section === 'math' || body.section === 'both' ? body.section : null;
+            const size = typeof body.size === 'number' && Number.isFinite(body.size) ? body.size : null;
+            if (!section || size === null || typeof body.ruleOnly !== 'boolean') return null;
+            return { section, size, ruleOnly: body.ruleOnly };
+          };
+          const period = (): ReportPeriod | null => {
+            const p = isObj(body) ? body.period : null;
+            return p === 'last_test' || p === 'last_7_days' || p === 'all_time' ? p : null;
+          };
+          if (what === 'preview/weak-drill' && m === 'POST') {
+            const r = drillReq();
+            return r ? json(await ai.previewWeakDrill(r)) : problem(400, 'Malformed request.');
+          }
+          if (what === 'weak-drill' && m === 'POST') {
+            const r = drillReq();
+            return r ? json(await ai.weakDrill(r)) : problem(400, 'Malformed request.');
+          }
+          if (what === 'preview/report' && m === 'POST') {
+            const p = period();
+            return p ? json(await ai.previewReport(p)) : problem(400, 'Malformed request.');
+          }
+          if (what === 'report' && m === 'POST') {
+            const p = period();
+            return p ? json(await ai.report(p, isObj(body) && body.regenerate === true)) : problem(400, 'Malformed request.');
+          }
+          return problem(404, 'Not found.');
+        } catch (e) {
+          if (e instanceof AiError) return problem(400, e.message);
+          // Never echo a raw error from the AI path: it might carry request details.
+          return problem(500, 'The AI request failed on this computer.');
+        }
+      }
+
       if (path === '/api/backups' && m === 'GET') {
         if (!deps.backups) return problem(404, 'Not found.');
         return json(await deps.backups.list());

@@ -94,6 +94,7 @@ export function kindLabel(session: SessionRecord): string {
   if (session.test) return TEST_KIND_LABEL[session.test.kind];
   if (session.mode === 'exam') return 'Exam module';
   if (session.source === 'retry') return 'Retry';
+  if (session.source === 'weak-skill') return 'Weak-skill drill';
   return session.source === 'browse' ? 'Single question' : 'Drill';
 }
 

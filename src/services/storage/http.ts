@@ -1,6 +1,7 @@
 // Storage adapters backed by the local server. Same contracts as the in-memory stores.
 
 import type { QuestionStatus } from '../../types/browse';
+import type { AiPreview, AiSettings, AiStatus, AiStore, AiTestResult, InsightReport, ReportPeriod, RulesNote, RulesNotesStore, WeakDrillRequest, WeakDrillResult } from '../../types/ai';
 import type { BackupList, BackupStore, RestoreResult } from '../../types/backup';
 import type { FlagRecord } from '../../types/drill';
 import type { MistakeStore, MistakeTag } from '../../types/mistakes';
@@ -111,6 +112,50 @@ export class HttpAttemptStore implements AttemptStore, TelemetryStore, MistakeSt
 
   async clearAll(): Promise<void> {
     await this.api.request('/api/user-data', { method: 'DELETE' });
+  }
+}
+
+/** The browser side of the AI layer. It can send a key in, but nothing ever sends the key back. */
+export class HttpAiStore implements AiStore {
+  constructor(private readonly api: ApiClient) {}
+
+  status(): Promise<AiStatus> {
+    return this.api.request<AiStatus>('/api/ai/status');
+  }
+  setKey(key: string): Promise<AiStatus> {
+    return this.api.request<AiStatus>('/api/ai/key', { method: 'PUT', body: JSON.stringify({ key }) });
+  }
+  removeKey(): Promise<AiStatus> {
+    return this.api.request<AiStatus>('/api/ai/key', { method: 'DELETE' });
+  }
+  testConnection(): Promise<AiTestResult> {
+    return this.api.request<AiTestResult>('/api/ai/test', { method: 'POST' });
+  }
+  updateSettings(patch: Partial<AiSettings>): Promise<AiStatus> {
+    return this.api.request<AiStatus>('/api/ai/settings', { method: 'PUT', body: JSON.stringify(patch) });
+  }
+  preview(_feature: 'weak_drill', req: WeakDrillRequest): Promise<AiPreview> {
+    return this.api.request<AiPreview>('/api/ai/preview/weak-drill', { method: 'POST', body: JSON.stringify(req) });
+  }
+  previewReport(period: ReportPeriod): Promise<AiPreview> {
+    return this.api.request<AiPreview>('/api/ai/preview/report', { method: 'POST', body: JSON.stringify({ period }) });
+  }
+  weakDrill(req: WeakDrillRequest): Promise<WeakDrillResult> {
+    return this.api.request<WeakDrillResult>('/api/ai/weak-drill', { method: 'POST', body: JSON.stringify(req) });
+  }
+  report(period: ReportPeriod, regenerate: boolean): Promise<InsightReport> {
+    return this.api.request<InsightReport>('/api/ai/report', { method: 'POST', body: JSON.stringify({ period, regenerate }) });
+  }
+}
+
+export class HttpRulesNotesStore implements RulesNotesStore {
+  constructor(private readonly api: ApiClient) {}
+
+  listNotes(): Promise<RulesNote[]> {
+    return this.api.request<RulesNote[]>('/api/rules-notes');
+  }
+  async setNote(skillCode: string, text: string): Promise<void> {
+    await this.api.request(`/api/rules-notes/${enc(skillCode)}`, { method: 'PUT', body: JSON.stringify({ text }) });
   }
 }
 

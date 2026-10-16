@@ -3,7 +3,8 @@ import type { AttemptStore, TelemetryStore } from './attemptTypes';
 import type { AnalyticsStore } from '../../types/analytics';
 import type { BackupStore } from '../../types/backup';
 import type { MistakeStore } from '../../types/mistakes';
-import { HttpAnalyticsStore, HttpAttemptStore, HttpBackupStore, HttpQuestionStore } from './http';
+import type { AiStore, RulesNotesStore } from '../../types/ai';
+import { HttpAiStore, HttpAnalyticsStore, HttpAttemptStore, HttpBackupStore, HttpQuestionStore, HttpRulesNotesStore } from './http';
 import type { QuestionStore } from './types';
 
 export type { AttemptStore, SessionFilter, TelemetryStore } from './attemptTypes';
@@ -25,6 +26,12 @@ export const mistakeStore: MistakeStore = userStore;
 
 /** Snapshots of user data and restore from them or from an export file. */
 export const backupStore: BackupStore = new HttpBackupStore(api);
+
+/** The AI layer on the local program. The key is sent in once and never read back. */
+export const aiStore: AiStore = new HttpAiStore(api);
+
+/** Your own rules notes per skill. Local only, never sent to Groq. */
+export const rulesNotesStore: RulesNotesStore = new HttpRulesNotesStore(api);
 
 /** Summaries for the analytics screens, computed by the local program. */
 export const analyticsStore: AnalyticsStore = new HttpAnalyticsStore(api);

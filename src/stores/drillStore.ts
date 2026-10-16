@@ -65,6 +65,8 @@ export interface DrillActions {
    * and the usual report, but kept out of first-attempt statistics.
    */
   startRetry(questionIds: readonly string[], facets: readonly QuestionFacet[]): Promise<void>;
+  /** Serves a weak-skill drill (AI-assisted or rule-based pick) in the given order, source "weak-skill". */
+  startWeakSkill(questionIds: readonly string[], facets: readonly QuestionFacet[]): Promise<void>;
   /** Practice one question picked in Browse: a session of length 1 with source "browse". */
   startSingle(questionId: string): Promise<void>;
   resume(sessionId: string): Promise<void>;
@@ -394,6 +396,22 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
           await begin(createSession(newId(), 'drill', config, ids, now(), 'retry'));
         } catch (e) {
           set({ error: `Could not start the retry: ${msg(e)}` });
+        }
+      },
+
+      async startWeakSkill(questionIds, facets) {
+        try {
+          const known = new Map(facets.map((f) => [f.id, f]));
+          const ids = [...new Set(questionIds)].filter((id) => known.has(id));
+          const first = known.get(ids[0] ?? '');
+          if (!first) {
+            set({ error: 'None of the picked questions are in the bank.' });
+            return;
+          }
+          const config: DrillConfig = { section: first.section, domainCode: 'all', skillCodes: [], difficulties: [], count: ids.length, liveOnly: false, questionIds: ids };
+          await begin(createSession(newId(), 'drill', config, ids, now(), 'weak-skill'));
+        } catch (e) {
+          set({ error: `Could not start the drill: ${msg(e)}` });
         }
       },
 

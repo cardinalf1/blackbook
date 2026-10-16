@@ -5,13 +5,14 @@
 import type { ReactNode } from 'react';
 import type { DrillConfig, FlagRecord } from './drill';
 import type { MistakeReason, MistakeTag } from './mistakes';
+import type { AiSettings, RulesNote } from './ai';
 import type { ExamState } from './exam';
 import type { TestState } from './test';
 import type { ChoiceLetter, Difficulty, Question, Section } from './sat';
 
 export type SessionMode = 'drill' | 'exam';
 /** Where a session was started: a drill setup, one question picked in Browse, an exam module, or the retry queue. */
-export type SessionSource = 'drill' | 'browse' | 'exam' | 'retry';
+export type SessionSource = 'drill' | 'browse' | 'exam' | 'retry' | 'weak-skill';
 export type SessionStatus = 'in_progress' | 'finished' | 'abandoned';
 export type Confidence = 'guess' | 'unsure' | 'sure';
 export const CONFIDENCE_LEVELS: readonly Confidence[] = ['guess', 'unsure', 'sure'];
@@ -156,6 +157,8 @@ export interface EventPayloads {
   /** Ids and the reason only. The note the user types is never logged. */
   mistake_tag_set: { reason: MistakeReason; suggested: boolean };
   mistake_tag_changed: { from: MistakeReason; to: MistakeReason };
+  /** Logged by the local server for each AI request (session id 'ai'). Counts and outcomes only. */
+  ai_call: { feature: string; origin: string; candidates: number; cached: boolean; failure: string | null };
 }
 
 export type EventType = keyof EventPayloads;
@@ -201,6 +204,10 @@ export interface UserDataExport {
   mistakeTags?: MistakeTag[];
   /** On-screen "Flag for later" marks. Absent in exports made before Phase 6. */
   flags?: FlagRecord[];
+  /** Your own rules notes per skill. Absent before Phase 7. */
+  rulesNotes?: RulesNote[];
+  /** AI switches (never the key). Absent before Phase 7. */
+  aiSettings?: AiSettings;
 }
 
 // ---- Report ----

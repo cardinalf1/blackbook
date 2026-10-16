@@ -12,6 +12,8 @@ import type { PipelineDeps } from '../src/services/sync/pipeline';
 import { createHandler } from './app';
 import { DiskBankStore } from './bankStore';
 import { BackupManager } from './backups';
+import { AiService } from './ai/service';
+import { KeyStore } from './ai/keyStore';
 import { DownloadManager } from './download';
 import { FsDetailCache } from './files';
 import { createIdleMonitor } from './idle';
@@ -100,6 +102,7 @@ async function main(): Promise<void> {
     bank,
     users,
     backups,
+    ai: new AiService({ users, bank, analytics, keys: new KeyStore(join(dataFolder, 'secrets', 'groq-key')), fetch: (i, init) => fetch(i, init) }),
     analytics,
     downloads,
     sanitize: createSanitizer(window as unknown as Parameters<typeof createSanitizer>[0]),

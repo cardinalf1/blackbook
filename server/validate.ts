@@ -2,6 +2,7 @@
 // client can never write something the app cannot read back.
 
 import type { FlagRecord } from '../src/types/drill';
+import { DEFAULT_AI_SETTINGS, RULES_NOTE_MAX, type AiFeature, type AiSettings, type RulesNote } from '../src/types/ai';
 import { MISTAKE_NOTE_MAX, MISTAKE_REASONS, type MistakeReason, type MistakeTag } from '../src/types/mistakes';
 import { CHOICE_LETTERS, type ChoiceLetter } from '../src/types/sat';
 import {
@@ -74,6 +75,7 @@ export const EVENT_TYPES: Record<EventType, true> = {
   test_abandoned: true,
   mistake_tag_set: true,
   mistake_tag_changed: true,
+  ai_call: true,
 };
 
 function isExam(e: unknown): boolean {
@@ -139,7 +141,7 @@ function isTest(t: unknown): boolean {
 
 export function parseSession(v: unknown): SessionRecord | null {
   if (!isObj(v) || v.version !== SESSION_RECORD_VERSION || !isStr(v.id) || !isMode(v.mode)) return null;
-  if (v.source !== 'drill' && v.source !== 'browse' && v.source !== 'exam' && v.source !== 'retry') return null;
+  if (!['drill', 'browse', 'exam', 'retry', 'weak-skill'].includes(v.source as string)) return null;
   if (v.status !== 'in_progress' && v.status !== 'finished' && v.status !== 'abandoned') return null;
   if (!isObj(v.config) || !Array.isArray(v.queueIds) || !v.queueIds.every(isStr) || v.queueIds.length > 500) return null;
   if (!isNum(v.index) || v.index < 0 || (v.queueIds.length > 0 && v.index >= v.queueIds.length)) return null;
@@ -192,6 +194,9 @@ export interface ValidatedUserData {
   events: EventRecord[];
   flags: FlagRecord[];
   mistakeTags: MistakeTag[];
+  rulesNotes: RulesNote[];
+  /** Null when the file has none (exports from before Phase 7). */
+  aiSettings: AiSettings | null;
 }
 
 const MAX_RESTORE_ROWS = 2_000_000;
@@ -207,7 +212,7 @@ export function parseUserData(v: unknown): ValidatedUserData | string {
     if (x === undefined) return [];
     return Array.isArray(x) && x.length <= MAX_RESTORE_ROWS ? x : `The ${key} in that file are not readable.`;
   };
-  const lists = { sessions: list('sessions'), attempts: list('attempts'), events: list('events'), flags: list('flags'), mistakeTags: list('mistakeTags') };
+  const lists = { sessions: list('sessions'), attempts: list('attempts'), events: list('events'), flags: list('flags'), mistakeTags: list('mistakeTags'), rulesNotes: list('rulesNotes') };
   for (const [k, x] of Object.entries(lists)) if (typeof x === 'string') return x;
   const check = <T>(key: string, items: unknown, parse: (x: unknown) => T | null): T[] | string => {
     const out: T[] = [];
@@ -223,12 +228,47 @@ export function parseUserData(v: unknown): ValidatedUserData | string {
   const events = check('event', lists.events, parseEvent);
   const mistakeTags = check('mistake tag', lists.mistakeTags, parseTag);
   const flags = check('flag', lists.flags, (x) => (isObj(x) && isStr(x.questionId) && isNum(x.at) ? ({ questionId: x.questionId, at: x.at } as FlagRecord) : null));
-  for (const r of [sessions, attempts, events, mistakeTags, flags]) if (typeof r === 'string') return r;
+  const rulesNotes = check('rules note', lists.rulesNotes, parseRulesNote);
+  for (const r of [sessions, attempts, events, mistakeTags, flags, rulesNotes]) if (typeof r === 'string') return r;
+  const aiSettings = v.aiSettings === undefined ? null : parseAiSettings(v.aiSettings);
+  if (v.aiSettings !== undefined && aiSettings === null) return 'The AI settings in that file are damaged, so nothing was restored.';
   return {
     sessions: sessions as SessionRecord[],
     attempts: attempts as StoredAttempt[],
     events: events as EventRecord[],
     flags: flags as FlagRecord[],
     mistakeTags: mistakeTags as MistakeTag[],
+    rulesNotes: rulesNotes as RulesNote[],
+    aiSettings,
   };
+}
+
+export function parseRulesNote(v: unknown): RulesNote | null {
+  if (!isObj(v) || !isStr(v.skillCode) || typeof v.text !== 'string' || v.text.length > RULES_NOTE_MAX || !isNum(v.updatedAt)) return null;
+  return { skillCode: v.skillCode, text: v.text, updatedAt: v.updatedAt };
+}
+
+const FEATURES: readonly AiFeature[] = ['weak_drill', 'report'];
+
+/** A whole settings object, or a patch when `partial` is set. Unknown keys are dropped. */
+export function parseAiSettings(v: unknown, partial = false): AiSettings | null {
+  if (!isObj(v)) return null;
+  const out: Partial<AiSettings> = {};
+  if (v.enabled !== undefined) {
+    if (typeof v.enabled !== 'boolean') return null;
+    out.enabled = v.enabled;
+  }
+  if (v.includeText !== undefined) {
+    if (typeof v.includeText !== 'boolean') return null;
+    out.includeText = v.includeText;
+  }
+  if (v.textConfirmedAt !== undefined) {
+    if (!(v.textConfirmedAt === null || isNum(v.textConfirmedAt))) return null;
+    out.textConfirmedAt = v.textConfirmedAt;
+  }
+  if (v.previewSeen !== undefined) {
+    if (!Array.isArray(v.previewSeen) || !v.previewSeen.every((f) => FEATURES.includes(f as AiFeature))) return null;
+    out.previewSeen = [...new Set(v.previewSeen as AiFeature[])];
+  }
+  return partial ? (out as AiSettings) : { ...DEFAULT_AI_SETTINGS, ...out };
 }

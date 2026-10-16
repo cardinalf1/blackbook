@@ -9,6 +9,7 @@ import type { AttemptStore, SessionFilter, TelemetryStore } from '../src/service
 import type { QuestionStatus } from '../src/types/browse';
 import type { FlagRecord } from '../src/types/drill';
 import type { MistakeStore, MistakeTag } from '../src/types/mistakes';
+import { DEFAULT_AI_SETTINGS, type AiSettings, type RulesNote, type RulesNotesStore } from '../src/types/ai';
 import type { EventRecord, EventType, SessionRecord, StoredAttempt, TelemetryStats, UserDataExport } from '../src/types/session';
 import { transaction, type SqlDb, type SqlParam } from './sql';
 import type { ValidatedUserData } from './validate';
@@ -155,6 +156,49 @@ export const MIGRATIONS: readonly Migration[] = [
   CREATE INDEX mistake_tags_question ON mistake_tags (session_id, question_id, at);
   CREATE TRIGGER mistake_tags_append_only BEFORE UPDATE ON mistake_tags
     BEGIN SELECT RAISE(ABORT, 'mistake tags are append-only'); END;
+  `,
+  // 6: Phase 7. The source CHECK goes (the server validates sources, so a new one never needs another
+  // rebuild); settings, the user's own rules notes, and a cache of AI replies keyed by input hash.
+  // The Groq key is never stored here: it lives in a separate file (server/ai/keyStore.ts).
+  `
+  CREATE TABLE sessions_v6 (
+    id TEXT PRIMARY KEY,
+    mode TEXT NOT NULL CHECK (mode IN ('drill', 'exam')),
+    source TEXT NOT NULL DEFAULT 'drill',
+    status TEXT NOT NULL CHECK (status IN ('in_progress', 'finished', 'abandoned')),
+    started_at INTEGER NOT NULL,
+    finished_at INTEGER,
+    last_activity_at INTEGER NOT NULL,
+    data TEXT NOT NULL
+  );
+  INSERT INTO sessions_v6 (id, mode, source, status, started_at, finished_at, last_activity_at, data)
+    SELECT id, mode, source, status, started_at, finished_at, last_activity_at, data FROM sessions;
+  DROP TABLE sessions;
+  ALTER TABLE sessions_v6 RENAME TO sessions;
+  CREATE INDEX sessions_status ON sessions (status, mode, started_at);
+  ALTER TABLE sessions ADD COLUMN test_id TEXT GENERATED ALWAYS AS (json_extract(data, '$.exam.testId')) VIRTUAL;
+  ALTER TABLE sessions ADD COLUMN test_kind TEXT GENERATED ALWAYS AS (json_extract(data, '$.test.kind')) VIRTUAL;
+  ALTER TABLE sessions ADD COLUMN test_paused INTEGER GENERATED ALWAYS AS (COALESCE(json_extract(data, '$.test.paused'), 0)) VIRTUAL;
+  ALTER TABLE sessions ADD COLUMN exam_paused INTEGER GENERATED ALWAYS AS (COALESCE(json_array_length(json_extract(data, '$.exam.pauses')), 0) > 0) VIRTUAL;
+  CREATE INDEX sessions_test ON sessions (test_id);
+  CREATE INDEX sessions_finished ON sessions (status, finished_at);
+
+  CREATE TABLE settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+  CREATE TABLE rules_notes (
+    skill_code TEXT PRIMARY KEY,
+    text TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  -- Replies only, keyed by a hash of the request. The request (which may hold question text) is never stored.
+  CREATE TABLE ai_cache (
+    hash TEXT PRIMARY KEY,
+    feature TEXT NOT NULL,
+    reply TEXT NOT NULL,
+    at INTEGER NOT NULL
+  );
   `,
 ];
 
@@ -316,7 +360,7 @@ export class ClosedSessionError extends Error {
   }
 }
 
-export class SqliteUserStore implements AttemptStore, TelemetryStore, MistakeStore {
+export class SqliteUserStore implements AttemptStore, TelemetryStore, MistakeStore, RulesNotesStore {
   constructor(private readonly db: SqlDb) {
     migrate(db);
   }
@@ -442,7 +486,58 @@ export class SqliteUserStore implements AttemptStore, TelemetryStore, MistakeSto
       events: await this.listEvents(),
       mistakeTags: await this.listTags(),
       flags: await this.listFlags(),
+      rulesNotes: await this.listNotes(),
+      aiSettings: this.aiSettings(),
     };
+  }
+
+  // ---- rules notes (RulesNotesStore) ----
+
+  async listNotes(): Promise<RulesNote[]> {
+    return this.db
+      .all<{ skill_code: string; text: string; updated_at: number }>('SELECT * FROM rules_notes ORDER BY skill_code')
+      .map((r) => ({ skillCode: r.skill_code, text: r.text, updatedAt: r.updated_at }));
+  }
+
+  async setNote(skillCode: string, text: string): Promise<void> {
+    transaction(this.db, () => {
+      if (text.trim() === '') this.db.run('DELETE FROM rules_notes WHERE skill_code = ?', skillCode);
+      else
+        this.db.run(
+          'INSERT INTO rules_notes (skill_code, text, updated_at) VALUES (?, ?, ?) ON CONFLICT (skill_code) DO UPDATE SET text = excluded.text, updated_at = excluded.updated_at',
+          skillCode,
+          text,
+          Date.now(),
+        );
+    });
+  }
+
+  // ---- settings and the AI reply cache ----
+
+  aiSettings(): AiSettings {
+    const r = this.db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'ai'");
+    if (!r) return { ...DEFAULT_AI_SETTINGS };
+    try {
+      return { ...DEFAULT_AI_SETTINGS, ...(JSON.parse(r.value) as Partial<AiSettings>) };
+    } catch {
+      return { ...DEFAULT_AI_SETTINGS };
+    }
+  }
+
+  saveAiSettings(s: AiSettings): void {
+    transaction(this.db, () => {
+      this.db.run("INSERT INTO settings (key, value) VALUES ('ai', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value", JSON.stringify(s));
+    });
+  }
+
+  cachedReply(hash: string): string | null {
+    return this.db.get<{ reply: string }>('SELECT reply FROM ai_cache WHERE hash = ?', hash)?.reply ?? null;
+  }
+
+  cacheReply(hash: string, feature: string, reply: string): void {
+    transaction(this.db, () => {
+      this.db.run('INSERT OR REPLACE INTO ai_cache (hash, feature, reply, at) VALUES (?, ?, ?, ?)', hash, feature, reply, Date.now());
+    });
   }
 
   async addTag(t: MistakeTag): Promise<void> {
@@ -497,6 +592,13 @@ export class SqliteUserStore implements AttemptStore, TelemetryStore, MistakeSto
           e.id, e.sessionId, e.mode, e.questionId, e.type, e.ts, e.monoMs, e.pageId, e.seq, JSON.stringify(e.payload),
         );
       }
+      this.db.run('DELETE FROM rules_notes');
+      for (const n of data.rulesNotes) {
+        this.db.run('INSERT OR REPLACE INTO rules_notes (skill_code, text, updated_at) VALUES (?, ?, ?)', n.skillCode, n.text, n.updatedAt);
+      }
+      if (data.aiSettings) {
+        this.db.run("INSERT INTO settings (key, value) VALUES ('ai', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value", JSON.stringify(data.aiSettings));
+      }
       for (const t of data.mistakeTags) {
         this.db.run(
           'INSERT OR IGNORE INTO mistake_tags (id, session_id, question_id, reason, note, suggested, at) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -527,6 +629,8 @@ export class SqliteUserStore implements AttemptStore, TelemetryStore, MistakeSto
       this.db.run('DELETE FROM sessions');
       this.db.run('DELETE FROM events');
       this.db.run('DELETE FROM mistake_tags');
+      this.db.run('DELETE FROM rules_notes');
+      this.db.run('DELETE FROM ai_cache');
     });
   }
 }
