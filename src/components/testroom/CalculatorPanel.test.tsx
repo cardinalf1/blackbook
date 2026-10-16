@@ -129,7 +129,7 @@ describe('CalculatorPanel', () => {
     });
 
     expect(mockGetState).toHaveBeenCalledTimes(1);
-    expect(onEngineStateChange).toHaveBeenCalledWith(savedStateOnExit);
+    expect(onEngineStateChange).toHaveBeenCalledWith('graphing', savedStateOnExit);
     expect(mockDestroy).toHaveBeenCalledTimes(1);
   });
 

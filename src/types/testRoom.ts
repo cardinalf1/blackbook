@@ -187,7 +187,8 @@ export interface CalculatorPanelProps {
   engine: CalculatorEngine | null;
   /** Saved per mode, restored when the panel or mode comes back. */
   engineState: CalculatorEngineState | null;
-  onEngineStateChange: (state: CalculatorEngineState) => void;
+  /** Called when an engine is unmounted, with the mode it was showing (on a switch, the old mode). */
+  onEngineStateChange: (mode: CalculatorMode, state: CalculatorEngineState) => void;
 }
 
 // ---- Student-produced responses ----

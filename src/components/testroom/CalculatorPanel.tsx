@@ -71,7 +71,7 @@ export function CalculatorPanel({
       .then((handle) => {
         if (cancelled) {
           try {
-            onEngineStateChangeRef.current(handle.getState());
+            onEngineStateChangeRef.current(mode, handle.getState());
           } finally {
             handle.destroy();
           }
@@ -90,7 +90,7 @@ export function CalculatorPanel({
       const handle = handleRef.current;
       if (handle) {
         try {
-          onEngineStateChangeRef.current(handle.getState());
+          onEngineStateChangeRef.current(mode, handle.getState());
         } finally {
           handle.destroy();
         }

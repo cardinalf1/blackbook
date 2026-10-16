@@ -12,6 +12,7 @@ export function SprDirections({ heading = 'How to enter your answer' }: SprDirec
       <ul className="list-disc space-y-2 pl-5 text-sm text-zinc-300 leading-relaxed">
         <li>Enter a single answer even if there are multiple correct solutions.</li>
         <li>Positive answers may contain up to 5 characters; negative answers may contain up to 6 characters (the negative sign counts as one character).</li>
+        <li>Here the decimal point and the fraction slash count as characters too.</li>
         <li>If a fraction does not fit within the character limit, enter its decimal equivalent.</li>
         <li>If a decimal does not fit within the character limit, truncate or round it at the fourth digit.</li>
         <li>Enter mixed numbers as improper fractions or decimals; do not use spaces.</li>
