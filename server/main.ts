@@ -11,7 +11,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { JSDOM } from 'jsdom';
+import { JSDOM } from './jsdomShim';
 import { createSanitizer } from '../src/services/normalize/sanitize';
 import type { PipelineDeps } from '../src/services/sync/pipeline';
 import { APP_VERSION } from '../src/version';
