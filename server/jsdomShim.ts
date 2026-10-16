@@ -1,13 +1,16 @@
-// Shims fs.readFileSync for jsdom's default-stylesheet.css.
+// Shims fs.readFileSync for jsdom's default-stylesheet.css and
+// Module._resolveFilename for jsdom's xhr-sync-worker.js.
 // In compiled standalone binaries (bun build --compile), jsdom's computed-style helper
 // calls fs.readFileSync(path.resolve(__dirname, "../../../browser/default-stylesheet.css"), ...)
-// where __dirname points to the build machine's path. Intercepting this call and serving
-// the embedded stylesheet string prevents an ENOENT crash on sidecar startup.
-// NOTE: We MUST patch fs.readFileSync BEFORE requiring jsdom, because jsdom evaluates
-// computed-style.js at require/import time. A static `export { JSDOM } from 'jsdom'`
-// causes the bundler to hoist and evaluate jsdom before executing this file's statements.
+// and XMLHttpRequest-impl calls require.resolve("./xhr-sync-worker.js") which evaluates to
+// the build machine's absolute path. Intercepting these calls prevents ENOENT / Cannot find module
+// crashes on sidecar startup.
+// NOTE: We MUST patch these BEFORE requiring jsdom, because jsdom evaluates them
+// during module initialization. A static `export { JSDOM } from 'jsdom'` causes
+// the bundler to hoist and evaluate jsdom before executing this file's statements.
 
 import fs from 'node:fs';
+import Module from 'node:module';
 import { DEFAULT_STYLESHEET } from './defaultStylesheet';
 
 const origReadFileSync = fs.readFileSync.bind(fs);
@@ -22,7 +25,17 @@ const origReadFileSync = fs.readFileSync.bind(fs);
   return origReadFileSync(p, options);
 };
 
-// Required dynamically after installing the monkey patch so computed-style.js
-// hits the patched readFileSync instead of the native one during module initialization.
+const origResolveFilename = (Module as any)._resolveFilename;
+if (typeof origResolveFilename === 'function') {
+  (Module as any)._resolveFilename = function (request: string, parent: any, isMain: boolean, options: any) {
+    if (typeof request === 'string' && request.includes('xhr-sync-worker')) {
+      return 'xhr-sync-worker.js';
+    }
+    return origResolveFilename.call(this, request, parent, isMain, options);
+  };
+}
+
+// Required dynamically after installing the monkey patches so computed-style.js
+// and XMLHttpRequest-impl.js hit the patched methods during module initialization.
 const jsdom = require('jsdom');
 export const JSDOM: typeof import('jsdom').JSDOM = jsdom.JSDOM;

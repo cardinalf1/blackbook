@@ -15,4 +15,9 @@ describe('jsdomShim', () => {
     expect(content.length).toBeGreaterThan(0);
     expect(content).toContain('display: block');
   });
+
+  it('intercepts non-existent xhr-sync-worker paths without throwing module not found', () => {
+    const fakePath = 'D:\\a\\blackbook\\blackbook\\node_modules\\jsdom\\lib\\jsdom\\living\\xhr\\xhr-sync-worker.js';
+    expect(() => require.resolve(fakePath)).not.toThrow();
+  });
 });
