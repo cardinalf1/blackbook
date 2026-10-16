@@ -219,7 +219,7 @@ describe('DataPage', () => {
     // On success, status line is shown
     const statusLine = container.querySelector('[role="status"]');
     expect(statusLine).not.toBeNull();
-    expect(statusLine?.textContent).toContain('Telemetry deleted successfully.');
+    expect(statusLine?.textContent).toContain('Telemetry deleted. Anything there was to lose is in a safety copy');
 
     await act(async () => {
       root.unmount();

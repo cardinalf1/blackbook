@@ -98,10 +98,12 @@ export function DataPage({
         setStatusMessage({ action: 'export', text: 'Data exported successfully.' });
       } else if (action === 'deleteTelemetry') {
         await onDeleteTelemetry();
-        setStatusMessage({ action: 'deleteTelemetry', text: 'Telemetry deleted successfully.' });
+        setStatusMessage({ action: 'deleteTelemetry', text: 'Telemetry deleted. Anything there was to lose is in a safety copy under Backups and restore.' });
+        void loadBackups();
       } else if (action === 'deleteAll') {
         await onDeleteAll();
-        setStatusMessage({ action: 'deleteAll', text: 'All progress deleted successfully.' });
+        setStatusMessage({ action: 'deleteAll', text: 'All progress deleted. Anything there was to lose is in a safety copy under Backups and restore.' });
+        void loadBackups();
       }
       setConfirming(null);
     } catch (err) {
