@@ -1,3 +1,77 @@
+# Morning report: Phase 8 (simple home, one merged dashboard; 2026-10-16, unattended)
+
+## Status
+
+**Phase 8 is done** on branch `claude/phase8-dashboard`, tag `phase8-done`. Nothing is pushed. Final gates: typecheck clean, 107 test files and 801 tests passing, `bun run sync` exit 0, nothing from `data/`, `fixtures/`, `docs/research/`, `handoff/screens/` or any key file tracked. `handoff/BUGS.md` was empty, so there were no bugs to fix.
+
+I wrote the tokens, the hidden-session flag (migration 7), the insight fixes, the dashboard endpoint and builder, the scope logic, the Up next picker, the navigation model, the App wiring, the Past drills hide controls, the cross-check and every test for them. Three Gemini 3.8 Flash (Medium) workers built the presentational parts in worktrees: (1) Home, the settings menu, the test chooser, the Question bank page and My rules notes; (2) the scope bar, coach card, numbers row and trends; (3) the skills map, mistakes, habits, tests table and detail links. I reviewed each diff and merged them one at a time, running the tests after each merge. Fixes I made after review: no nested `<main>` and no forced full height on Home (it would have scrolled at 768 px), and KPI tiles that showed "0%" or a blank where they should say "no answers" or "not enough data".
+
+**A Groq key is now set on this computer**, so the coach came back **AI-assisted from a real Groq call** when I opened the dashboard. That was the only real AI call I made.
+
+## Definition of done
+
+| Item | Status |
+|---|---|
+| typecheck, tests, sync, nothing tracked, nothing pushed, tag | Met |
+| BUGS.md items | Not applicable: the file was empty |
+| Home: one primary action, four groups, settings menu | Met. Seen in the browser at 1366x768: scroll height 768, so no scrolling |
+| Test: every pre-Phase 8 screen within two clicks of Home | Met (`src/services/home/routes.test.ts`, plus `App.test.tsx`, which checks every destination opens a screen) |
+| Home targets before and after | Before: 13 buttons in one block, plus Refresh questions, Choose File and Start retry when retries were due (15 to 16 targets), and 2 duplicate bank cards. After: **6 top-level targets** (Up next, four group cards, Settings). Counting every link inside the cards, 13 clickable elements (Up next, "or choose something else", 10 group links, Settings) |
+| Bank loaded: no import form or duplicate bank cards on Home; empty bank: empty-bank screen | Met (`App.test.tsx`). The bank block moved to Settings > Question bank (seen in the browser) |
+| One Dashboard; old routes redirect; every old metric within two clicks | Met. `viewFor('analytics' / 'aiReport' / 'mySkillsTop')` goes to the Dashboard; the checklist test is in `server/dashboard.test.ts` and `routes.test.ts`. The app has no URLs, so "routes" here means the app's view names |
+| No empty cards; no weakest skill under 5 first attempts; no pool-health insight with a sample size | Met (`src/services/ai/insights.test.ts`, `server/dashboard.test.ts`). On your data the headline is now "weakest 1 of 11", not "Transitions 0% after 2" |
+| Hiding: off the dashboard only; no-repeat and retries still count it | Met (`server/hidden.test.ts`, `server/dashboard.test.ts`, and the cross-check on synthetic data) |
+| Cross-check passes, endpoint timing reported | Met. Synthetic set (5,000 answers, 200,000 events): page matches brute force for 6 scopes, **median 216 ms, max 265 ms** (budget 300). Your data: matches, about 30 ms. Your data has no hidden sessions yet, so the hidden checks ran on synthetic data only |
+
+## Decisions I made
+
+- **Screenshots** had random names; I renamed them to `home.png`, `browse.png`, `analytics.png` and `report.png` and added `handoff/screens/` to `.gitignore`. The "after" captures are in `handoff/screens/after/`.
+- **Hidden sessions** are stored in their own table, `hidden_sessions` (migration 7), so saving a session never clears the mark. Hiding a test hides its modules. Hidden sessions are also left out of the timing baselines and the weak-skill ranking (those are analytics), but they still count for "questions done", seen status, the retry queue, no-repeat and pool health. "Hide all before" uses local midnight of the chosen day.
+- **Coach:** it needs 3 finished sessions (hidden ones not counted) before it shows insights; until then it says "Do N more drills to unlock this". The endpoint always returns rule-based lines, and the page then asks `GET /api/ai/coach` for AI wording, which keeps the endpoint under budget. The model picks and words; it never sees or chooses the action buttons.
+- **"Below target" skills** count only skills with 5 or more first attempts. "First attempt" means what the app already counts: finished, final answers outside retry sessions.
+- **Up next:** "enough data for a weak-skill drill" means 3 skills that each have 3 or more first attempts (the weak drill's own minimum). The starter drill is 20 questions in the section you have practiced less (Reading and Writing on a tie).
+- **Changes against the previous period** appear only when both periods have 10 or more answers. Study time compares the last 7 days with the 7 days before, whatever the scope.
+- **Official domain weights** (docs/exam-spec.md) are in `DOMAIN_WEIGHTS`, keyed by the bank's domain codes. Practice share is your answering time per domain within its section, in scope.
+- **"One section"** in the test chooser opens test setup with Reading and Writing preselected; you can switch to Math there. **"800 modes"** opens drill setup with the practice-modes panel focused. **"Random 20"** sits in that panel and opens the old step-through viewer, which saves nothing.
+- **Old analytics pages** stay as they were (their own tabs and filter bar) and are reached only as drill-downs. Back from them returns to the Dashboard.
+- **Date fields** in the scope bar and in "Hide all before" read "Any date" or "Pick a date" until you focus them (`src/components/ui/DateField.tsx`), instead of the raw "dd-----yyyy" mask. The old analytics filter bar still has the raw mask (in `later.md`).
+
+## What I could not see
+
+- The T3 browser preview timed out on every screenshot (the tab was never visible), so I captured the screens with headless Chrome at 1366x768 and cropped each section. I checked every capture one by one: Home, the settings menu, the test chooser, Home at 420 px wide, each Dashboard section, More filters, the 7-day scope, the skill drill-down, Past drills with the hide controls, the Question bank page, My rules notes and drill setup with the practice modes.
+- **Not seen in the browser:** a chart drawn as lines (your data has fewer than 3 points per series, so the tables showed, which is correct), the reasons breakdown (you have no tags yet), the 800 mode rows (no sets yet), an unlock state for the coach, and hiding or showing a real session (I only opened the confirmation and cancelled, so your data is unchanged).
+- Keyboard order and focus rings were checked in the jsdom tests and by reading the code, not by tabbing through a real browser.
+
+## Before and after
+
+| Screen | Before (`handoff/screens/`) | After (`handoff/screens/after/`) |
+|---|---|---|
+| Home | `home.png`: 13 buttons, two bank cards, import form, stray lines | `home-1366.png`, `home-settings-menu.png`, `home-test-chooser.png`, `home-narrow.png` |
+| Analytics | `analytics.png`: six tabs and a filter bar before any content, a line drawn from 2 points | `dash-top.png` and one capture per section (`dash-*.png`); with under 3 points a table replaces the line (`dash-trends.png`) |
+| Report | `report.png`: an empty "AI-assisted" first card, "Transitions 0% after 2", pool health with "Sample size: 20" | `dash-coach.png`: 3 insights, each with N and one action; no pool-health insight |
+| Browse | `browse.png` | Unchanged apart from the "One random question" entry |
+
+## Quota or tool problems
+
+None from Gemini; all three tasks finished on the first try. The T3 preview screenshots timed out (see above). Stopping the dev server left its child processes running, so I stopped them by port (3000 and 47821).
+
+## Exact steps to test it yourself
+
+1. `bun run dev`. Home shows one white Up next button, four cards and Settings at the top right. With your data it says "Practice your 4 weakest skills".
+2. Settings > Question bank: Refresh questions and Import are there, and no longer on Home. Back.
+3. Take a test: the chooser offers Full test, One section and One module. Escape closes it.
+4. Practice > 800 modes: drill setup opens on the practice modes, with Random 20 at the top.
+5. Progress > Dashboard. Try the section index (Coach, Numbers and so on), the scope buttons, Both / Reading and Writing / Math, and More filters (the dates say "Any date").
+6. Coach: the label says AI-assisted when your key works, otherwise rule-based. Each line has one button; "Drill your 3 weakest skills" starts a drill.
+7. Skills: click a skill name; the detail page opens on that skill. Back returns to the Dashboard.
+8. Mistakes: "Tag 5 misses from last session" opens that session's report for tagging. Once you tag misses, the reasons breakdown appears.
+9. Detailed views: each of the 8 links opens an old page; Back returns to the Dashboard.
+10. Past drills: click "Hide from analytics" on an early session, then go back to the Dashboard (All time); the numbers drop. "Show hidden sessions" brings the row back, and "Show in analytics" undoes the hide. Starting a full test still won't reuse questions from hidden sessions.
+11. "Hide all sessions before..." asks for a date and a confirmation before it does anything.
+12. `bun scripts/analytics-check.ts` and `bun scripts/analytics-check.ts --synthetic` both end with "Cross-check passed."
+
+---
+
 # Morning report: Phase 7 (AI layer, 800 modes, pacing, rules notes; 2026-10-16, unattended)
 
 ## Status
