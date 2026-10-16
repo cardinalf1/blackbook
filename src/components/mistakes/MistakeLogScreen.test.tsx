@@ -334,4 +334,41 @@ describe('MistakeLogScreen', () => {
 
     expect(container.textContent).toContain('No mistake tags match the selected filters.');
   });
+
+  it('shows RulesNoteBox when a skill filter is selected and hides it when all skills are selected', async () => {
+    vi.mocked(mistakeLoad.loadMistakeLog).mockResolvedValueOnce({
+      rows: mockRows,
+      browse: new Map(),
+    });
+
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<MistakeLogScreen onBack={vi.fn()} onOpenReport={vi.fn()} />);
+    });
+
+    // Initially all skills -> no RulesNoteBox reminder
+    expect(container.textContent).not.toContain('Write the rule in your own words.');
+
+    const skillSelect = container.querySelector(
+      'select[aria-label="Filter by skill"]',
+    ) as HTMLSelectElement;
+    expect(skillSelect).not.toBeNull();
+
+    // Select skill
+    await act(async () => {
+      skillSelect.value = 'CAS.WORDS';
+      skillSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Write the rule in your own words. Do not paste question text. These notes stay on this computer and are never sent to AI.');
+    expect(container.textContent).toContain('Words in Context');
+
+    // Deselect skill
+    await act(async () => {
+      skillSelect.value = 'all';
+      skillSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    expect(container.textContent).not.toContain('Write the rule in your own words.');
+  });
 });

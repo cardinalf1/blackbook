@@ -4,6 +4,7 @@ import type { BreakdownRow, ReportItem } from '../../types/session';
 import type { TestModuleReport, TestReport, TestReportProps } from '../../types/test';
 import { formatDuration } from '../../utils/formatDuration';
 import { MistakeReviewPanel } from '../mistakes/MistakeReviewPanel';
+import { PacingSection } from '../pacing/PacingSection';
 import { QuestionHtml } from '../QuestionHtml';
 
 const SECTION_LABELS: Record<Section, string> = {
@@ -359,6 +360,13 @@ function ModuleReportView({
 
       {/* Mistake review panel */}
       <MistakeReviewPanel report={module.report} source="exam" />
+
+      {/* Pacing section */}
+      <PacingSection
+        report={module.report}
+        section={module.section}
+        timeLimitMs={module.timeLimitMs}
+      />
 
       {/* Filter and questions list */}
       <div className="space-y-3 pt-2">
