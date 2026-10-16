@@ -23,7 +23,13 @@ export interface DrillConfig {
    * in place of choosing by the filters above. Ids missing from the bank are dropped.
    */
   questionIds?: string[];
+  /** Set when the drill came from a Math 800 / English 800 preset (services/modes/presets). */
+  preset?: PresetId;
+  /** A soft time limit for the set, at the real pace. Shown as a countdown; the set is never submitted for you. */
+  timeLimitMs?: number;
 }
+
+export type PresetId = 'math800' | 'english800' | 'conventions';
 
 /** The slice of a question the setup screen needs to count and list options. No content. */
 export interface QuestionFacet {
