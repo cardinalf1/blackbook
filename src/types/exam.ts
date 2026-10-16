@@ -1,7 +1,7 @@
 // The exam module (Phase 3): one timed module end to end. Built so Phase 4 can chain four of them
 // (module number and tier are already part of the spec). Numbers come from src/config/examConfig.ts.
 
-import type { ChoiceLetter, Question, Section } from './sat';
+import type { Section } from './sat';
 import type { SessionReport } from './session';
 
 /** Which module this is. Module 1 is 'routing'; module 2 is 'easier' or 'harder' (Phase 4). */
@@ -70,20 +70,6 @@ export interface NavigatorItem {
   flagged: boolean;
 }
 
-export interface ExamHeaderProps {
-  /** For example "Section 1, Module 1: Reading and Writing". */
-  title: string;
-  /** Milliseconds left, already computed from the deadline. */
-  remainingMs: number;
-  timerHidden: boolean;
-  onToggleTimer: () => void;
-  /** True while paused: the countdown shows "Paused". */
-  paused: boolean;
-  onPauseClick: () => void;
-  /** Math only: shows a "Reference" button. */
-  onOpenReference?: () => void;
-}
-
 export interface FiveMinuteAlertProps {
   onDismiss: () => void;
 }
@@ -100,63 +86,12 @@ export interface PauseDialogProps {
   remainingMs: number;
 }
 
-export interface ExamBottomBarProps {
-  /** 0-based. */
-  index: number;
-  total: number;
-  onBack: () => void;
-  /** On the last question this opens the review page; the label is then "Review". */
-  onNext: () => void;
-  onOpenNavigator: () => void;
-  /** True while an answer is being saved or a save failed: Back and Next are disabled. */
-  disabled: boolean;
-}
-
-export interface NavigatorDrawerProps {
-  items: readonly NavigatorItem[];
-  /** 0-based index of the question on screen. */
-  currentIndex: number;
-  /** 0-based. */
-  onJump: (index: number) => void;
-  onClose: () => void;
-  onGoToReview: () => void;
-}
-
-export interface ExamQuestionPaneProps {
-  question: Question;
-  /** 1-based number shown on the question. */
-  number: number;
-  /** Choice letter or typed text. Null when unanswered. */
-  response: string | null;
-  /** '' clears. */
-  onSelect: (response: string) => void;
-  struck: readonly ChoiceLetter[];
-  onStrike: (letter: ChoiceLetter) => void;
-  flagged: boolean;
-  onToggleFlag: () => void;
-}
-
 export interface SprInputProps {
   value: string;
   /** Only called with values that pass the input rules (see examConfig). */
   onChange: (value: string) => void;
   /** For the label: "Answer for question 7". */
   questionNumber: number;
-}
-
-export interface ReferenceSheetProps {
-  onClose: () => void;
-}
-
-export interface ExamReviewProps {
-  title: string;
-  items: readonly NavigatorItem[];
-  remainingMs: number;
-  /** 0-based. */
-  onJump: (index: number) => void;
-  /** Submits after the user confirms inside the component. */
-  onSubmit: () => void;
-  busy: boolean;
 }
 
 export interface ExamResultsProps {
