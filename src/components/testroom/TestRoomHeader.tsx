@@ -234,6 +234,7 @@ export function TestRoomHeader({
               <circle cx="8" cy="8" r="1.5" />
               <circle cx="8" cy="13" r="1.5" />
             </svg>
+            <span className={`mt-0.5 font-mono text-[10px] ${moreOpen ? 'underline underline-offset-4' : ''}`}>More</span>
           </button>
 
           {/* More Dropdown Menu */}
