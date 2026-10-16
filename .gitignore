@@ -13,3 +13,6 @@ fixtures/
 
 # Research notes quote the source site; stay untracked
 docs/research/
+
+# Owner screenshots, local only
+handoff/screens/

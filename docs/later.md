@@ -64,3 +64,6 @@ One line per idea, grouped by phase (AGENTS.md rule 8).
 - Run the weak-skill drill once with question text on and once off (same day, same size) and record in docs/ai-spec.md what the text changed: groups, near-duplicates avoided, slip targeting.
 - Try openai/gpt-oss-20b against 120b for the same requests; the smaller one has the same rate limits and may be faster.
 - A clock-based pace hint (it updates only when the drill screen re-renders today).
+
+## Phase 8 (home and dashboard)
+- Older screens (drill, exam, browse, settings, data, mistake log) can adopt the monochrome tokens in `src/components/ui/tokens.ts`.
