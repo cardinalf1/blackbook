@@ -56,6 +56,7 @@ describe('AiReportScreen', () => {
         title: 'Skills below target',
         headline: 'Linear equations need focus',
         sentence: 'You missed 3 of 4 algebra questions involving two variables.',
+        action: null,
         sampleSize: 4,
         thin: true,
       },

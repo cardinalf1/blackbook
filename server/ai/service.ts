@@ -7,7 +7,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { AI_MODEL, GROQ_POLICY_LINE } from '../../src/config/aiConfig';
 import { DAY_MS } from '../../src/config/mistakeConfig';
 import { PACE_TARGET_MS } from '../../src/config/paceConfig';
-import { buildInsights, readReportReply, REPORT_SCHEMA, reportPrompt, ruleNextWeek, ruleReport, type InsightInputs } from '../../src/services/ai/insights';
+import { buildInsights, COACH_MAX, readReportReply, REPORT_SCHEMA, reportPrompt, ruleCoach, ruleNextWeek, ruleReport, type InsightInputs } from '../../src/services/ai/insights';
+import { hiddenSessionIds } from '../../src/services/analytics/hidden';
+import { insightInputsFrom } from '../../src/services/ai/insightInputs';
 import {
   buildCandidates,
   buildWeakDrillPrompt,
@@ -20,11 +22,8 @@ import {
 } from '../../src/services/ai/weakDrill';
 import { buildRows } from '../../src/services/browse/filter';
 import { countableAttempts } from '../../src/services/drill/stats';
-import { STRICT_POLICY } from '../../src/services/eligibility/eligibility';
 import { latestTags } from '../../src/services/mistakes/mistakes';
-import { deriveRetryQueue, dueQuestionIds, retryAccuracy } from '../../src/services/retry/queue';
-import { poolHealth } from '../../src/services/test/pool';
-import type { AiFailure, AiPreview, AiSettings, AiStatus, AiTestResult, InsightReport, ReportPeriod, WeakDrillRequest, WeakDrillResult } from '../../src/types/ai';
+import type { AiFailure, AiPreview, CoachResult, AiSettings, AiStatus, AiTestResult, InsightReport, ReportPeriod, WeakDrillRequest, WeakDrillResult } from '../../src/types/ai';
 import type { AnalyticsFilter, AnalyticsStore } from '../../src/types/analytics';
 import { DEFAULT_ANALYTICS_FILTER } from '../../src/types/analytics';
 import type { BrowseRow } from '../../src/types/browse';
@@ -171,7 +170,9 @@ export class AiService {
   private async weakDrillParts(req: WeakDrillRequest, includeText: boolean) {
     const { rows, byId, questions } = await this.rows();
     const [attempts, sessions, tags] = await Promise.all([this.d.users.listAttempts(), this.d.users.listSessions(), this.d.users.listTags()]);
-    const first = [...countableAttempts(attempts, sessions, 'drill'), ...countableAttempts(attempts, sessions, 'exam')];
+    // Hidden sessions (early random clicks) do not shape the ranking; their questions still count as seen.
+    const hidden = hiddenSessionIds(sessions, await this.d.users.listHidden());
+    const first = [...countableAttempts(attempts, sessions, 'drill'), ...countableAttempts(attempts, sessions, 'exam')].filter((a) => !hidden.has(a.sessionId));
     const skills = rankWeakSkills(first, byId, req.section);
     const bands = new Map(questions.map((q): [string, number | null] => [q.id, Number.isFinite(q.scoreBand) ? q.scoreBand : null]));
     const candidates = buildCandidates(rows, skills, bands);
@@ -283,47 +284,48 @@ export class AiService {
   }
 
   private async insightInputs(period: ReportPeriod): Promise<InsightInputs> {
-    const { f, before, from, to } = await this.periodFilter(period);
-    const [overview, skills, timing, behavior] = await Promise.all([this.d.analytics.overview(f), this.d.analytics.skills(f), this.d.analytics.timing(f), this.d.analytics.behavior(f)]);
-    const { rows, byId } = await this.rows();
-    const [attempts, sessions, tags] = await Promise.all([this.d.users.listAttempts(), this.d.users.listSessions(), this.d.users.listTags()]);
-    const inRange = (at: number, a: number | null, b: number | null) => (a === null || at >= a) && (b === null || at <= b);
-    const reasons = (a: number | null, b: number | null) => {
-      const m: Partial<Record<MistakeReason, number>> = {};
-      for (const t of latestTags(tags).values()) if (inRange(t.at, a, b) && byId.has(t.questionId)) m[t.reason] = (m[t.reason] ?? 0) + 1;
-      return m;
-    };
-    const queue = deriveRetryQueue(attempts, sessions, this.now());
-    const acc = retryAccuracy(attempts, sessions);
-    const health = poolHealth(rows, STRICT_POLICY);
-    const both = (x: { drill: { attempts: number; correct: number }; exam: { attempts: number; correct: number } }) => ({ attempts: x.drill.attempts + x.exam.attempts, correct: x.drill.correct + x.exam.correct });
-    const total = both(overview.attempts);
-    const ch = behavior.counts;
-    return {
-      period,
-      answered: total.attempts,
-      correct: total.correct,
-      skills: skills.rows.map((r) => {
-        const c = both(r.counts);
-        return { skillCode: r.skillCode, skill: r.skill, section: r.section, answered: c.attempts, correct: c.correct };
-      }),
-      rushedWrong: timing.flaggedCounts.rushedWrong.drill + timing.flaggedCounts.rushedWrong.exam,
-      stuck: timing.flaggedCounts.stuck.drill + timing.flaggedCounts.stuck.exam,
-      reasons: reasons(from, to),
-      reasonsBefore: before ? reasons(before.from, before.to) : null,
-      lastFive: {
-        modules: timing.modules.length,
-        reached: timing.modules.filter((m) => m.reachedFiveMinutes).length,
-        answeredInLastFive: timing.modules.reduce((s, m) => s + m.answeredInLastFive, 0),
-      },
-      changes: {
-        correctToIncorrect: ch.drill.correctToIncorrect + ch.exam.correctToIncorrect,
-        incorrectToCorrect: ch.drill.incorrectToCorrect + ch.exam.incorrectToCorrect,
-        incorrectToIncorrect: ch.drill.incorrectToIncorrect + ch.exam.incorrectToIncorrect,
-      },
-      retry: { answered: acc.answered, correct: acc.correct, due: dueQuestionIds(queue).length, queued: queue.length },
-      pool: { full: health.full, rw: health.rw, math: health.math },
-    };
+    const { f, before } = await this.periodFilter(period);
+    return this.insightInputsFor(f, before, period);
+  }
+
+  /** Insight inputs for any analytics filter. Hidden sessions and their tags are left out unless the filter counts them. */
+  async insightInputsFor(f: AnalyticsFilter, before: AnalyticsFilter | null, period: InsightInputs['period'] = 'custom'): Promise<InsightInputs> {
+    const [overview, skills, timing, behavior, misses] = await Promise.all([
+      this.d.analytics.overview(f),
+      this.d.analytics.skills(f),
+      this.d.analytics.timing(f),
+      this.d.analytics.behavior(f),
+      this.d.analytics.misses(f),
+    ]);
+    const { byId } = await this.rows();
+    const [attempts, sessions, tags, hiddenRows] = await Promise.all([this.d.users.listAttempts(), this.d.users.listSessions(), this.d.users.listTags(), this.d.users.listHidden()]);
+    const hidden = f.includeHidden ? new Set<string>() : hiddenSessionIds(sessions, hiddenRows);
+    return insightInputsFrom({ filter: f, before, period, overview, skills, timing, behavior, misses, tags, hidden, inBank: (id) => byId.has(id), attempts, sessions, now: this.now() });
+  }
+
+  /**
+   * The dashboard coach for one scope: at most COACH_MAX insights. AI-assisted when a key is set and
+   * AI is on (the model only picks and words; code supplies numbers and the action), otherwise rule-based.
+   */
+  async coach(f: AnalyticsFilter, before: AnalyticsFilter | null): Promise<CoachResult> {
+    const insights = buildInsights(await this.insightInputsFor(f, before));
+    const rule = (reason: AiFailure | null): CoachResult => ({ origin: 'rule', fallbackReason: reason, lines: ruleCoach(insights), cached: false });
+    if (insights.length === 0) return rule(null);
+    const gate = await this.blocker();
+    if ('failure' in gate) return rule(gate.failure);
+    const p = reportPrompt(insights, 'custom');
+    const r = await this.call('report', gate.key, this.chatRequest(p.system, p.user, 'report', REPORT_SCHEMA), false);
+    if (!r.ok) {
+      this.log('report', 'rule', insights.length, false, r.failure);
+      return rule(r.failure);
+    }
+    const read = readReportReply(r.json, insights);
+    if (!read) {
+      this.log('report', 'rule', insights.length, r.cached, 'invalid_reply');
+      return rule('invalid_reply');
+    }
+    this.log('report', 'ai', insights.length, r.cached, null);
+    return { origin: 'ai', fallbackReason: null, lines: read.lines.slice(0, COACH_MAX), cached: r.cached };
   }
 
   async previewReport(period: ReportPeriod): Promise<AiPreview> {

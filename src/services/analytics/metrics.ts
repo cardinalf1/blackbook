@@ -18,6 +18,16 @@ export function wilsonLowerBound(correct: number, attempts: number, z: number = 
   return Math.max(0, (centre - margin) / (1 + z2 / attempts));
 }
 
+/** Upper end of the same Wilson interval. 0 with no answers. */
+export function wilsonUpperBound(correct: number, attempts: number, z: number = WILSON_Z): number {
+  if (attempts <= 0) return 0;
+  const p = correct / attempts;
+  const z2 = z * z;
+  const centre = p + z2 / (2 * attempts);
+  const margin = z * Math.sqrt((p * (1 - p)) / attempts + z2 / (4 * attempts * attempts));
+  return Math.min(1, (centre + margin) / (1 + z2 / attempts));
+}
+
 export function rateView(correct: number, attempts: number): RateView {
   return {
     attempts,

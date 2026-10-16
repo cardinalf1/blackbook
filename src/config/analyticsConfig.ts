@@ -53,3 +53,35 @@ export const RANKING_EXPLANATION =
   `Skills are ranked by the lower end of an 80% confidence interval for your accuracy (Wilson interval, z = ${WILSON_Z}), not by raw accuracy, ` +
   `so 1 right out of 1 does not count as mastery. Skills with fewer than ${MIN_ATTEMPTS_TO_RANK} answers are placed after your proven weak spots, ` +
   'earlier the more of the skill you have not seen.';
+
+// ---- Dashboard (Phase 8) ----
+
+/** The coach needs this many finished sessions (hidden ones not counted) before it shows insights. */
+export const COACH_MIN_SESSIONS = 3;
+/** A numbers-row change against the previous period is shown only when both periods have this many answers. */
+export const KPI_MIN_ATTEMPTS = 10;
+/** Trend points with fewer answers are drawn hollow; with fewer points than this a table replaces the line. */
+export const TREND_HOLLOW_BELOW = 10;
+export const TREND_TABLE_BELOW_POINTS = 3;
+/** Habits figures resting on fewer than this are marked "thin data". */
+export const HABITS_THIN_BELOW = 20;
+
+/**
+ * Official share of each domain within its section (docs/exam-spec.md, "Verified"), by the bank's
+ * domain codes. Used only to compare with your own practice time.
+ */
+export const DOMAIN_WEIGHTS: Readonly<Record<string, number>> = {
+  CAS: 0.28,
+  INI: 0.26,
+  SEC: 0.26,
+  EOI: 0.2,
+  H: 0.35,
+  P: 0.35,
+  Q: 0.15,
+  S: 0.15,
+};
+
+/** Shown once at the bottom of the dashboard. */
+export const DASHBOARD_LIMITS =
+  'Computed on this computer from your finished sessions. Counts and timing describe what you did, not why; only your own tags say why. ' +
+  'The score range is an approximation from a practice scoring model, useful for comparing your own tests, not a prediction of an official score.';

@@ -2,6 +2,7 @@
 //
 // Binds to 127.0.0.1 only. In dev the UI comes from Vite on port 3000, which proxies /api here.
 
+import { DashboardService } from './dashboard';
 import { randomBytes } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -93,6 +94,7 @@ async function main(): Promise<void> {
         })
       : null;
 
+  const ai = new AiService({ users, bank, analytics, keys: new KeyStore(join(dataFolder, 'secrets', 'groq-key')), fetch: (i, init) => fetch(i, init) });
   const handler = createHandler({
     security: {
       token,
@@ -102,8 +104,17 @@ async function main(): Promise<void> {
     bank,
     users,
     backups,
-    ai: new AiService({ users, bank, analytics, keys: new KeyStore(join(dataFolder, 'secrets', 'groq-key')), fetch: (i, init) => fetch(i, init) }),
+    ai,
     analytics,
+    dashboard: new DashboardService({
+      analytics,
+      users,
+      bank,
+      aiAvailable: async () => {
+        const s = await ai.status();
+        return s.hasKey && s.settings.enabled;
+      },
+    }),
     downloads,
     sanitize: createSanitizer(window as unknown as Parameters<typeof createSanitizer>[0]),
     dataFolder,

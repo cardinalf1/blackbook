@@ -3,6 +3,7 @@
 // the model only chooses from what code offered and words what code supplied. The key lives on the
 // local server and never reaches the browser, an event, a log, an export or a backup.
 
+import type { DrillConfig } from './drill';
 import type { Difficulty, Section } from './sat';
 
 export type AiFeature = 'weak_drill' | 'report';
@@ -90,7 +91,18 @@ export interface Insight {
   thin: boolean;
   /** Rule-based priority; higher is more useful. */
   priority: number;
+  /** What the one button under it launches. Code chooses it; it is never sent to the model. */
+  action: CoachAction | null;
 }
+
+/**
+ * The one action under a coach insight: a drill with a config code built (weakest skills, review
+ * misses), the retry set, or another screen.
+ */
+export type CoachAction =
+  | { kind: 'drill'; label: string; config: DrillConfig }
+  | { kind: 'retry'; label: string }
+  | { kind: 'open'; label: string; target: 'exam_setup' | 'mistakes' | 'drill_setup' };
 
 export interface ReportLine {
   insightId: string;
@@ -99,6 +111,7 @@ export interface ReportLine {
   sentence: string;
   thin: boolean;
   sampleSize: number;
+  action: CoachAction | null;
 }
 
 export interface InsightReport {
@@ -111,6 +124,14 @@ export interface InsightReport {
   dropped: number;
   cached: boolean;
   generatedAt: number;
+}
+
+/** The dashboard coach: at most three report lines, each with its action. */
+export interface CoachResult {
+  origin: ResultOrigin;
+  fallbackReason: AiFailure | null;
+  lines: ReportLine[];
+  cached: boolean;
 }
 
 /** What one AI call would send, exactly, for the preview. */
@@ -136,6 +157,8 @@ export interface AiStore {
   previewReport(period: ReportPeriod): Promise<AiPreview>;
   weakDrill(req: WeakDrillRequest): Promise<WeakDrillResult>;
   report(period: ReportPeriod, regenerate: boolean): Promise<InsightReport>;
+  /** The dashboard coach for an analytics filter (query string of src/services/analytics/filter). */
+  coach(filter: import('./analytics').AnalyticsFilter): Promise<CoachResult>;
 }
 
 // ---- Rules notes ----

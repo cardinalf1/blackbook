@@ -80,6 +80,9 @@ function createFakeAiStore(overrides: Partial<AiStatus> = {}): FakeAiStore {
     async report() {
       throw new Error('Not implemented');
     },
+    async coach() {
+      throw new Error('Not implemented');
+    },
   };
 }
 

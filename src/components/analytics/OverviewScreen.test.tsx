@@ -51,6 +51,7 @@ describe('OverviewScreen', () => {
     activeMs: { drill: 0, exam: 0 },
     bank: { total: 1000, live: 800, seen: 120, seenLive: 100 },
     daily: [],
+    dailyPace: [],
     unattributed: 0,
   };
 
@@ -76,6 +77,7 @@ describe('OverviewScreen', () => {
       },
       activeMs: { drill: 65 * 60 * 1000, exam: 25 * 60 * 1000 },
       bank: { total: 500, live: 450, seen: 50, seenLive: 40 },
+      dailyPace: [],
       daily: [
         { day: '2026-10-14', mode: 'drill', attempts: 4, correct: 3 },
         { day: '2026-10-15', mode: 'exam', attempts: 2, correct: 1 },
@@ -109,6 +111,7 @@ describe('OverviewScreen', () => {
       },
       activeMs: { drill: 3600000, exam: 3600000 },
       bank: { total: 500, live: 450, seen: 150, seenLive: 140 },
+      dailyPace: [],
       daily: [
         { day: '2026-10-14', mode: 'drill', attempts: 20, correct: 15 },
         { day: '2026-10-15', mode: 'exam', attempts: 25, correct: 20 },

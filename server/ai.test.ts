@@ -57,6 +57,7 @@ const stubAnalytics = {
   overview: async () => ({ sessions: { drill: 3, exam: 0 }, attempts: { drill: { attempts: 30, correct: 12, timeMs: 1 }, exam: { attempts: 0, correct: 0, timeMs: 0 } }, activeMs: { drill: 1, exam: 0 }, bank: { total: 54, live: 54, seen: 30, seenLive: 30 }, daily: [], unattributed: 0 }),
   skills: async () => ({ rows: [{ section: 'math', domainCode: 'H', domain: 'Algebra', skillCode: 'S1', skill: 'Skill S1', bankTotal: 18, bankLive: 18, unseenLive: 8, counts: { drill: { attempts: 10, correct: 2, timeMs: 1 }, exam: { attempts: 0, correct: 0, timeMs: 0 } }, recent: [] }] }),
   timing: async () => ({ baselines: [], flaggedCounts: { rushedWrong: { drill: 4, exam: 0 }, stuck: { drill: 2, exam: 0 } }, flagged: [], modules: [] }),
+  misses: async () => [],
   behavior: async () => ({ counts: { drill: { ...zeroBehavior, correctToIncorrect: 3, incorrectToCorrect: 1 }, exam: zeroBehavior } }),
 } as unknown as AnalyticsStore;
 
@@ -273,8 +274,9 @@ describe('the AI report', () => {
     }));
     const r = await w.ai.report('all_time', false);
     expect(r.origin).toBe('ai');
-    expect(r.lines.map((l) => l.insightId)).toEqual(['skills_below_target', 'answer_changes', 'overall', 'pool_health']);
-    expect(r.dropped).toBe(2);
+    expect(r.lines.map((l) => l.insightId)).toEqual(['skills_below_target', 'answer_changes', 'overall']);
+    // pool_health is no longer an insight (Phase 8), so its sentence is dropped like an unknown id.
+    expect(r.dropped).toBe(3);
     // The invented number in "next week" is replaced by the rule-based line.
     expect(r.nextWeek).not.toContain('500');
   });
