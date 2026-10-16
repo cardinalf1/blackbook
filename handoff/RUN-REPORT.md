@@ -114,7 +114,7 @@ git push origin v1.0.0
 1. Navigate to: `https://github.com/cardinalf1/blackbook/releases/new`
 2. **Choose a tag:** Select `v1.0.0`.
 3. **Release title:** `Blackbook 1.0.0`
-4. **Description:** Copy and paste the contents of [CHANGELOG.md](file:///C:/Users/Raghav/.t3/projects/blackbook/CHANGELOG.md).
+4. **Description:** Copy and paste the contents of [CHANGELOG.md](CHANGELOG.md).
 5. **Attach binaries:** Drag and drop the following files into the release assets dropzone:
    - `release/Blackbook-Setup-1.0.0.exe`
    - `release/SHA256SUMS.txt`

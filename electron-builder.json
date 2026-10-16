@@ -22,7 +22,7 @@
   },
   "mac": {
     "target": "dmg",
-    "artifactName": "Blackbook-${version}-mac.${ext}"
+    "artifactName": "Blackbook-${version}-${arch}.${ext}"
   },
   "nsis": {
     "oneClick": false,
