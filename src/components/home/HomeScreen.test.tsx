@@ -16,6 +16,7 @@ describe('HomeScreen', () => {
     primary: {
       kind: 'start_drill',
       size: 20,
+      section: 'rw',
       label: 'Start a 20-question drill',
       reason: 'A mixed set from questions you have not seen yet.',
     },

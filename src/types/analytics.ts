@@ -319,6 +319,8 @@ export interface SkillsScreenProps {
   loadDetail: (skillCode: string) => Promise<SkillDetail>;
   /** Loads a question's content for a missed-question row (rationale included). Null if gone from the bank. */
   loadQuestion: (questionId: string) => Promise<import('./sat').Question | null>;
+  /** Open this skill's detail on mount (from the Dashboard). */
+  initialSkill?: string;
 }
 
 export interface TimingScreenProps {

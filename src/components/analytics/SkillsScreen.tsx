@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { averageMs, describeRate, pooled, rateView, wilsonLowerBound } from '../../services/analytics/metrics';
 import type { AnalyticsKind, MissRow, SkillDetail, SkillRow, SkillSessionRow, SkillsScreenProps } from '../../types/analytics';
 import type { Difficulty, Question } from '../../types/sat';
@@ -81,7 +81,7 @@ interface QuestionLoadState {
   error: string | null;
 }
 
-export function SkillsScreen({ summary, loadDetail, loadQuestion }: SkillsScreenProps) {
+export function SkillsScreen({ summary, loadDetail, loadQuestion, initialSkill }: SkillsScreenProps) {
   const [filterText, setFilterText] = useState('');
   const [onlyAnswered, setOnlyAnswered] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('weakest');
@@ -110,6 +110,16 @@ export function SkillsScreen({ summary, loadDetail, loadQuestion }: SkillsScreen
         setDetailLoading(false);
       });
   };
+
+  // Opened from the Dashboard's skills map: show that skill's detail straight away.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (initialSkill && !opened.current) {
+      opened.current = true;
+      handleSelectSkill(initialSkill);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSkill]);
 
   const handleShowQuestion = async (questionId: string) => {
     setQuestionsState((prev) => ({

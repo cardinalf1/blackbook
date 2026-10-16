@@ -26,6 +26,8 @@ interface Props {
   /** 'setup' starts a new test; 'open' continues or reopens the test given by `testId`. */
   startAt: 'setup' | 'open';
   testId?: string;
+  /** The kind preselected on the setup screen (Home's chooser: full test or one section). */
+  initialKind?: TestKind;
   onExit: () => void;
   onMySkills: () => void;
 }
@@ -35,7 +37,7 @@ interface Props {
  * Everything that decides what comes next lives in the test store; this component only shows the
  * step the saved test is on.
  */
-export function TestFlow({ startAt, testId, onExit, onMySkills }: Props) {
+export function TestFlow({ startAt, testId, initialKind, onExit, onMySkills }: Props) {
   const record = useTest((s) => s.record);
   const busy = useTest((s) => s.busy);
   const error = useTest((s) => s.error);
@@ -75,7 +77,7 @@ export function TestFlow({ startAt, testId, onExit, onMySkills }: Props) {
             {error}
           </div>
         )}
-        <SetupStep busy={busy} error={error} onCancel={onExit} />
+        <SetupStep initialKind={initialKind} busy={busy} error={error} onCancel={onExit} />
       </>
     );
   }
@@ -87,8 +89,8 @@ export function TestFlow({ startAt, testId, onExit, onMySkills }: Props) {
   return <RunningStep onLeave={leave} />;
 }
 
-function SetupStep({ busy, error, onCancel }: { busy: boolean; error: string | null; onCancel: () => void }) {
-  const [kind, setKind] = useState<TestKind>('full');
+function SetupStep({ busy, error, onCancel, initialKind = 'full' }: { busy: boolean; error: string | null; onCancel: () => void; initialKind?: TestKind }) {
+  const [kind, setKind] = useState<TestKind>(initialKind);
   const [includeSeen, setIncludeSeen] = useState(false);
   const [allowRepeats, setAllowRepeats] = useState(false);
   const [poolHealth, setPoolHealth] = useState<PoolHealthView | null>(null);

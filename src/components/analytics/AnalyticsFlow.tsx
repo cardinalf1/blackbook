@@ -54,7 +54,7 @@ function Show<T>({ result, children }: { result: Loaded<T>; children: (data: T) 
  * The analytics area: tabs and filters around the six screens. Every screen gets a summary the
  * local program computed; nothing here sees raw events. Launching a drill is handed to the caller.
  */
-export function AnalyticsFlow({ onExit, onLaunch, startTab = 'overview' }: { onExit: () => void; onLaunch: (config: DrillConfig) => void; startTab?: AnalyticsTab }) {
+export function AnalyticsFlow({ onExit, onLaunch, startTab = 'overview', initialSkill }: { onExit: () => void; onLaunch: (config: DrillConfig) => void; startTab?: AnalyticsTab; initialSkill?: string }) {
   const [tab, setTab] = useState<AnalyticsTab>(startTab);
   const [filter, setFilter] = useState<AnalyticsFilter>(DEFAULT_ANALYTICS_FILTER);
   const key = JSON.stringify(filter);
@@ -62,7 +62,7 @@ export function AnalyticsFlow({ onExit, onLaunch, startTab = 'overview' }: { onE
   return (
     <AnalyticsShell tab={tab} onTab={setTab} filter={filter} onFilter={setFilter} onBack={onExit}>
       {tab === 'overview' && <OverviewTab filter={filter} filterKey={key} />}
-      {tab === 'skills' && <SkillsTab filter={filter} filterKey={key} />}
+      {tab === 'skills' && <SkillsTab filter={filter} filterKey={key} initialSkill={initialSkill} />}
       {tab === 'timing' && <TimingTab filter={filter} filterKey={key} />}
       {tab === 'behavior' && <BehaviorTab filter={filter} filterKey={key} />}
       {tab === 'tests' && <TestsTab filter={filter} filterKey={key} />}
@@ -84,11 +84,11 @@ function OverviewTab({ filter, filterKey }: TabProps) {
   return <Show result={result}>{(d) => <OverviewScreen summary={d.summary} latestTests={d.latestTests} />}</Show>;
 }
 
-function SkillsTab({ filter, filterKey }: TabProps) {
+function SkillsTab({ filter, filterKey, initialSkill }: TabProps & { initialSkill?: string }) {
   const result = useLoad(() => analyticsStore.skills(filter), filterKey);
   const loadDetail = useCallback((skillCode: string) => analyticsStore.skillDetail(filter, skillCode), [filter]);
   const loadQuestion = useCallback(async (id: string) => (await questionStore.get(id)) ?? null, []);
-  return <Show result={result}>{(summary) => <SkillsScreen summary={summary} loadDetail={loadDetail} loadQuestion={loadQuestion} />}</Show>;
+  return <Show result={result}>{(summary) => <SkillsScreen summary={summary} loadDetail={loadDetail} loadQuestion={loadQuestion} initialSkill={initialSkill} />}</Show>;
 }
 
 function TimingTab({ filter, filterKey }: TabProps) {

@@ -14,13 +14,24 @@ import { InProgressSection } from './components/drill/InProgressSection';
 import { ExamFlow } from './components/exam/ExamFlow';
 import { TestFlow } from './components/test/TestFlow';
 import { QuestionView } from './components/QuestionView';
+import { HomeScreen } from './components/home/HomeScreen';
+import { BankScreen } from './components/home/BankScreen';
+import { RulesNotesScreen } from './components/home/RulesNotesScreen';
+import { DashboardScreen } from './components/dashboard/DashboardScreen';
+import { T } from './components/ui/tokens';
 import { DOWNLOAD_ENABLED } from './config';
 import { api, ApiError, initApiAuth } from './services/api/client';
-import { questionStore, type BankMeta } from './services/storage';
+import { questionStore } from './services/storage';
 import { startTelemetry } from './services/telemetry';
-import { drillStore, useDrill } from './stores/drillStore';
+import { drillStore } from './stores/drillStore';
 import type { Question } from './types/sat';
-import { loadPoolHealth, loadRetryState, startRetryNow, type PoolHealthView, type RetryState } from './services/retry/load';
+import type { AnalyticsTab } from './types/analytics';
+import type { CoachAction } from './types/ai';
+import type { DashboardLink } from './types/dashboard';
+import type { TestKind } from './types/test';
+import { startRetryNow } from './services/retry/load';
+import { loadHomeState, type HomeState } from './services/home/load';
+import { LEGACY_REDIRECTS, type LegacyView, type ScreenId } from './services/home/routes';
 
 const PRACTICE_SIZE = 20;
 /** Tells the local program a Blackbook page is still open, so it does not shut down when idle. */
@@ -28,18 +39,84 @@ const HEARTBEAT_MS = 60_000;
 
 type View =
   | { kind: 'loading' }
-  | { kind: 'home'; meta: BankMeta | null; count: number }
+  | { kind: 'home'; count: number; home: HomeState | null }
   | { kind: 'practice'; questions: Question[]; index: number }
-  | { kind: 'browse' }
-  | { kind: 'analytics' }
+  | { kind: 'browse'; random?: boolean }
+  | { kind: 'dashboard' }
+  /** An old analytics page, now a drill-down from the Dashboard. */
+  | { kind: 'detail'; tab: AnalyticsTab; skill?: string }
+  /** The Phase 7 study report, now a drill-down from the Dashboard. */
+  | { kind: 'studyReport' }
   | { kind: 'mistakes' }
   | { kind: 'settings' }
   | { kind: 'weakDrill' }
-  | { kind: 'aiReport' }
-  | { kind: 'mistakeReport'; sessionId: string }
+  | { kind: 'bank' }
+  | { kind: 'rulesNotes' }
+  | { kind: 'inProgress' }
+  | { kind: 'mistakeReport'; sessionId: string; back: 'mistakes' | 'dashboard' }
   | { kind: 'drill'; startAt: DrillStart }
   | { kind: 'exam'; startAt: 'setup' | 'play' }
-  | { kind: 'test'; startAt: 'setup' | 'open'; testId?: string };
+  | { kind: 'test'; startAt: 'setup' | 'open'; testId?: string; initialKind?: TestKind };
+
+/** Where one destination id opens. Old top-level views go through LEGACY_REDIRECTS first. */
+export function viewFor(to: ScreenId | LegacyView): Exclude<View, { kind: 'loading' | 'home' | 'practice' | 'mistakeReport' }> | 'random20' | 'home' {
+  const id: ScreenId = to in LEGACY_REDIRECTS ? LEGACY_REDIRECTS[to as LegacyView] : (to as ScreenId);
+  switch (id) {
+    case 'home':
+      return 'home';
+    case 'drill_setup':
+      return { kind: 'drill', startAt: 'setup' };
+    case 'modes800':
+      return { kind: 'drill', startAt: 'modes' };
+    case 'random20':
+      return 'random20';
+    case 'weak_drill':
+      return { kind: 'weakDrill' };
+    case 'random_question':
+      return { kind: 'browse', random: true };
+    case 'test_chooser':
+    case 'test_setup_full':
+      return { kind: 'test', startAt: 'setup', initialKind: 'full' };
+    case 'test_setup_section':
+      return { kind: 'test', startAt: 'setup', initialKind: 'rw' };
+    case 'exam_setup':
+      return { kind: 'exam', startAt: 'setup' };
+    case 'dashboard':
+      return { kind: 'dashboard' };
+    case 'past':
+      return { kind: 'drill', startAt: 'past' };
+    case 'mistakes':
+      return { kind: 'mistakes' };
+    case 'browse':
+      return { kind: 'browse' };
+    case 'rules_notes':
+      return { kind: 'rulesNotes' };
+    case 'settings':
+      return { kind: 'settings' };
+    case 'data':
+      return { kind: 'drill', startAt: 'data' };
+    case 'bank':
+      return { kind: 'bank' };
+    case 'in_progress':
+      return { kind: 'inProgress' };
+    case 'detail_overview':
+      return { kind: 'detail', tab: 'overview' };
+    case 'detail_skills':
+      return { kind: 'detail', tab: 'skills' };
+    case 'detail_timing':
+      return { kind: 'detail', tab: 'timing' };
+    case 'detail_behavior':
+      return { kind: 'detail', tab: 'behavior' };
+    case 'detail_tests':
+      return { kind: 'detail', tab: 'tests' };
+    case 'detail_study':
+      return { kind: 'detail', tab: 'study' };
+    case 'detail_report':
+      return { kind: 'studyReport' };
+    case 'my_skills':
+      return { kind: 'drill', startAt: 'skills' };
+  }
+}
 
 function sample<T>(items: readonly T[], n: number): T[] {
   const a = [...items];
@@ -50,31 +127,21 @@ function sample<T>(items: readonly T[], n: number): T[] {
   return a.slice(0, n);
 }
 
-function formatPoolEstimate(n: number): string {
-  return n >= 50 ? '50 or more' : String(n);
-}
-
 export default function App() {
   const [view, setView] = useState<View>({ kind: 'loading' });
   const [error, setError] = useState<string | null>(null);
-  const [retryState, setRetryState] = useState<RetryState | null>(null);
-  const [poolHealth, setPoolHealth] = useState<PoolHealthView | null>(null);
+  const [bankCount, setBankCount] = useState(0);
 
   const loadHome = useCallback(async () => {
     setError(null);
     try {
       await initApiAuth();
       startTelemetry();
-      const [meta, count, retry, health] = await Promise.all([
-        questionStore.getMeta(),
-        questionStore.count(),
-        loadRetryState().catch(() => null),
-        loadPoolHealth().catch(() => null),
-        drillStore.getState().init(),
-      ]);
-      setRetryState(retry);
-      setPoolHealth(health);
-      setView({ kind: 'home', meta, count });
+      const count = await questionStore.count();
+      setBankCount(count);
+      setView({ kind: 'home', count, home: null });
+      const home = count > 0 ? await loadHomeState(count).catch(() => null) : null;
+      setView((v) => (v.kind === 'home' ? { kind: 'home', count, home } : v));
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         setError('This page has no access to Blackbook. Open Blackbook again from the link its launcher printed.');
@@ -95,7 +162,9 @@ export default function App() {
     return () => window.clearInterval(t);
   }, []);
 
-  /** Starts a drill from a prefilled config (Study next) through the normal drill start. */
+  const fail = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
+
+  /** Starts a drill from a prefilled config (coach, Study next, skills map) through the normal drill start. */
   const launchDrill = async (config: DrillConfig) => {
     try {
       const facets = await loadFacets(questionStore);
@@ -104,7 +173,7 @@ export default function App() {
       if (session) setView({ kind: 'drill', startAt: 'play' });
       else setError(drillStore.getState().error ?? 'Could not start that drill.');
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      fail(e);
     }
   };
 
@@ -120,184 +189,103 @@ export default function App() {
       if (session) setView({ kind: 'drill', startAt: 'play' });
       else setError(drillStore.getState().error ?? 'Could not start retry session.');
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      fail(e);
     }
   };
 
+  const go = (to: ScreenId) => {
+    const v = viewFor(to);
+    if (v === 'home') void loadHome();
+    else if (v === 'random20') void startPractice();
+    else setView(v);
+  };
+
+  const resumed = () => setView(drillStore.getState().session?.mode === 'exam' ? { kind: 'exam', startAt: 'play' } : { kind: 'drill', startAt: 'play' });
+
+  const runUpNext = (home: HomeState) => {
+    const p = home.upNext.primary;
+    if (p.kind === 'resume') {
+      if (p.isTest) setView({ kind: 'test', startAt: 'open', testId: p.sessionId });
+      else
+        void drillStore
+          .getState()
+          .resume(p.sessionId)
+          .then(() => (drillStore.getState().session?.id === p.sessionId ? resumed() : setError(drillStore.getState().error ?? 'Could not resume.')), fail);
+    } else if (p.kind === 'retry') void handleStartRetry();
+    else if (p.kind === 'weak_drill') setView({ kind: 'weakDrill' });
+    else void launchDrill({ section: p.section, domainCode: 'all', skillCodes: [], difficulties: [], count: p.size, liveOnly: true });
+  };
+
+  const onCoachAction = (a: CoachAction) => {
+    if (a.kind === 'drill') void launchDrill(a.config);
+    else if (a.kind === 'retry') void handleStartRetry();
+    else go(a.target === 'exam_setup' ? 'exam_setup' : a.target === 'mistakes' ? 'mistakes' : 'drill_setup');
+  };
+
+  const onDashboardLink = (l: DashboardLink) => {
+    if (l.to === 'skill') setView({ kind: 'detail', tab: 'skills', skill: l.skillCode });
+    else if (l.to === 'test') setView({ kind: 'test', startAt: 'open', testId: l.testId });
+    else if (l.to === 'report') setView({ kind: 'studyReport' });
+    else if (l.to === 'mistakes') setView({ kind: 'mistakes' });
+    else if (l.to === 'past') setView({ kind: 'drill', startAt: 'past' });
+    else setView({ kind: 'detail', tab: l.to });
+  };
+
+  const toDashboard = () => setView({ kind: 'dashboard' });
+  const mySkills = () => setView({ kind: 'drill', startAt: 'skills' });
+  const isHome = view.kind === 'home' && view.count > 0;
+
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-6">
-      <header className="flex items-baseline justify-between">
-        <h1 className="font-mono text-lg">Blackbook</h1>
-        <p className="text-xs text-zinc-500">Independent practice tool. Not affiliated with any testing organization.</p>
-      </header>
+      {!isHome && (
+        <header className="flex items-baseline justify-between">
+          <h1 className="font-mono text-lg">Blackbook</h1>
+          <p className="text-xs text-zinc-500">Independent practice tool. Not affiliated with any testing organization.</p>
+        </header>
+      )}
 
       {error && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-red-900/50 bg-[#121215] p-4 text-sm text-red-400" role="alert">
+        <div className="flex flex-wrap items-center gap-3 rounded-[2px] border border-[#27272A] bg-black p-4 text-sm text-white" role="alert">
           <span className="min-w-0 flex-1">{error}</span>
-          <button
-            type="button"
-            onClick={() => void loadHome()}
-            className="rounded-md bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-          >
+          <button type="button" onClick={() => void loadHome()} className={T.primary}>
             Retry
           </button>
         </div>
       )}
 
-      {view.kind === 'home' && (
-        <>
-          {retryState && retryState.dueCount > 0 && (
-            <section className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[#27272A] bg-[#121215] p-5">
-              <div>
-                <div className="text-sm font-medium text-zinc-100">
-                  {retryState.dueCount} questions due for retry
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => void handleStartRetry()}
-                className="rounded-md bg-zinc-100 px-4 py-1.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-              >
-                Start retry
-              </button>
-            </section>
-          )}
+      {view.kind === 'home' && view.count > 0 && (
+        view.home ? (
+          <HomeScreen
+            status={{ questions: view.home.questions, done: view.home.done }}
+            upNext={view.home.upNext}
+            poolLine={view.home.poolLine}
+            onPrimary={() => view.home && runUpNext(view.home)}
+            onNavigate={go}
+          />
+        ) : (
+          <p className={T.muted}>Loading...</p>
+        )
+      )}
 
-          {retryState && retryState.dueCount === 0 && retryState.queue.length > 0 && (
-            <p className="text-xs text-zinc-500">No retries due</p>
-          )}
+      {/* With no bank, the empty-bank screen is the whole home, with Download as the one action. */}
+      {view.kind === 'home' && view.count === 0 &&
+        (DOWNLOAD_ENABLED ? (
+          <DownloadController hasBank={false} questionCount={0} importSlot={<ImportPanel onImported={reloadHome} />} onBankChanged={reloadHome} />
+        ) : (
+          <ImportPanel onImported={reloadHome} />
+        ))}
 
-          {poolHealth && (
-            <p className="text-xs text-zinc-400">
-              Full tests left: {formatPoolEstimate(poolHealth.fresh.full)}, Reading and Writing: {formatPoolEstimate(poolHealth.fresh.rw)}, Math: {formatPoolEstimate(poolHealth.fresh.math)} (estimate)
-            </p>
-          )}
+      {view.kind === 'bank' && <BankScreen questionCount={bankCount} onBankChanged={reloadHome} onBack={() => void loadHome()} />}
 
-          {view.count > 0 && view.meta && (
-            <section className="flex flex-wrap items-center gap-4 rounded-lg border border-[#27272A] bg-[#121215] p-5">
-              <div className="text-sm">
-                <div>{view.count} questions loaded</div>
-                <div className="text-xs text-zinc-500">
-                  Synced {new Date(view.meta.fetchedAt).toLocaleString()}, imported {new Date(view.meta.importedAt).toLocaleString()}
-                </div>
-              </div>
-              <div className="ml-auto flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setView({ kind: 'drill', startAt: 'setup' })}
-                  className="rounded-md bg-zinc-100 px-4 py-1.5 text-sm font-medium text-zinc-900"
-                >
-                  Start a drill
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setView({ kind: 'exam', startAt: 'setup' })}
-                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
-                >
-                  Practice module
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setView({ kind: 'test', startAt: 'setup' })}
-                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
-                >
-                  Practice test
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setView({ kind: 'drill', startAt: 'skills' })}
-                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
-                >
-                  My skills
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setView({ kind: 'analytics' })}
-                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
-                >
-                  Analytics
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setView({ kind: 'drill', startAt: 'past' })}
-                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
-                >
-                  Past drills
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setView({ kind: 'drill', startAt: 'data' })}
-                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
-                >
-                  Your data
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setView({ kind: 'weakDrill' })}
-                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
-                >
-                  Weak-skill drill
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setView({ kind: 'aiReport' })}
-                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
-                >
-                  Study report
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setView({ kind: 'settings' })}
-                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
-                >
-                  Settings
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setView({ kind: 'mistakes' })}
-                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
-                >
-                  Mistake log
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setView({ kind: 'browse' })}
-                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
-                >
-                  Browse questions
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void startPractice()}
-                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
-                >
-                  Step through {Math.min(PRACTICE_SIZE, view.count)} random questions
-                </button>
-              </div>
-            </section>
-          )}
-          {view.count > 0 && (
-            <InProgressSection
-              onOpenTest={(testId) => setView({ kind: 'test', startAt: 'open', testId })}
-              onResumed={() =>
-                setView(drillStore.getState().session?.mode === 'exam' ? { kind: 'exam', startAt: 'play' } : { kind: 'drill', startAt: 'play' })
-              }
-            />
-          )}
-          {DOWNLOAD_ENABLED ? (
-            <>
-              <DownloadController
-                hasBank={view.count > 0}
-                questionCount={view.count}
-                importSlot={<ImportPanel onImported={reloadHome} />}
-                onBankChanged={reloadHome}
-              />
-              {view.count > 0 && <ImportPanel onImported={reloadHome} />}
-            </>
-          ) : (
-            <ImportPanel onImported={reloadHome} />
-          )}
-        </>
+      {view.kind === 'rulesNotes' && <RulesNotesScreen onBack={() => void loadHome()} />}
+
+      {view.kind === 'inProgress' && (
+        <section className="space-y-4">
+          <button type="button" onClick={() => void loadHome()} className={T.secondary}>
+            Back
+          </button>
+          <InProgressSection onOpenTest={(testId) => setView({ kind: 'test', startAt: 'open', testId })} onResumed={resumed} />
+        </section>
       )}
 
       {view.kind === 'practice' && (
@@ -326,9 +314,7 @@ export default function App() {
               Next
             </button>
           </nav>
-          {view.questions[view.index] && (
-            <QuestionView key={view.questions[view.index]?.id} question={view.questions[view.index] as Question} />
-          )}
+          {view.questions[view.index] && <QuestionView key={view.questions[view.index]?.id} question={view.questions[view.index] as Question} />}
         </section>
       )}
 
@@ -338,22 +324,29 @@ export default function App() {
           onExit={() => void loadHome()}
           onOpenExam={() => setView({ kind: 'exam', startAt: 'play' })}
           onOpenTest={(testId) => setView({ kind: 'test', startAt: 'open', testId })}
+          onRandom20={() => void startPractice()}
         />
       )}
-      {view.kind === 'exam' && (
-        <ExamFlow startAt={view.startAt} onExit={() => void loadHome()} onMySkills={() => setView({ kind: 'drill', startAt: 'skills' })} />
-      )}
+      {view.kind === 'exam' && <ExamFlow startAt={view.startAt} onExit={() => void loadHome()} onMySkills={mySkills} />}
 
       {view.kind === 'test' && (
-        <TestFlow
-          startAt={view.startAt}
-          testId={view.testId}
-          onExit={() => void loadHome()}
-          onMySkills={() => setView({ kind: 'drill', startAt: 'skills' })}
+        <TestFlow startAt={view.startAt} testId={view.testId} initialKind={view.initialKind} onExit={() => void loadHome()} onMySkills={mySkills} />
+      )}
+
+      {view.kind === 'dashboard' && (
+        <DashboardScreen
+          actions={{ onAction: onCoachAction, onLink: onDashboardLink, onTagSession: (sessionId) => setView({ kind: 'mistakeReport', sessionId, back: 'dashboard' }) }}
+          onBack={() => void loadHome()}
+          onOpenTest={(testId) => setView({ kind: 'test', startAt: 'open', testId })}
+          onOpen={go}
         />
       )}
 
-      {view.kind === 'analytics' && <AnalyticsFlow onExit={() => void loadHome()} onLaunch={(config) => void launchDrill(config)} />}
+      {view.kind === 'detail' && (
+        <AnalyticsFlow key={`${view.tab}:${view.skill ?? ''}`} startTab={view.tab} initialSkill={view.skill} onExit={toDashboard} onLaunch={(config) => void launchDrill(config)} />
+      )}
+
+      {view.kind === 'studyReport' && <AiReportScreen onBack={toDashboard} />}
 
       {view.kind === 'settings' && <SettingsScreen onBack={() => void loadHome()} />}
 
@@ -361,22 +354,20 @@ export default function App() {
         <WeakDrillScreen onBack={() => void loadHome()} onStarted={() => drillStore.getState().session && setView({ kind: 'drill', startAt: 'play' })} />
       )}
 
-      {view.kind === 'aiReport' && <AiReportScreen onBack={() => void loadHome()} />}
-
       {view.kind === 'mistakes' && (
-        <MistakeLogScreen onBack={() => void loadHome()} onOpenReport={(sessionId) => setView({ kind: 'mistakeReport', sessionId })} />
+        <MistakeLogScreen onBack={() => void loadHome()} onOpenReport={(sessionId) => setView({ kind: 'mistakeReport', sessionId, back: 'mistakes' })} />
       )}
 
       {view.kind === 'mistakeReport' && (
         <ReportScreen
           sessionId={view.sessionId}
-          backLabel="Back to mistake log"
-          onBack={() => setView({ kind: 'mistakes' })}
-          onMySkills={() => setView({ kind: 'drill', startAt: 'skills' })}
+          backLabel={view.back === 'dashboard' ? 'Back to dashboard' : 'Back to mistake log'}
+          onBack={() => setView(view.back === 'dashboard' ? { kind: 'dashboard' } : { kind: 'mistakes' })}
+          onMySkills={mySkills}
         />
       )}
 
-      {view.kind === 'browse' && <BrowseScreen onBack={() => void loadHome()} onMySkills={() => setView({ kind: 'drill', startAt: 'skills' })} />}
+      {view.kind === 'browse' && <BrowseScreen onBack={() => void loadHome()} onMySkills={mySkills} startRandom={view.random === true} />}
     </main>
   );
 }

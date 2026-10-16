@@ -6,6 +6,7 @@
 //   4. otherwise a 20-question drill.
 
 import { MIN_SKILL_ANSWERS, WEAK_SKILL_COUNT } from '../ai/weakDrill';
+import type { Section } from '../../types/sat';
 import type { InProgressRow } from '../../types/session';
 
 export const STARTER_DRILL_SIZE = 20;
@@ -16,7 +17,7 @@ export type UpNext =
   | { kind: 'resume'; sessionId: string; isTest: boolean; label: string; reason: string }
   | { kind: 'retry'; due: number; label: string; reason: string }
   | { kind: 'weak_drill'; skills: number; label: string; reason: string }
-  | { kind: 'start_drill'; size: number; label: string; reason: string };
+  | { kind: 'start_drill'; size: number; section: Section; label: string; reason: string };
 
 export interface UpNextInputs {
   /** Newest activity first (inProgressRows). */
@@ -24,6 +25,8 @@ export interface UpNextInputs {
   retryDue: number;
   /** Skills with at least MIN_SKILL_ANSWERS first attempts (hidden sessions not counted). */
   rankableSkills: number;
+  /** The section you have answered fewer first attempts in (Reading and Writing on a tie). */
+  starterSection: Section;
 }
 
 export interface UpNextChoice {
@@ -61,7 +64,13 @@ export function pickUpNext(i: UpNextInputs): UpNextChoice {
     };
   }
   return {
-    primary: { kind: 'start_drill', size: STARTER_DRILL_SIZE, label: `Start a ${STARTER_DRILL_SIZE}-question drill`, reason: 'A mixed set from questions you have not seen yet.' },
+    primary: {
+      kind: 'start_drill',
+      size: STARTER_DRILL_SIZE,
+      section: i.starterSection,
+      label: `Start a ${STARTER_DRILL_SIZE}-question drill`,
+      reason: `${i.starterSection === 'rw' ? 'Reading and Writing' : 'Math'}, all domains, questions you have not seen first. It is the section you have practiced less.`,
+    },
     moreInProgress,
   };
 }
