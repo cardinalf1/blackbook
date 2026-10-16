@@ -1,6 +1,6 @@
 # Calculator spec (Phase 9)
 
-What the real test's calculator does, what Blackbook builds, and why the embedded graphing calculator is **not** turned on. Labels: **Verified** (seen in the owner's screenshots of a real practice test, 2026-10-16, or read in a source below), **Assumed** (Blackbook's choice), **Not seen**.
+What the real test's calculator does, what Blackbook builds, and how the Desmos calculator is turned on with each user's own key. Labels: **Verified** (seen in the owner's screenshots of a real practice test, 2026-10-16, or read in a source below), **Assumed** (Blackbook's choice or untested), **Unverified** (could not be checked), **Not seen**.
 
 ## Sources (read 2026-10-16)
 
@@ -30,7 +30,7 @@ What the real test's calculator does, what Blackbook builds, and why the embedde
 - Section 5c: "Your API Key is intended to be used by you and to identify your Application. You will keep your API Key confidential and make reasonable efforts to prevent and discourage others from using your API Key."
 - Section 5b(iii): the Desmos branding may not be removed, altered or obscured.
 
-## Decision: not turned on
+## First decision (Phase 9): not turned on for a shared app
 
 The terms do not clearly allow Blackbook's use. Blackbook is free, but it is an application handed to classmates who use it on their own computers, and the terms count "any use of the API in an Application that is accessed by End Users in production" as commercial, whatever the price. One key shared in the package is ruled out by section 5c. Each user requesting their own key for personal use might fit "personal, non-commercial use", but the terms do not say so plainly. As the Phase 9 prompt asks, the embed step stops here.
 
@@ -40,14 +40,40 @@ What is built instead:
 - A clean extension point: `CalculatorEngine` in `src/types/testRoom.ts`, `mount(element, mode, savedState)` returning `getState`, `resize` and `destroy`. With no engine, the panel says so in plain words and points here. If an engine fails to load (offline, blocked), the panel says that and the test carries on.
 - The engine never receives question content: only the mode and its own saved state.
 
-## To turn it on later (owner's decision)
+## Decision (Phase 9 follow-up, 2026-10-16): on, with each user's own key
 
-1. Ask Desmos (partnerships@desmos.com) whether a free study app shared with a few classmates, each user entering their own key, is allowed under the Trial Tier, or get a written OK. Record the answer here.
-2. If allowed: write `src/services/calculator/desmos.ts` implementing `CalculatorEngine` (load the script with the user's key, `GraphingCalculator` with `setMathBounds({ left: -10, right: 10, bottom: -10, top: 10 })` for graphing, `ScientificCalculator` for scientific, `getState`/`setState` for the saved state). Keep the key in Settings like the Groq key, stored on the local server, never in the repo.
-3. Load it inside a sandboxed iframe (`sandbox="allow-scripts"`, no `allow-same-origin`) so a remote script never runs with access to the app's origin and its per-launch token; the local server's Content-Security-Policy must allow the Desmos origin for that frame only.
-4. Keep the Desmos branding visible (terms 5b(iii)).
+The owner accepts the free Trial Tier terms for personal use. The app is shared with two friends, and **each uses their own key**. Nobody's key is shipped, shared or committed. Without a key, nothing changes from Phase 9: the panel says no calculator is set up and where to add a key.
+
+Phase 9's first decision ("not turned on") stands for any shared or bundled key.
+
+## How the key is used (findings, 2026-10-16)
+
+| Item | Label | Detail |
+|---|---|---|
+| The key goes in the script URL: `https://www.desmos.com/api/v1.11/calculator.js?apiKey=KEY` | Verified | API docs v1.11 ("you must supply an API key as a URL parameter") |
+| `v1.11` redirects to the current patch release (`/api/v1.11.4/calculator.js`) | Verified | A request without following redirects returned 302 |
+| Desmos checks the key when serving the script: an unknown key gets **403 "Unrecognized API key"**, a missing key gets 403 "Missing or malformed required url parameter: apiKey" | Verified | Requests made from this computer with a made-up key and with none |
+| A recognized key gets 200 | **Assumed** | No real key was available to try. Settings > Test treats 200 as recognized |
+| Whether a key is limited to certain websites (origins or referrers), and whether `localhost` is accepted | **Unverified** | The docs do not mention it, and desmos.com/my-api needs a login. Settings > Test runs from the local program without a page origin, so it cannot detect an origin limit. If the panel says the calculator could not load while Test passes, an origin limit is the likely cause |
+| Scientific (and four-function) "must be separately enabled per API key", and calling a constructor that is not enabled "is an error" | Verified | API docs |
+| What the Scientific mode does with a key that has it disabled | **Assumed** | The panel shows "could not load" for that mode, and Graphing still works |
+| Desmos needs `eval` and blob workers (allowed in the frame's CSP) | **Assumed** | Not checkable without a key; the CSP allows `'unsafe-eval'`, `blob:` and `*.desmos.com` only |
+
+## How it is built
+
+- **Key storage.** Settings > Desmos calculator: Save key, Test, Remove key. The key goes to the local program and is written to `secrets/desmos-key` in the user-data folder (under the git-ignored `data/app` in dev). It is never in the database, so no export or backup can hold it, and it is never sent back: the app only learns `hasKey`. Test and error messages never contain it (`server/calculator.ts`, tests in `server/calculator.test.ts`).
+- **Loading.** With a key, the calculator panel loads `GET /api/calculator/frame?mode=graphing|scientific` from the local program into an iframe with `sandbox="allow-scripts"` (no `allow-same-origin`).
+  - That page loads the official script with the key and creates a `GraphingCalculator` (keypad, expressions, settings, zoom buttons, window -10 to 10) or a `ScientificCalculator`.
+  - The page is `no-store` and has its own Content-Security-Policy: Desmos hosts only, inline code by nonce, framed only by the app.
+  - Desmos's script runs in an opaque origin, so it never has access to the app's origin, its access token or its data. The app's own code never handles the key.
+- **State.** The frame sends the calculator's state after each change. The panel keeps it in memory per mode, restores it when the panel or mode comes back, keeps it across questions in a module, and drops it at the next module. It is never saved with the session and never logged.
+- **Failure.** No key: the "no calculator is set up" message pointing to Settings. Script blocked, offline, unknown key, or nothing within 15 seconds: "The calculator could not load (offline or blocked). Everything else keeps working." The test never waits on the calculator.
+- **Telemetry** is unchanged: opened, closed, mode switched, open time per question. Never expressions or state.
+- **Branding.** Desmos's own branding inside the calculator is left as it is (terms 5b(iii)).
+- **Leak guard.** `src/services/secrets.test.ts` fails if a key-shaped string (32 hex characters, or `gsk_` and a long token) appears in any committed file, any handoff file or a user-data export.
 
 ## Assumed
 
 - The calculator keeps its expressions, place, size and mode across questions inside one module and starts fresh in the next module.
 - Default place and size: left side below the header, 380 by 540 pixels (`CALCULATOR_DEFAULT_RECT`).
+- The load timeout of 15 seconds (`DESMOS_LOAD_TIMEOUT_MS`).

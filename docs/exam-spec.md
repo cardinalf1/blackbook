@@ -149,7 +149,7 @@ Ticked items were verified from the owner's screenshots (2026-10-16). Open items
 - [ ] Review screen layout and wording (separate page? grid states? submit button text). Not seen; Blackbook's is assumed.
 - [x] Student-produced answer preview exists ("Answer Preview:" under the box). Its rendering of a typed value: not seen.
 - [ ] Break screen: what is shown, what the button says after zero, whether the countdown is visible.
-- [x] Calculator: floating panel, Graphing and Scientific modes, drag handle, corner resize, close (not embedded in Blackbook: see docs/calculator-spec.md).
+- [x] Calculator: floating panel, Graphing and Scientific modes, drag handle, corner resize, close (in Blackbook: Desmos with each user's own key, see docs/calculator-spec.md).
 - [ ] Calculator: Scientific mode on screen; whether expressions persist between questions.
 - [x] "." and "-" count toward the limits (inferred from the examples table).
 - [ ] Whether "/" counts toward the limits.

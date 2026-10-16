@@ -73,7 +73,7 @@ One line per idea, grouped by phase (AGENTS.md rule 8).
 
 ## Phase 9 (test room)
 - Screenshots to take in a real practice test: the review page; the Math More menu; Help, Shortcuts and Assistive Technology open; the Directions dropdown open; the line reader on screen; the unscheduled break screen; Exit confirmation; a typed answer in the Answer Preview (a fraction and a decimal); the calculator in Scientific mode; a figure in full screen and at a zoom other than 100%; the highlight note editor and the underline style dropdown; the timer hidden and the five-minute warning; whether the eliminator starts on.
-- Desmos: ask partnerships@desmos.com whether a free study app shared with classmates, each entering their own key, fits the Trial Tier; if yes, add the engine (steps in docs/calculator-spec.md).
+- Desmos is on with each user's own key (Phase 9 follow-up). Still to check with a real key: whether keys are limited to some websites, Scientific mode on a key without it enabled, and whether the frame's CSP is enough.
 - Underline styles (the dropdown next to the underline control) and Assistive Technology are not built.
 - Drills keep their own SPR box (6 characters, any text); they could use the exam box with the typed limits and preview.
 - The line reader darkens the header and footer too; it could limit itself to the passage pane.
