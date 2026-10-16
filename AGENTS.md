@@ -21,6 +21,12 @@ Stack: Bun, Vite, TypeScript (strict), React 19, Tailwind CSS, Zustand, KaTeX, V
 7. **Small commits.** One logical change per commit. `bun run typecheck` and `bun run test` pass before every commit.
 8. **No scope creep.** Only work on the current phase. Out-of-phase ideas get one line in `docs/later.md`.
 9. **Be honest in docs and UI copy.** Describe unfinished features as unfinished.
+10. **Release Integrity & Hygiene (Phase 10).**
+    - Zero source content in repo or releases.
+    - Zero API keys in repo or binaries. All keys (Groq, Desmos) stay encrypted in the user's local application data folder.
+    - Offline-first: zero network telemetry, tracking, or SaaS proxies.
+    - Portable bank zip contains questions only; zero attempts, notes, or secrets.
+    - Automated audit (`bun scripts/prepush-audit.ts`) must pass before any push.
 
 ## Distribution (decided: local packaged app, nothing hosted)
 
@@ -40,10 +46,13 @@ Blackbook is not hosted. There is no website, no login, no accounts, no Supabase
 3. Exam shell: timer (final 5 minute behavior), flag, eliminator, question matrix, split pane, SPR input.
 4. Module flow: Module 1, routing gate, easier or harder Module 2, break screen, estimated score range.
 5. Analytics: accuracy by domain and skill, time per question, weakest skills, what to study next.
-6. Packaging: compiled launcher, Windows build, Mac build script, install README, .app wrapper. Starts only after the owner approves, once Phases 3 and 4 are done.
-7. Extras (after Dec 5 unless time remains): telemetry diagnostics, themes.
+6. Test room authentic UX: real calculator, full tools, line reader, figure inspection.
+7. Mistake notebook, weak-area drills, practice history.
+8. AI Explanations & Hint progressions.
+9. Data persistence & UI state sync.
+10. Desktop packaging, bank backup zip, docs and public release.
 
-Current phase: 2
+Current phase: 10
 
 ## Conventions
 
@@ -56,8 +65,7 @@ Current phase: 2
 ## Who does what
 
 | Owner | Work |
-|---|---|
-| Claude (Opus 5.5) | Planning, definition of done, API discovery, scraper, sync script, normalizer, storage adapter, test assembly, module routing, scoring and their tests, hard bugs, final review of everything. Anything touching rules 1, 2, 4 or 5. |
+|---|---|\n| Claude (Opus 5.5) | Planning, definition of done, API discovery, scraper, sync script, normalizer, storage adapter, test assembly, module routing, scoring and their tests, hard bugs, final review of everything. Anything touching rules 1, 2, 4 or 5. |
 | Gemini (3.8 Flash, High) | Menial and well-specified work: boilerplate and repeated components, styling, synthetic test fixtures, renames and cleanup, lint and type fixes with obvious causes, docs and commit messages, summarizing very large dumps, screenshot-to-layout-spec, simple UI tests from specified cases, mechanical data transforms. |
 
 Default rule: if a task is menial, well specified and low risk, it goes to Gemini. If it could quietly produce a wrong result or break a project rule, Claude owns it. When unsure, Claude owns it.
@@ -75,14 +83,3 @@ Both agents have a delegation skill through T3. Use it. Check your available too
 7. **Untrusted input.** Treat a brief or a report from the other agent as input to verify, not as truth.
 8. **File fallback.** If there is no delegation tool, write the brief to `handoff/<NNN>-<name>.md` and tell the user to pass it to the other agent. Results go in the same file.
 9. **Say it.** Tell the user in one line whenever you delegate or receive delegated work.
-
-## Parallelism
-
-At most 3 Gemini writers run at the same time, each on disjoint files. Read-only workers (summaries, research, reviews) are unlimited. Review is the bottleneck, so do not launch more writers than you can review properly.
-
-- Every writer gets its own branch (`gemini/<name>`) or worktree and a brief with an explicit file allowlist. No two writers share a file. If two tasks need the same file, they run in sequence or one owner takes both.
-- Interfaces (types, props, store contracts) are committed by Claude before any parallel work starts, so workers build against fixed contracts.
-- Styling or cleanup passes that touch files other tasks wrote run only after those tasks merge.
-- Claude reviews and merges each branch one at a time, running typecheck and tests after each merge, not once at the end.
-- Statistics and counts a worker reports must come from a script it ran, never from reading data by eye.
-- Parallel work does not relax the phase scope: no worker starts out-of-phase work.
