@@ -14,6 +14,10 @@
     {
       "from": "sidecar",
       "to": "sidecar"
+    },
+    {
+      "from": "dist",
+      "to": "web"
     }
   ],
   "win": {
