@@ -11,7 +11,7 @@ export function BankScreen({
   const hasBank = questionCount > 0;
 
   return (
-    <div className={`min-h-screen ${T.page} p-4 sm:p-6 max-w-4xl mx-auto space-y-6`}>
+    <div className={`${T.page} p-4 sm:p-6 max-w-4xl mx-auto space-y-6`}>
       <header className="flex items-center gap-4 border-b border-[#27272A] pb-4">
         <button
           type="button"

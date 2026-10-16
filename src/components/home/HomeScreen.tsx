@@ -30,7 +30,7 @@ export function HomeScreen({
   };
 
   return (
-    <div className={`min-h-screen ${T.page} flex flex-col justify-between p-4 sm:p-6 max-w-6xl mx-auto space-y-4 sm:space-y-5`}>
+    <div className={`${T.page} flex flex-col p-4 sm:p-6 max-w-6xl mx-auto space-y-4 sm:space-y-5`}>
       {/* Header */}
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[#27272A] pb-3">
         <div>
@@ -46,7 +46,7 @@ export function HomeScreen({
       </header>
 
       {/* Main Content */}
-      <main className="space-y-4 sm:space-y-5 flex-1">
+      <div className="space-y-4 sm:space-y-5">
         {/* Up next card */}
         <section className={`${T.card} p-4 sm:p-5 space-y-2.5`}>
           <div className={T.label}>Up next</div>
@@ -117,7 +117,7 @@ export function HomeScreen({
             </section>
           ))}
         </div>
-      </main>
+      </div>
 
       {/* Footer */}
       <footer className="pt-3 pb-1 text-center border-t border-[#27272A]">
