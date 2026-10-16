@@ -20,7 +20,8 @@ const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
  * Browse with seen and done status. Picking a question (or Random) starts a single-question
  * session with the usual deferred feedback; Done shows its report, then Browse comes back as it was.
  */
-export function BrowseScreen({ onBack, onMySkills }: { onBack: () => void; onMySkills: () => void }) {
+/** `startRandom` opens one random question from the current filters as soon as the list loads (Home's "One random question"). */
+export function BrowseScreen({ onBack, onMySkills, startRandom = false }: { onBack: () => void; onMySkills: () => void; startRandom?: boolean }) {
   const [rows, setRows] = useState<BrowseRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [state, setState] = useState<BrowseViewState>(savedState);
@@ -78,6 +79,15 @@ export function BrowseScreen({ onBack, onMySkills }: { onBack: () => void; onMyS
       window.scrollTo(0, 0);
     }
   };
+
+  const randomDone = useRef(false);
+  useEffect(() => {
+    if (!startRandom || randomDone.current || !rows) return;
+    randomDone.current = true;
+    const pick = pickRandom(applyFilters(rows, state.filters));
+    if (pick) void open(pick.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startRandom, rows]);
 
   const backToList = () => {
     restoreScroll.current = true;

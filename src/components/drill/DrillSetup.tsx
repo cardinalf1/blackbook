@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { capCount, matchingCount } from '../../services/drill/facets';
 import type { DrillConfig, DrillSetupProps } from '../../types/drill';
 import type { Difficulty, Section } from '../../types/sat';
@@ -22,7 +22,13 @@ export function DrillSetup({
   onStart,
   onCancel,
   onStarted,
-}: DrillSetupProps & { onStarted?: () => void }) {
+  onRandom20,
+  focusModes = false,
+}: DrillSetupProps & { onStarted?: () => void; onRandom20?: () => void; focusModes?: boolean }) {
+  const modesRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (focusModes) modesRef.current?.focus();
+  }, [focusModes]);
   const sectionSelectId = useId();
   const domainSelectId = useId();
   const countInputId = useId();
@@ -119,13 +125,28 @@ export function DrillSetup({
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6">
       {/* Practice modes */}
-      <section className="space-y-4 rounded-lg border border-[#27272A] bg-[#121215] p-5">
+      <section id="practice-modes" ref={modesRef} tabIndex={-1} aria-label="Practice modes" className="space-y-4 rounded-lg border border-[#27272A] bg-[#121215] p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400">
         <div className="border-b border-[#27272A] pb-3">
           <h2 className="font-mono text-sm font-medium text-zinc-100">Practice modes</h2>
           <p className="mt-0.5 text-xs text-zinc-400">
             Practice modes, not a promise about your real score.
           </p>
         </div>
+        {onRandom20 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#27272A] pb-4">
+            <div>
+              <div className="text-sm text-zinc-100">Random 20</div>
+              <div className="text-xs text-zinc-400">Step through 20 random questions with their answers. Nothing is saved or scored.</div>
+            </div>
+            <button
+              type="button"
+              onClick={onRandom20}
+              className="rounded-md border border-[#27272A] px-3 py-1.5 text-xs font-medium text-zinc-100 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+            >
+              Random 20
+            </button>
+          </div>
+        )}
         <PresetPanel onStarted={onStarted ?? (() => {})} />
       </section>
 

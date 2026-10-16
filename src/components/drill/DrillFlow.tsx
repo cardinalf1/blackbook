@@ -21,7 +21,7 @@ import { DrillSetup } from './DrillSetup';
 import { FinishConfirm } from './FinishConfirm';
 import { InProgressSection } from './InProgressSection';
 
-export type DrillStart = 'setup' | 'play' | 'skills' | 'past' | 'data';
+export type DrillStart = 'setup' | 'modes' | 'play' | 'skills' | 'past' | 'data';
 
 type Step =
   | { kind: 'setup' }
@@ -47,9 +47,9 @@ function Notice({ children, error = false }: { children: ReactNode; error?: bool
  * Setup, the question loop, the report, Past drills, the Data page and the skills table. Session
  * state lives in the drill store; this component chooses the screen and loads what it shows.
  */
-export function DrillFlow({ onExit, startAt, onOpenExam, onOpenTest }: { onExit: () => void; startAt: DrillStart; onOpenExam?: () => void; onOpenTest?: (testId: string) => void }) {
+export function DrillFlow({ onExit, startAt, onOpenExam, onOpenTest, onRandom20 }: { onExit: () => void; startAt: DrillStart; onOpenExam?: () => void; onOpenTest?: (testId: string) => void; onRandom20?: () => void }) {
   const error = useDrill((s) => s.error);
-  const [step, setStep] = useState<Step>(startAt === 'skills' ? { kind: 'skills', back: null } : { kind: startAt });
+  const [step, setStep] = useState<Step>(startAt === 'skills' ? { kind: 'skills', back: null } : startAt === 'modes' ? { kind: 'setup' } : { kind: startAt });
   const [facets, setFacets] = useState<QuestionFacet[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -78,7 +78,7 @@ export function DrillFlow({ onExit, startAt, onOpenExam, onOpenTest }: { onExit:
       return (
         <div className="space-y-3">
           {banner}
-          <DrillSetup taxonomy={buildTaxonomy(facets)} facets={facets} onStart={(c) => void start(c)} onCancel={onExit} onStarted={() => drillStore.getState().session && setStep({ kind: 'play' })} />
+          <DrillSetup taxonomy={buildTaxonomy(facets)} facets={facets} onStart={(c) => void start(c)} onCancel={onExit} onStarted={() => drillStore.getState().session && setStep({ kind: 'play' })} onRandom20={onRandom20} focusModes={startAt === 'modes'} />
         </div>
       );
     case 'skills':
