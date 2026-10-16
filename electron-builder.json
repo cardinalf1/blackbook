@@ -1,0 +1,35 @@
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.blackbook.app",
+  "productName": "Blackbook",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "out/**/*",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "sidecar",
+      "to": "sidecar"
+    }
+  ],
+  "win": {
+    "target": "nsis",
+    "artifactName": "Blackbook-Setup-${version}.${ext}"
+  },
+  "mac": {
+    "target": "dmg",
+    "artifactName": "Blackbook-${version}-mac.${ext}"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Blackbook"
+  }
+}
