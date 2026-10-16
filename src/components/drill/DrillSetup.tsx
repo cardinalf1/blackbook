@@ -2,6 +2,7 @@ import { useId, useMemo, useState } from 'react';
 import { capCount, matchingCount } from '../../services/drill/facets';
 import type { DrillConfig, DrillSetupProps } from '../../types/drill';
 import type { Difficulty, Section } from '../../types/sat';
+import { PresetPanel } from '../modes/PresetPanel';
 
 const SECTION_OPTIONS: readonly { value: Section; label: string }[] = [
   { value: 'rw', label: 'Reading and Writing' },
@@ -14,7 +15,13 @@ const DIFFICULTY_OPTIONS: readonly { diff: Difficulty; label: string }[] = [
   { diff: 'H', label: 'Hard' },
 ];
 
-export function DrillSetup({ taxonomy, facets, onStart, onCancel }: DrillSetupProps) {
+export function DrillSetup({
+  taxonomy,
+  facets,
+  onStart,
+  onCancel,
+  onStarted,
+}: DrillSetupProps & { onStarted?: () => void }) {
   const sectionSelectId = useId();
   const domainSelectId = useId();
   const countInputId = useId();
@@ -110,6 +117,17 @@ export function DrillSetup({ taxonomy, facets, onStart, onCancel }: DrillSetupPr
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6">
+      {/* Practice modes */}
+      <section className="space-y-4 rounded-lg border border-[#27272A] bg-[#121215] p-5">
+        <div className="border-b border-[#27272A] pb-3">
+          <h2 className="font-mono text-sm font-medium text-zinc-100">Practice modes</h2>
+          <p className="mt-0.5 text-xs text-zinc-400">
+            Practice modes, not a promise about your real score.
+          </p>
+        </div>
+        <PresetPanel onStarted={onStarted ?? (() => {})} />
+      </section>
+
       <section className="space-y-5 rounded-lg border border-[#27272A] bg-[#121215] p-5">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#27272A] pb-3">
