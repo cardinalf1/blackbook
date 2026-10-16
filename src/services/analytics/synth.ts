@@ -18,6 +18,8 @@ export interface SynthOptions {
   events: number;
   /** Questions removed from the returned bank after generation, so some attempts have no known skill. */
   orphanQuestions?: number;
+  /** Hide every nth finished session from analytics (and the first finished test). Off when absent. */
+  hideEvery?: number;
 }
 
 function rng(seed: number): () => number {
@@ -296,5 +298,15 @@ export function synthData(opts: SynthOptions): RawData {
   // A few questions leave the bank, so some answers cannot be attributed to a skill.
   const drop = new Set<string>();
   while (drop.size < (opts.orphanQuestions ?? 3)) drop.add((all[int(0, all.length - 1)] as Question).id);
-  return { sessions, attempts, events, questions: all.filter((q) => !drop.has(q.id)) };
+  const hidden: string[] = [];
+  const every = opts.hideEvery ?? 0;
+  if (every > 0) {
+    const finished = sessions.filter((s) => s.status === 'finished' && !s.exam?.testId);
+    finished.forEach((s, i) => {
+      if (!s.test && i % every === 0) hidden.push(s.id);
+    });
+    const test = finished.find((s) => s.test);
+    if (test) hidden.push(test.id);
+  }
+  return { sessions, attempts, events, questions: all.filter((q) => !drop.has(q.id)), ...(hidden.length > 0 ? { hidden } : {}) };
 }

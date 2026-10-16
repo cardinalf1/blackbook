@@ -11,6 +11,7 @@ export function filterToParams(f: AnalyticsFilter, params = new URLSearchParams(
   if (f.section !== null) params.set('section', f.section);
   if (f.excludePaused) params.set('excludePaused', '1');
   if (f.excludeSingle) params.set('excludeSingle', '1');
+  if (f.includeHidden) params.set('includeHidden', '1');
   return params;
 }
 
@@ -31,5 +32,6 @@ export function filterFromParams(p: URLSearchParams): AnalyticsFilter {
     section: SECTIONS.includes(section as Section) ? (section as Section) : null,
     excludePaused: p.get('excludePaused') === '1',
     excludeSingle: p.get('excludeSingle') === '1',
+    includeHidden: p.get('includeHidden') === '1',
   };
 }

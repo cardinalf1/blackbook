@@ -156,7 +156,7 @@ describe('backup and restore', () => {
     expect(files[0]).toBe(`blackbook-${dayStamp(new Date(2026, 9, 4).getTime())}.json`);
     const text = await readFile(join(dir, 'backups', files[6] as string), 'utf8');
     const data = JSON.parse(text) as Record<string, unknown>;
-    expect(Object.keys(data).sort()).toEqual(['aiSettings', 'app', 'attempts', 'events', 'exportedAt', 'flags', 'mistakeTags', 'rulesNotes', 'schemaVersion', 'sessions']);
+    expect(Object.keys(data).sort()).toEqual(['aiSettings', 'app', 'attempts', 'events', 'exportedAt', 'flags', 'hiddenSessions', 'mistakeTags', 'rulesNotes', 'schemaVersion', 'sessions']);
     expect((await mgr.list()).lastBackupAt).not.toBeNull();
   });
 

@@ -83,6 +83,12 @@ const zeroCounts = (): ModeCounts => ({ attempts: 0, correct: 0, timeMs: 0 });
 const byMode = <T>(make: () => T): ByMode<T> => ({ drill: make(), exam: make() });
 const n = (v: unknown): number => Number(v ?? 0);
 
+/**
+ * Sessions hidden from analytics (Past drills), and the modules of a hidden test. Only analytics
+ * skips them: eligibility, the retry queue and pool health read sessions and attempts directly.
+ */
+const NOT_HIDDEN = `x.id NOT IN (SELECT session_id FROM hidden_sessions) AND COALESCE(x.test_id, '') NOT IN (SELECT session_id FROM hidden_sessions)`;
+
 /** SQL that selects the sessions inside the filter (`s`) and their answered final attempts (`a`). */
 function scope(f: AnalyticsFilter): { sql: string; params: SqlParam[] } {
   const where: string[] = [];
@@ -116,7 +122,7 @@ function scope(f: AnalyticsFilter): { sql: string; params: SqlParam[] } {
       COALESCE(json_extract(x.data, '$.exam.module.section'), json_extract(x.data, '$.config.section')) AS section,
       COALESCE(json_extract(x.data, '$.totalActiveMs'), 0) AS active_ms
     FROM sessions x LEFT JOIN sessions c ON c.id = x.test_id
-    WHERE x.status = 'finished' AND x.test_kind IS NULL AND x.source <> 'retry'
+    WHERE x.status = 'finished' AND x.test_kind IS NULL AND x.source <> 'retry'${f.includeHidden ? '' : ` AND ${NOT_HIDDEN}`}
   ),
   s AS (SELECT * FROM s0 ${where.length ? `WHERE ${where.join(' AND ')}` : ''}),
   a AS (
@@ -129,10 +135,10 @@ function scope(f: AnalyticsFilter): { sql: string; params: SqlParam[] } {
 }
 
 /** Unfiltered baselines: your own timing per mode, section and difficulty over all finished answers. */
-const BASELINE_SQL = `
+const baselineSql = (includeHidden: boolean) => `
   base AS (
     SELECT t.mode, q.section, q.difficulty, t.time_ms
-    FROM attempts t JOIN sessions x ON x.id = t.session_id AND x.status = 'finished' AND x.test_kind IS NULL AND x.source <> 'retry'
+    FROM attempts t JOIN sessions x ON x.id = t.session_id AND x.status = 'finished' AND x.test_kind IS NULL AND x.source <> 'retry'${includeHidden ? '' : ` AND ${NOT_HIDDEN}`}
          JOIN qmeta q ON q.id = t.question_id
     WHERE t.status = 'final' AND t.response <> ''
   ),
@@ -199,6 +205,7 @@ export class SqlAnalytics implements AnalyticsStore {
       activeMs: byMode(() => 0),
       bank: { total: 0, live: 0, seen: 0, seenLive: 0 },
       daily: [],
+      dailyPace: [],
       unattributed: 0,
     };
     for (const r of this.db.all<{ mode: SessionMode; c: number; ms: number }>(
@@ -227,6 +234,13 @@ export class SqlAnalytics implements AnalyticsStore {
        FROM a GROUP BY day, mode ORDER BY day, mode`, ...params,
     )) {
       out.daily.push({ day: r.day, mode: r.mode, attempts: n(r.c), correct: n(r.ok) });
+    }
+    for (const r of this.db.all<{ day: string; mode: SessionMode; section: Section; c: number; ms: number }>(
+      `WITH ${sql}
+       SELECT strftime('%Y-%m-%d', sts / 1000, 'unixepoch', 'localtime') AS day, mode, section, COUNT(*) AS c, SUM(time_ms) AS ms
+       FROM a GROUP BY day, mode, section ORDER BY day, mode, section`, ...params,
+    )) {
+      out.dailyPace.push({ day: r.day, mode: r.mode, section: r.section, attempts: n(r.c), timeMs: n(r.ms) });
     }
     out.unattributed = n(
       this.db.get<{ c: number }>(
@@ -332,7 +346,7 @@ export class SqlAnalytics implements AnalyticsStore {
     const { sql, params } = scope(f);
     const baselines: TimingBaseline[] = this.db
       .all<{ mode: SessionMode; section: Section; difficulty: Difficulty; n: number; total: number; median: number; rush: number; stuck: number }>(
-        `WITH ${BASELINE_SQL} SELECT * FROM bl ORDER BY mode, section, difficulty`,
+        `WITH ${baselineSql(f.includeHidden)} SELECT * FROM bl ORDER BY mode, section, difficulty`,
       )
       .map((r) => ({
         mode: r.mode, section: r.section, difficulty: r.difficulty, n: n(r.n), medianMs: n(r.median), rushMs: n(r.rush), stuckMs: n(r.stuck),
@@ -463,6 +477,7 @@ export class SqlAnalytics implements AnalyticsStore {
     else if (f.kind !== 'all') where.push('0');
     if (f.section !== null) { where.push("(x.test_kind = 'full' OR x.test_kind = ?)"); params.push(f.section); }
     if (f.excludePaused) where.push('x.test_paused = 0');
+    if (!f.includeHidden) where.push('x.id NOT IN (SELECT session_id FROM hidden_sessions)');
     const tests: TestHistoryRow[] = this.db
       .all<{ data: string }>(`SELECT x.data FROM sessions x WHERE ${where.join(' AND ')} ORDER BY ${ts}, x.id`, ...params)
       .map((r) => {

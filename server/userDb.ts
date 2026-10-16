@@ -10,7 +10,7 @@ import type { QuestionStatus } from '../src/types/browse';
 import type { FlagRecord } from '../src/types/drill';
 import type { MistakeStore, MistakeTag } from '../src/types/mistakes';
 import { DEFAULT_AI_SETTINGS, type AiSettings, type RulesNote, type RulesNotesStore } from '../src/types/ai';
-import type { EventRecord, EventType, SessionRecord, StoredAttempt, TelemetryStats, UserDataExport } from '../src/types/session';
+import type { EventRecord, HiddenSession, HiddenSessionsStore, EventType, SessionRecord, StoredAttempt, TelemetryStats, UserDataExport } from '../src/types/session';
 import { transaction, type SqlDb, type SqlParam } from './sql';
 import type { ValidatedUserData } from './validate';
 
@@ -200,6 +200,14 @@ export const MIGRATIONS: readonly Migration[] = [
     at INTEGER NOT NULL
   );
   `,
+  // 7: Phase 8. Sessions hidden from analytics. A side table, so saving a session never clears the
+  // mark, and only analytics reads it (eligibility, retries and pool health ignore it on purpose).
+  `
+  CREATE TABLE hidden_sessions (
+    session_id TEXT PRIMARY KEY,
+    at INTEGER NOT NULL
+  );
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
@@ -360,7 +368,7 @@ export class ClosedSessionError extends Error {
   }
 }
 
-export class SqliteUserStore implements AttemptStore, TelemetryStore, MistakeStore, RulesNotesStore {
+export class SqliteUserStore implements AttemptStore, TelemetryStore, MistakeStore, RulesNotesStore, HiddenSessionsStore {
   constructor(private readonly db: SqlDb) {
     migrate(db);
   }
@@ -488,7 +496,45 @@ export class SqliteUserStore implements AttemptStore, TelemetryStore, MistakeSto
       flags: await this.listFlags(),
       rulesNotes: await this.listNotes(),
       aiSettings: this.aiSettings(),
+      hiddenSessions: await this.listHidden(),
     };
+  }
+
+  // ---- hidden from analytics (HiddenSessionsStore) ----
+
+  async listHidden(): Promise<HiddenSession[]> {
+    return this.db
+      .all<{ session_id: string; at: number }>('SELECT session_id, at FROM hidden_sessions ORDER BY at, session_id')
+      .map((r) => ({ sessionId: r.session_id, at: Number(r.at) }));
+  }
+
+  async setHidden(sessionIds: readonly string[], hidden: boolean): Promise<number> {
+    let changed = 0;
+    const now = Date.now();
+    transaction(this.db, () => {
+      for (const id of sessionIds) {
+        const present = Number(this.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM hidden_sessions WHERE session_id = ?', id)?.n ?? 0) > 0;
+        if (hidden && !present) {
+          this.db.run('INSERT INTO hidden_sessions (session_id, at) VALUES (?, ?)', id, now);
+          changed++;
+        } else if (!hidden && present) {
+          this.db.run('DELETE FROM hidden_sessions WHERE session_id = ?', id);
+          changed++;
+        }
+      }
+    });
+    return changed;
+  }
+
+  async hideBefore(before: number): Promise<number> {
+    const ids = this.db
+      .all<{ id: string }>(
+        `SELECT id FROM sessions WHERE status = 'finished' AND test_id IS NULL AND COALESCE(finished_at, last_activity_at) < ?
+           AND id NOT IN (SELECT session_id FROM hidden_sessions)`,
+        before,
+      )
+      .map((r) => r.id);
+    return this.setHidden(ids, true);
   }
 
   // ---- rules notes (RulesNotesStore) ----
@@ -592,6 +638,8 @@ export class SqliteUserStore implements AttemptStore, TelemetryStore, MistakeSto
           e.id, e.sessionId, e.mode, e.questionId, e.type, e.ts, e.monoMs, e.pageId, e.seq, JSON.stringify(e.payload),
         );
       }
+      this.db.run('DELETE FROM hidden_sessions');
+      for (const h of data.hiddenSessions) this.db.run('INSERT OR REPLACE INTO hidden_sessions (session_id, at) VALUES (?, ?)', h.sessionId, h.at);
       this.db.run('DELETE FROM rules_notes');
       for (const n of data.rulesNotes) {
         this.db.run('INSERT OR REPLACE INTO rules_notes (skill_code, text, updated_at) VALUES (?, ?, ?)', n.skillCode, n.text, n.updatedAt);
@@ -631,6 +679,7 @@ export class SqliteUserStore implements AttemptStore, TelemetryStore, MistakeSto
       this.db.run('DELETE FROM mistake_tags');
       this.db.run('DELETE FROM rules_notes');
       this.db.run('DELETE FROM ai_cache');
+      this.db.run('DELETE FROM hidden_sessions');
     });
   }
 }

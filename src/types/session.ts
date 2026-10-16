@@ -208,6 +208,26 @@ export interface UserDataExport {
   rulesNotes?: RulesNote[];
   /** AI switches (never the key). Absent before Phase 7. */
   aiSettings?: AiSettings;
+  /** Sessions hidden from analytics. Absent before Phase 8. */
+  hiddenSessions?: HiddenSession[];
+}
+
+/**
+ * A session the user hid from analytics (early random clicks). Hiding only affects the dashboard
+ * and analytics: the question still counts as seen and done for the exam no-repeat rule, the retry
+ * queue and pool health. Hiding a test hides its modules.
+ */
+export interface HiddenSession {
+  sessionId: string;
+  at: number;
+}
+
+export interface HiddenSessionsStore {
+  listHidden(): Promise<HiddenSession[]>;
+  /** Hides or shows these sessions. Returns how many changed. */
+  setHidden(sessionIds: readonly string[], hidden: boolean): Promise<number>;
+  /** Hides every finished session (tests included) that finished before `before`. Returns how many were newly hidden. */
+  hideBefore(before: number): Promise<number>;
 }
 
 // ---- Report ----

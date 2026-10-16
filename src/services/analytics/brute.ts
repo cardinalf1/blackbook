@@ -38,6 +38,8 @@ export interface RawData {
   attempts: readonly StoredAttempt[];
   events: readonly EventRecord[];
   questions: readonly Question[];
+  /** Ids of sessions hidden from analytics. A hidden test hides its modules too. */
+  hidden?: readonly string[];
 }
 
 type Kind = 'single' | 'module' | 'section' | 'full' | 'drill';
@@ -64,10 +66,12 @@ function dayOf(ts: number): string {
 class Data {
   readonly byQuestion = new Map<string, Question>();
   readonly containers = new Map<string, SessionRecord>();
+  readonly hidden: ReadonlySet<string>;
 
   constructor(readonly raw: RawData) {
     for (const q of raw.questions) this.byQuestion.set(q.id, q);
     for (const s of raw.sessions) if (s.test) this.containers.set(s.id, s);
+    this.hidden = new Set(raw.hidden ?? []);
   }
 
   /** Finished sessions that hold questions, with the figures the filter looks at. */
@@ -75,6 +79,7 @@ class Data {
     const out: Sess[] = [];
     for (const s of this.raw.sessions) {
       if (s.status !== 'finished' || s.test || s.source === 'retry') continue;
+      if (!f.includeHidden && (this.hidden.has(s.id) || (s.exam?.testId !== undefined && this.hidden.has(s.exam.testId)))) continue;
       const container = s.exam?.testId ? this.containers.get(s.exam.testId) : undefined;
       let kind: Kind;
       if (s.source === 'browse') kind = 'single';
@@ -125,7 +130,7 @@ export function bruteOverview(raw: RawData, f: AnalyticsFilter): OverviewSummary
   const sessions = d.sessions(f);
   const out: OverviewSummary = {
     sessions: two(() => 0), attempts: two(zero), activeMs: two(() => 0),
-    bank: { total: 0, live: 0, seen: 0, seenLive: 0 }, daily: [], unattributed: 0,
+    bank: { total: 0, live: 0, seen: 0, seenLive: 0 }, daily: [], dailyPace: [], unattributed: 0,
   };
   for (const x of sessions) {
     out.sessions[x.s.mode]++;
@@ -133,7 +138,13 @@ export function bruteOverview(raw: RawData, f: AnalyticsFilter): OverviewSummary
   }
   const rows = d.answered(sessions);
   const days = new Map<string, { day: string; mode: SessionMode; attempts: number; correct: number }>();
-  for (const { a, sess } of rows) {
+  const paces = new Map<string, { day: string; mode: SessionMode; section: Section; attempts: number; timeMs: number }>();
+  for (const { a, sess, q } of rows) {
+    const pk = `${dayOf(sess.ts)}|${a.mode}|${q.section}`;
+    const p = paces.get(pk) ?? { day: dayOf(sess.ts), mode: a.mode, section: q.section, attempts: 0, timeMs: 0 };
+    p.attempts++;
+    p.timeMs += a.timeMs;
+    paces.set(pk, p);
     const c = out.attempts[a.mode];
     c.attempts++;
     c.correct += a.correct ? 1 : 0;
@@ -146,6 +157,7 @@ export function bruteOverview(raw: RawData, f: AnalyticsFilter): OverviewSummary
     days.set(key, r);
   }
   out.daily = [...days.values()].sort((x, y) => cmp(x.day, y.day) || cmp(x.mode, y.mode));
+  out.dailyPace = [...paces.values()].sort((x, y) => cmp(x.day, y.day) || cmp(x.mode, y.mode) || cmp(x.section, y.section));
   const seen = seenIds(d);
   for (const q of raw.questions) {
     out.bank.total++;
@@ -248,7 +260,7 @@ function nearestRank(sorted: readonly number[], p: number): number {
 export function bruteTiming(raw: RawData, f: AnalyticsFilter): TimingSummary {
   const d = new Data(raw);
   // Baselines use every finished session, whatever the filter says.
-  const everything = d.sessions({ from: null, to: null, kind: 'all', section: null, excludePaused: false, excludeSingle: false });
+  const everything = d.sessions({ from: null, to: null, kind: 'all', section: null, excludePaused: false, excludeSingle: false, includeHidden: f.includeHidden });
   const groups = new Map<string, { mode: SessionMode; section: Section; difficulty: Difficulty; times: number[] }>();
   for (const { a, q } of d.answered(everything)) {
     const k = `${a.mode}|${q.section}|${q.difficulty}`;
@@ -358,6 +370,7 @@ export function bruteTests(raw: RawData, f: AnalyticsFilter): TestHistory {
       if (f.kind !== 'all' && f.kind !== 'full' && f.kind !== 'section') return false;
       if (f.section !== null && s.test.kind !== 'full' && s.test.kind !== f.section) return false;
       if (f.excludePaused && s.test.paused) return false;
+      if (!f.includeHidden && (raw.hidden ?? []).includes(s.id)) return false;
       return true;
     })
     .sort((x, y) => (x.finishedAt ?? x.lastActivityAt) - (y.finishedAt ?? y.lastActivityAt) || cmp(x.id, y.id))

@@ -1,14 +1,16 @@
 // Storage adapters backed by the local server. Same contracts as the in-memory stores.
 
 import type { QuestionStatus } from '../../types/browse';
-import type { AiPreview, AiSettings, AiStatus, AiStore, AiTestResult, InsightReport, ReportPeriod, RulesNote, RulesNotesStore, WeakDrillRequest, WeakDrillResult } from '../../types/ai';
+import type { AiPreview, AiSettings, AiStatus, AiStore, AiTestResult, CoachResult, InsightReport, ReportPeriod, RulesNote, RulesNotesStore, WeakDrillRequest, WeakDrillResult } from '../../types/ai';
 import type { BackupList, BackupStore, RestoreResult } from '../../types/backup';
 import type { FlagRecord } from '../../types/drill';
 import type { MistakeStore, MistakeTag } from '../../types/mistakes';
-import type { EventRecord, SessionRecord, StoredAttempt, TelemetryStats, UserDataExport } from '../../types/session';
+import type { EventRecord, HiddenSession, HiddenSessionsStore, SessionRecord, StoredAttempt, TelemetryStats, UserDataExport } from '../../types/session';
 import type { Question, Section } from '../../types/sat';
 import type { AnalyticsFilter, AnalyticsStore, BehaviorSummary, MissRow, OverviewSummary, SkillDetail, SkillsSummary, TestHistory, TimingSummary } from '../../types/analytics';
 import { filterToParams } from '../analytics/filter';
+import { scopeToParams } from '../dashboard/scope';
+import type { DashboardData, DashboardScope, DashboardStore } from '../../types/dashboard';
 import { ApiError, type ApiClient } from '../api/client';
 import type { AttemptStore, SessionFilter, TelemetryStore } from './attemptTypes';
 import type { BankMeta, QuestionQuery, QuestionStore } from './types';
@@ -146,6 +148,9 @@ export class HttpAiStore implements AiStore {
   report(period: ReportPeriod, regenerate: boolean): Promise<InsightReport> {
     return this.api.request<InsightReport>('/api/ai/report', { method: 'POST', body: JSON.stringify({ period, regenerate }) });
   }
+  coach(filter: AnalyticsFilter): Promise<CoachResult> {
+    return this.api.request<CoachResult>(`/api/ai/coach?${filterToParams(filter).toString()}`);
+  }
 }
 
 export class HttpRulesNotesStore implements RulesNotesStore {
@@ -156,6 +161,29 @@ export class HttpRulesNotesStore implements RulesNotesStore {
   }
   async setNote(skillCode: string, text: string): Promise<void> {
     await this.api.request(`/api/rules-notes/${enc(skillCode)}`, { method: 'PUT', body: JSON.stringify({ text }) });
+  }
+}
+
+export class HttpHiddenSessionsStore implements HiddenSessionsStore {
+  constructor(private readonly api: ApiClient) {}
+
+  listHidden(): Promise<HiddenSession[]> {
+    return this.api.request<HiddenSession[]>('/api/hidden-sessions');
+  }
+  async setHidden(sessionIds: readonly string[], hidden: boolean): Promise<number> {
+    if (sessionIds.length === 0) return 0;
+    return (await this.api.request<{ changed: number }>('/api/hidden-sessions', { method: 'POST', body: JSON.stringify({ sessionIds, hidden }) })).changed;
+  }
+  async hideBefore(before: number): Promise<number> {
+    return (await this.api.request<{ changed: number }>('/api/hidden-sessions', { method: 'POST', body: JSON.stringify({ before }) })).changed;
+  }
+}
+
+export class HttpDashboardStore implements DashboardStore {
+  constructor(private readonly api: ApiClient) {}
+
+  load(scope: DashboardScope): Promise<DashboardData> {
+    return this.api.request<DashboardData>(`/api/dashboard?${scopeToParams(scope).toString()}`);
   }
 }
 

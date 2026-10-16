@@ -25,9 +25,11 @@ export interface AnalyticsFilter {
   excludePaused: boolean;
   /** Leave out one-question sessions started from Browse. */
   excludeSingle: boolean;
+  /** Count sessions the user hid from analytics (Past drills). Off by default. */
+  includeHidden: boolean;
 }
 
-export const DEFAULT_ANALYTICS_FILTER: AnalyticsFilter = { from: null, to: null, kind: 'all', section: null, excludePaused: false, excludeSingle: false };
+export const DEFAULT_ANALYTICS_FILTER: AnalyticsFilter = { from: null, to: null, kind: 'all', section: null, excludePaused: false, excludeSingle: false, includeHidden: false };
 
 /** Counts for one mode. Answered questions only, in finished sessions. */
 export interface ModeCounts {
@@ -51,6 +53,8 @@ export interface OverviewSummary {
   bank: { total: number; live: number; seen: number; seenLive: number };
   /** Per calendar day (local time), oldest first. One row per day and mode. */
   daily: { day: string; mode: SessionMode; attempts: number; correct: number }[];
+  /** Per calendar day, mode and question section: answers and their summed active time, for pace over time. */
+  dailyPace: { day: string; mode: SessionMode; section: Section; attempts: number; timeMs: number }[];
   /** Answers whose question is no longer in the bank, left out of every skill figure. */
   unattributed: number;
 }

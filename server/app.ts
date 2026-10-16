@@ -5,9 +5,12 @@ import { DOWNLOAD_ENABLED } from '../src/config';
 import { importBankText } from '../src/services/import/importBank';
 import type { Sanitizer } from '../src/services/normalize/sanitize';
 import { filterFromParams } from '../src/services/analytics/filter';
+import { previousPeriod, scopeFromParams } from '../src/services/dashboard/scope';
+import type { DashboardService } from './dashboard';
 import type { AttemptStore, SessionFilter, TelemetryStore } from '../src/services/storage/attemptTypes';
 import type { MistakeStore } from '../src/types/mistakes';
 import type { RulesNotesStore } from '../src/types/ai';
+import type { HiddenSessionsStore } from '../src/types/session';
 import type { AnalyticsStore } from '../src/types/analytics';
 import type { QuestionQuery } from '../src/services/storage/types';
 import type { DownloadProgress, DownloadScopeChoice } from '../src/types/download';
@@ -25,13 +28,15 @@ import { checkHostAndOrigin, checkRequest, sameSecret, sessionCookie, type Secur
 export interface AppDeps {
   security: SecurityConfig;
   bank: DiskBankStore;
-  users: AttemptStore & TelemetryStore & MistakeStore & RulesNotesStore & { replaceAll(data: ValidatedUserData): Promise<void> };
+  users: AttemptStore & TelemetryStore & MistakeStore & RulesNotesStore & HiddenSessionsStore & { replaceAll(data: ValidatedUserData): Promise<void> };
   /** The AI layer. Absent in tests that do not need it. */
   ai?: AiService;
   /** Snapshots and restore. Absent in tests that do not need them. */
   backups?: BackupManager;
   /** Summaries computed in SQL. Absent in tests that do not need them. */
   analytics?: AnalyticsStore;
+  /** The whole Dashboard page per scope. Absent in tests that do not need it. */
+  dashboard?: DashboardService;
   downloads: DownloadManager;
   sanitize: Sanitizer;
   dataFolder: string;
@@ -262,6 +267,18 @@ export function createHandler(deps: AppDeps): (req: Request) => Promise<Response
         return json({ ok: true });
       }
 
+      // ---- hidden from analytics ----
+      if (path === '/api/hidden-sessions' && m === 'GET') return json(await deps.users.listHidden());
+      if (path === '/api/hidden-sessions' && m === 'POST') {
+        const body = await readJson(req);
+        if (!isObj(body)) return problem(400, 'Malformed request.');
+        if (typeof body.before === 'number' && Number.isFinite(body.before)) return json({ changed: await deps.users.hideBefore(body.before) });
+        const ids = body.sessionIds;
+        if (!Array.isArray(ids) || ids.length === 0 || ids.length > 10_000 || !ids.every((x) => typeof x === 'string' && x.length > 0 && x.length < 200) || typeof body.hidden !== 'boolean')
+          return problem(400, 'Malformed request.');
+        return json({ changed: await deps.users.setHidden(ids as string[], body.hidden) });
+      }
+
       // ---- AI (the key goes in, never out) ----
       if (path.startsWith('/api/ai/')) {
         const ai = deps.ai;
@@ -276,6 +293,10 @@ export function createHandler(deps: AppDeps): (req: Request) => Promise<Response
           }
           if (what === 'key' && m === 'DELETE') return json(await ai.removeKey());
           if (what === 'test' && m === 'POST') return json(await ai.testConnection());
+          if (what === 'coach' && m === 'GET') {
+            const f = filterFromParams(url.searchParams);
+            return json(await ai.coach(f, previousPeriod(f)));
+          }
           if (what === 'settings' && m === 'PUT') {
             const patch = parseAiSettings(await readJson(req), true);
             if (!patch) return problem(400, 'Malformed settings.');
@@ -340,6 +361,12 @@ export function createHandler(deps: AppDeps): (req: Request) => Promise<Response
       if (path === '/api/user-data' && m === 'DELETE') {
         await deps.users.clearAll();
         return json({ ok: true });
+      }
+
+      // ---- dashboard (one request per scope) ----
+      if (path === '/api/dashboard' && m === 'GET') {
+        if (!deps.dashboard) return problem(404, 'Not found.');
+        return json(await deps.dashboard.load(scopeFromParams(url.searchParams)));
       }
 
       // ---- analytics (summaries only; raw events never leave the server) ----

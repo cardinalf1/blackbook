@@ -13,6 +13,7 @@ import {
   type EventType,
   type SessionRecord,
   type StoredAttempt,
+  HiddenSession,
 } from '../src/types/session';
 
 export const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -195,6 +196,8 @@ export interface ValidatedUserData {
   flags: FlagRecord[];
   mistakeTags: MistakeTag[];
   rulesNotes: RulesNote[];
+  /** Empty in exports from before Phase 8. */
+  hiddenSessions: HiddenSession[];
   /** Null when the file has none (exports from before Phase 7). */
   aiSettings: AiSettings | null;
 }
@@ -212,7 +215,7 @@ export function parseUserData(v: unknown): ValidatedUserData | string {
     if (x === undefined) return [];
     return Array.isArray(x) && x.length <= MAX_RESTORE_ROWS ? x : `The ${key} in that file are not readable.`;
   };
-  const lists = { sessions: list('sessions'), attempts: list('attempts'), events: list('events'), flags: list('flags'), mistakeTags: list('mistakeTags'), rulesNotes: list('rulesNotes') };
+  const lists = { sessions: list('sessions'), attempts: list('attempts'), events: list('events'), flags: list('flags'), mistakeTags: list('mistakeTags'), rulesNotes: list('rulesNotes'), hiddenSessions: list('hiddenSessions') };
   for (const [k, x] of Object.entries(lists)) if (typeof x === 'string') return x;
   const check = <T>(key: string, items: unknown, parse: (x: unknown) => T | null): T[] | string => {
     const out: T[] = [];
@@ -229,7 +232,8 @@ export function parseUserData(v: unknown): ValidatedUserData | string {
   const mistakeTags = check('mistake tag', lists.mistakeTags, parseTag);
   const flags = check('flag', lists.flags, (x) => (isObj(x) && isStr(x.questionId) && isNum(x.at) ? ({ questionId: x.questionId, at: x.at } as FlagRecord) : null));
   const rulesNotes = check('rules note', lists.rulesNotes, parseRulesNote);
-  for (const r of [sessions, attempts, events, mistakeTags, flags, rulesNotes]) if (typeof r === 'string') return r;
+  const hiddenSessions = check('hidden session', lists.hiddenSessions, (x) => (isObj(x) && isStr(x.sessionId) && isNum(x.at) ? ({ sessionId: x.sessionId, at: x.at } as HiddenSession) : null));
+  for (const r of [sessions, attempts, events, mistakeTags, flags, rulesNotes, hiddenSessions]) if (typeof r === 'string') return r;
   const aiSettings = v.aiSettings === undefined ? null : parseAiSettings(v.aiSettings);
   if (v.aiSettings !== undefined && aiSettings === null) return 'The AI settings in that file are damaged, so nothing was restored.';
   return {
@@ -239,6 +243,7 @@ export function parseUserData(v: unknown): ValidatedUserData | string {
     flags: flags as FlagRecord[],
     mistakeTags: mistakeTags as MistakeTag[],
     rulesNotes: rulesNotes as RulesNote[],
+    hiddenSessions: hiddenSessions as HiddenSession[],
     aiSettings,
   };
 }

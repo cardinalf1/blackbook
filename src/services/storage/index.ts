@@ -4,8 +4,10 @@ import type { AnalyticsStore } from '../../types/analytics';
 import type { BackupStore } from '../../types/backup';
 import type { MistakeStore } from '../../types/mistakes';
 import type { AiStore, RulesNotesStore } from '../../types/ai';
-import { HttpAiStore, HttpAnalyticsStore, HttpAttemptStore, HttpBackupStore, HttpQuestionStore, HttpRulesNotesStore } from './http';
+import { HttpAiStore, HttpAnalyticsStore, HttpAttemptStore, HttpBackupStore, HttpDashboardStore, HttpHiddenSessionsStore, HttpQuestionStore, HttpRulesNotesStore } from './http';
 import type { QuestionStore } from './types';
+import type { HiddenSessionsStore } from '../../types/session';
+import type { DashboardStore } from '../../types/dashboard';
 
 export type { AttemptStore, SessionFilter, TelemetryStore } from './attemptTypes';
 export type { BankMeta, ProgressFn, QuestionQuery, QuestionStore } from './types';
@@ -33,5 +35,11 @@ export const aiStore: AiStore = new HttpAiStore(api);
 /** Your own rules notes per skill. Local only, never sent to Groq. */
 export const rulesNotesStore: RulesNotesStore = new HttpRulesNotesStore(api);
 
+/** Sessions hidden from analytics. Only analytics reads the mark; no-repeat and retries ignore it. */
+export const hiddenSessionsStore: HiddenSessionsStore = new HttpHiddenSessionsStore(api);
+
 /** Summaries for the analytics screens, computed by the local program. */
 export const analyticsStore: AnalyticsStore = new HttpAnalyticsStore(api);
+
+/** The whole Dashboard page per scope, built by the local program in one request. */
+export const dashboardStore: DashboardStore = new HttpDashboardStore(api);
