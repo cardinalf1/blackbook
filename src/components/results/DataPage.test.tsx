@@ -340,16 +340,34 @@ describe('DataPage', () => {
 
     const alertdialog = container.querySelector('[role="alertdialog"]');
     expect(alertdialog).not.toBeNull();
-    expect(alertdialog?.textContent).toContain(
-      'Delete every session, answer, flag, event and mistake tag. The question bank stays. This cannot be undone.',
-    );
+    expect(alertdialog?.textContent).toContain('Delete every session, answer, flag, event and mistake tag. The question bank stays.');
+    expect(alertdialog?.textContent).toContain('A safety copy is saved first');
 
     const confirmBtn = Array.from(alertdialog?.querySelectorAll('button') ?? []).find(
       (b) => b.textContent?.trim() === 'Delete everything',
-    );
+    ) as HTMLButtonElement;
+    const word = alertdialog?.querySelector('input[aria-label="Type DELETE to confirm"]') as HTMLInputElement;
+    const type = async (v: string) => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      await act(async () => {
+        set?.call(word, v);
+        word.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    };
 
+    // Disabled until the exact word is typed; a click does nothing.
+    expect(confirmBtn.disabled).toBe(true);
+    await type('delete');
+    expect(confirmBtn.disabled).toBe(true);
     await act(async () => {
-      confirmBtn?.click();
+      confirmBtn.click();
+    });
+    expect(onDeleteAll).not.toHaveBeenCalled();
+
+    await type('DELETE');
+    expect(confirmBtn.disabled).toBe(false);
+    await act(async () => {
+      confirmBtn.click();
     });
 
     expect(onDeleteAll).toHaveBeenCalledTimes(1);

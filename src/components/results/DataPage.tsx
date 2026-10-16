@@ -26,6 +26,9 @@ async function readFileAsText(file: File): Promise<string> {
   });
 }
 
+/** The word to type before "Delete all progress" runs. */
+export const DELETE_ALL_WORD = 'DELETE';
+
 export function DataPage({
   stats,
   statsError,
@@ -36,6 +39,8 @@ export function DataPage({
   backupStore = defaultBackupStore,
 }: DataPageProps) {
   const [confirming, setConfirming] = useState<ActionType | null>(null);
+  /** What the user typed to confirm "Delete all progress". */
+  const [deleteWord, setDeleteWord] = useState('');
   const [busyAction, setBusyAction] = useState<ActionType | null>(null);
   const [statusMessage, setStatusMessage] = useState<{ action: ActionType; text: string } | null>(
     null,
@@ -74,11 +79,13 @@ export function DataPage({
 
   const handleOpenConfirm = (action: ActionType) => {
     setConfirming(action);
+    setDeleteWord('');
     setErrorMessage(null);
   };
 
   const handleCancel = () => {
     setConfirming(null);
+    setDeleteWord('');
     setErrorMessage(null);
   };
 
@@ -574,8 +581,22 @@ export function DataPage({
                 className="mt-4 rounded-md border border-red-900/60 bg-[#121215] p-3.5"
               >
                 <p className="text-xs text-zinc-300">
-                  Delete every session, answer, flag, event and mistake tag. The question bank stays. This cannot be undone.
+                  Delete every session, answer, flag, event and mistake tag. The question bank stays. A safety copy is saved first and listed under
+                  Backups and restore, so you can bring it back from there.
                 </p>
+                <label className="mt-3 block text-xs text-zinc-400">
+                  Type <span className="font-mono font-semibold text-zinc-200">{DELETE_ALL_WORD}</span> to confirm
+                  <input
+                    type="text"
+                    value={deleteWord}
+                    onChange={(e) => setDeleteWord(e.target.value)}
+                    aria-label={`Type ${DELETE_ALL_WORD} to confirm`}
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={isBusy}
+                    className="mt-1 block w-40 rounded-md border border-[#27272A] bg-[#0A0A0C] px-2 py-1.5 font-mono text-xs text-zinc-100 focus:border-zinc-400 focus:outline-none disabled:opacity-50"
+                  />
+                </label>
                 {busyAction === 'deleteAll' && (
                   <p className="mt-2 text-xs font-medium text-zinc-400">Working...</p>
                 )}
@@ -594,7 +615,7 @@ export function DataPage({
                   <button
                     type="button"
                     onClick={() => handleRunAction('deleteAll')}
-                    disabled={isBusy}
+                    disabled={isBusy || deleteWord.trim() !== DELETE_ALL_WORD}
                     className="rounded-md border border-red-800 bg-red-950/80 px-3.5 py-1.5 font-mono text-xs font-semibold text-red-400 transition-colors hover:bg-red-900/60 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 disabled:opacity-50"
                   >
                     Delete everything
