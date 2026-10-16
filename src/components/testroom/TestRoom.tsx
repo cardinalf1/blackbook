@@ -12,7 +12,7 @@ import { LINE_READER_LINES, toolsFor } from '../../config/testRoomConfig';
 import { useAttentionTelemetry } from '../../hooks/useAttentionTelemetry';
 import { useExamClock } from '../../hooks/useExamClock';
 import { useFocusTimer } from '../../hooks/useFocusTimer';
-import { calculatorEngine } from '../../services/calculator/engine';
+import { useCalculatorEngine } from '../../services/calculator/engine';
 import { isPaused, remainingMs } from '../../services/exam/timer';
 import { currentQuestionId, progressOf } from '../../services/session/record';
 import { drillStore, useDrill } from '../../stores/drillStore';
@@ -87,6 +87,7 @@ export function TestRoomPlay({ onExit }: { onExit: () => void }) {
   const [hint, setHint] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const readTimeRef = useRef<() => number>(() => 0);
+  const engine = useCalculatorEngine();
   useZoomKeys();
 
   const exam = session?.exam;
@@ -302,7 +303,7 @@ export function TestRoomPlay({ onExit }: { onExit: () => void }) {
           rect={room.calculatorRect}
           onRectChange={(r) => testRoomStore.getState().setCalculatorRect(r)}
           onClose={() => testRoomStore.getState().toggleCalculator(questionId)}
-          engine={calculatorEngine()}
+          engine={engine}
           engineState={room.calculatorStates[room.calculatorMode] ?? null}
           onEngineStateChange={(m, st) => testRoomStore.getState().saveCalculatorState(m, st)}
         />

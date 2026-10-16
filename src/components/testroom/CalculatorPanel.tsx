@@ -299,8 +299,8 @@ export function CalculatorPanel({
       <div className="relative flex-1 overflow-hidden bg-black">
         {engine === null ? (
           <div className="flex h-full flex-col justify-center p-4 text-xs font-mono text-zinc-400 space-y-2">
-            <p>No calculator is set up in this copy of Blackbook. Use your own calculator for now.</p>
-            <p>See docs/calculator-spec.md.</p>
+            <p>No calculator is set up. To use the Desmos calculator, add your own Desmos API key in Settings (settings menu on Home, then Settings, "Desmos calculator").</p>
+            <p>Until then, use your own calculator. Nothing else in the test changes.</p>
           </div>
         ) : (
           <>

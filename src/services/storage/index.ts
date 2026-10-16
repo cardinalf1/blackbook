@@ -4,10 +4,11 @@ import type { AnalyticsStore } from '../../types/analytics';
 import type { BackupStore } from '../../types/backup';
 import type { MistakeStore } from '../../types/mistakes';
 import type { AiStore, RulesNotesStore } from '../../types/ai';
-import { HttpAiStore, HttpAnalyticsStore, HttpAttemptStore, HttpBackupStore, HttpDashboardStore, HttpHiddenSessionsStore, HttpQuestionStore, HttpRulesNotesStore } from './http';
+import { HttpAiStore, HttpCalculatorKeyStore, HttpAnalyticsStore, HttpAttemptStore, HttpBackupStore, HttpDashboardStore, HttpHiddenSessionsStore, HttpQuestionStore, HttpRulesNotesStore } from './http';
 import type { QuestionStore } from './types';
 import type { HiddenSessionsStore } from '../../types/session';
 import type { DashboardStore } from '../../types/dashboard';
+import type { CalculatorKeyStore } from '../../types/calculator';
 
 export type { AttemptStore, SessionFilter, TelemetryStore } from './attemptTypes';
 export type { BankMeta, ProgressFn, QuestionQuery, QuestionStore } from './types';
@@ -43,3 +44,6 @@ export const analyticsStore: AnalyticsStore = new HttpAnalyticsStore(api);
 
 /** The whole Dashboard page per scope, built by the local program in one request. */
 export const dashboardStore: DashboardStore = new HttpDashboardStore(api);
+
+/** The Desmos key for the calculator. Goes in, never comes back; only whether one is saved. */
+export const calculatorKeyStore: CalculatorKeyStore = new HttpCalculatorKeyStore(api);

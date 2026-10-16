@@ -57,9 +57,9 @@ describe('CalculatorPanel', () => {
     });
 
     expect(container.textContent).toContain(
-      'No calculator is set up in this copy of Blackbook. Use your own calculator for now.',
+      'No calculator is set up. To use the Desmos calculator, add your own Desmos API key in Settings',
     );
-    expect(container.textContent).toContain('See docs/calculator-spec.md.');
+    expect(container.textContent).toContain('Until then, use your own calculator.');
   });
 
   it('a fake engine whose mount rejects shows the could-not-load message', async () => {

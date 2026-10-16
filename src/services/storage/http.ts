@@ -3,6 +3,7 @@
 import type { QuestionStatus } from '../../types/browse';
 import type { AiPreview, AiSettings, AiStatus, AiStore, AiTestResult, CoachResult, InsightReport, ReportPeriod, RulesNote, RulesNotesStore, WeakDrillRequest, WeakDrillResult } from '../../types/ai';
 import type { BackupList, BackupStore, RestoreResult } from '../../types/backup';
+import type { CalculatorKeyStatus, CalculatorKeyStore, CalculatorKeyTest } from '../../types/calculator';
 import type { FlagRecord } from '../../types/drill';
 import type { MistakeStore, MistakeTag } from '../../types/mistakes';
 import type { EventRecord, HiddenSession, HiddenSessionsStore, SessionRecord, StoredAttempt, TelemetryStats, UserDataExport } from '../../types/session';
@@ -114,6 +115,24 @@ export class HttpAttemptStore implements AttemptStore, TelemetryStore, MistakeSt
 
   async clearAll(): Promise<void> {
     await this.api.request('/api/user-data', { method: 'DELETE' });
+  }
+}
+
+/** The Desmos key. Like the Groq key it goes in and is never sent back; only `hasKey` comes out. */
+export class HttpCalculatorKeyStore implements CalculatorKeyStore {
+  constructor(private readonly api: ApiClient) {}
+
+  status(): Promise<CalculatorKeyStatus> {
+    return this.api.request<CalculatorKeyStatus>('/api/calculator/status');
+  }
+  setKey(key: string): Promise<CalculatorKeyStatus> {
+    return this.api.request<CalculatorKeyStatus>('/api/calculator/key', { method: 'PUT', body: JSON.stringify({ key }) });
+  }
+  removeKey(): Promise<CalculatorKeyStatus> {
+    return this.api.request<CalculatorKeyStatus>('/api/calculator/key', { method: 'DELETE' });
+  }
+  test(): Promise<CalculatorKeyTest> {
+    return this.api.request<CalculatorKeyTest>('/api/calculator/test', { method: 'POST' });
   }
 }
 

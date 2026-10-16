@@ -2,7 +2,7 @@
 // Reading and Writing (through AnnotatedHtml), figure zoom for both. Drills keep their own screen.
 
 import { useEffect } from 'react';
-import { calculatorEngine } from '../../services/calculator/engine';
+import { useCalculatorEngine } from '../../services/calculator/engine';
 import { testRoomStore, useTestRoom } from '../../stores/testRoomStore';
 import type { Section } from '../../types/sat';
 import { T } from '../ui/tokens';
@@ -40,6 +40,7 @@ export function DrillToolButtons({ section, questionId }: { section: Section; qu
 /** The floating calculator and the reference sheet docked on the right of the window. */
 export function DrillToolPanels({ section, questionId }: { section: Section; questionId: string | null }) {
   const room = useTestRoom((s) => s);
+  const engine = useCalculatorEngine();
   if (section !== 'math') return null;
   return (
     <>
@@ -59,7 +60,7 @@ export function DrillToolPanels({ section, questionId }: { section: Section; que
           rect={room.calculatorRect}
           onRectChange={(r) => testRoomStore.getState().setCalculatorRect(r)}
           onClose={() => testRoomStore.getState().toggleCalculator(questionId)}
-          engine={calculatorEngine()}
+          engine={engine}
           engineState={room.calculatorStates[room.calculatorMode] ?? null}
           onEngineStateChange={(m, st) => testRoomStore.getState().saveCalculatorState(m, st)}
         />
