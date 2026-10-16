@@ -113,6 +113,13 @@ export function SkillsScreen({ summary, loadDetail, loadQuestion, initialSkill }
 
   // Opened from the Dashboard's skills map: show that skill's detail straight away.
   const opened = useRef(false);
+  const detailRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (initialSkill && selectedSkillCode === initialSkill && !detailLoading) {
+      detailRef.current?.scrollIntoView?.({ block: 'start' });
+      detailRef.current?.focus();
+    }
+  }, [initialSkill, selectedSkillCode, detailLoading]);
   useEffect(() => {
     if (initialSkill && !opened.current) {
       opened.current = true;
@@ -284,7 +291,7 @@ export function SkillsScreen({ summary, loadDetail, loadQuestion, initialSkill }
       </div>
 
       {selectedSkillCode !== null && (
-        <section className="space-y-5 rounded-lg border border-[#27272A] bg-[#121215] p-5">
+        <section ref={detailRef} tabIndex={-1} aria-label="Skill detail" className="space-y-5 rounded-lg border border-[#27272A] bg-[#121215] p-5 focus-visible:outline-none">
           <div className="flex items-center justify-between border-b border-[#27272A] pb-3">
             <div>
               <h3 className="font-mono text-sm font-medium text-zinc-100">

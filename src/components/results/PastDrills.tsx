@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { PastDrillsProps, PastHidingProps } from '../../types/session';
 import { formatDuration } from '../../utils/formatDuration';
+import { DateField } from '../ui/DateField';
 
 const btn =
   'rounded-md border border-[#27272A] px-3 py-1 text-xs font-medium text-zinc-200 transition-colors hover:border-zinc-500 hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400';
@@ -27,7 +28,7 @@ function HidingBar({ hiding, hiddenCount }: { hiding: PastHidingProps; hiddenCou
         <div className="space-y-2 rounded-md border border-[#27272A] p-3" role="group" aria-label="Hide all sessions before a date">
           <label className="flex items-center gap-2">
             Before
-            <input type="date" value={day} onChange={(e) => setDay(e.target.value)} className="rounded-md border border-[#27272A] bg-black px-2 py-1 text-xs text-zinc-100 [color-scheme:dark]" />
+            <DateField label="Hide sessions before" value={day} onChange={setDay} placeholder="Pick a date" />
           </label>
           {before !== null && (
             <p>

@@ -1,3 +1,4 @@
+import { DateField } from '../ui/DateField';
 import { useState, type ChangeEvent } from 'react';
 import { ANALYTICS_KINDS, type AnalyticsKind } from '../../types/analytics';
 import {
@@ -64,16 +65,16 @@ export function ScopeBar({ scope, resolved, onChange }: ScopeBarProps) {
     });
   };
 
-  const handleFromChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const fromMs = parseDateInput(e.target.value, false);
+  const handleFromChange = (value: string) => {
+    const fromMs = parseDateInput(value, false);
     onChange({
       ...scope,
       from: fromMs,
     });
   };
 
-  const handleToChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const toMs = parseDateInput(e.target.value, true);
+  const handleToChange = (value: string) => {
+    const toMs = parseDateInput(value, true);
     onChange({
       ...scope,
       to: toMs,
@@ -172,24 +173,12 @@ export function ScopeBar({ scope, resolved, onChange }: ScopeBarProps) {
           <div className="flex flex-wrap items-end gap-4">
             <label className="flex flex-col gap-1 text-xs text-zinc-400">
               <span>From</span>
-              <input
-                type="date"
-                aria-label="From date"
-                value={toDateInputValue(scope.from)}
-                onChange={handleFromChange}
-                className={T.input}
-              />
+              <DateField label="From date" value={toDateInputValue(scope.from)} onChange={(v) => handleFromChange(v)} />
             </label>
 
             <label className="flex flex-col gap-1 text-xs text-zinc-400">
               <span>To</span>
-              <input
-                type="date"
-                aria-label="To date"
-                value={toDateInputValue(scope.to)}
-                onChange={handleToChange}
-                className={T.input}
-              />
+              <DateField label="To date" value={toDateInputValue(scope.to)} onChange={(v) => handleToChange(v)} />
             </label>
 
             <label className="flex flex-col gap-1 text-xs text-zinc-400">

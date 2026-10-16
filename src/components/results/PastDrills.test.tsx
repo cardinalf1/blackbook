@@ -224,7 +224,7 @@ describe('PastDrills hide from analytics', () => {
     const { container, calls } = render();
     act(() => button(container, 'Hide all sessions before...').click());
     expect(button(container, 'Hide them').disabled).toBe(true);
-    const input = container.querySelector('input[type="date"]') as HTMLInputElement;
+    const input = container.querySelector('input[aria-label="Hide sessions before"]') as HTMLInputElement;
     act(() => {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
       setter?.call(input, '2026-10-01');
