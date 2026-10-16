@@ -54,9 +54,9 @@ export function NumbersRow({ numbers }: NumbersRowProps) {
         <div className="space-y-2">
           <span className={T.label}>First-attempt accuracy</span>
           <div className="space-y-1">
-            <div className={T.bigNum}>{firstAttemptPct}%</div>
+            <div className={T.bigNum}>{firstAttempt.attempts > 0 ? `${firstAttemptPct}%` : '–'}</div>
             <div className={T.body}>
-              {firstAttempt.correct} of {firstAttempt.attempts} ({firstAttemptPct}%)
+              {firstAttempt.attempts > 0 ? `${firstAttempt.correct} of ${firstAttempt.attempts} (${firstAttemptPct}%)` : 'No answers in this period'}
             </div>
             <div className={T.muted}>N = {firstAttempt.attempts}</div>
           </div>
@@ -113,6 +113,7 @@ export function NumbersRow({ numbers }: NumbersRowProps) {
           </div>
         </div>
 
+        {studyWeek.previousMs === null && <div className={T.muted}>not enough data</div>}
         {studyWeek.previousMs !== null && (
           <div className="font-mono text-xs text-zinc-300">
             {(() => {
@@ -145,7 +146,7 @@ export function NumbersRow({ numbers }: NumbersRowProps) {
                     <span className="font-mono text-zinc-400">N = {item.attempts}</span>
                   </div>
                   <div className="font-mono text-xs text-white">
-                    {paceStr} per answer vs target {targetStr}
+                    {item.attempts > 0 ? `${paceStr} per answer vs target ${targetStr}` : `no answers yet (target ${targetStr})`}
                   </div>
                   {item.previous !== null && item.previous.attempts > 0 && (
                     <div className="font-mono text-[11px] text-zinc-400">
@@ -158,6 +159,7 @@ export function NumbersRow({ numbers }: NumbersRowProps) {
                       })()}
                     </div>
                   )}
+                  {item.previous === null && <div className="font-mono text-[11px] text-zinc-500">change: not enough data</div>}
                 </div>
               );
             })}

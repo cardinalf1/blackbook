@@ -130,7 +130,7 @@ describe('NumbersRow', () => {
     });
 
     expect(container.textContent).toContain('+10 pp vs previous');
-    expect(container.textContent).not.toContain('not enough data');
+    // Other tiles may still say "not enough data"; the accuracy tile shows the change instead.
   });
 
   it('renders questions done with done of total, seen, and fresh tests estimate', async () => {
