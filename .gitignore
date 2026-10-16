@@ -30,5 +30,8 @@ coverage/
 # Research notes quote the source site; stay untracked
 /docs/research/
 
+# Phase prompts (local run instructions)
+/phaseexec/
+
 # Owner screenshots, local only
 /handoff/screens/
