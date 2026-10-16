@@ -2,10 +2,13 @@ import { useState } from 'react';
 import { presetTimeLeftMs } from '../../services/modes/presets';
 import { liveHint } from '../../services/pacing/pacing';
 import { formatCountdown } from '../../utils/formatCountdown';
-import { useDrill } from '../../stores/drillStore';
+import { drillStore, useDrill } from '../../stores/drillStore';
 import { CHOICE_LETTERS, type ChoiceLetter } from '../../types/sat';
 import type { Confidence, DrillPlayProps, SessionRecord } from '../../types/session';
 import { QuestionHtml } from '../QuestionHtml';
+import { AnnotatedHtml } from '../testroom/AnnotatedHtml';
+import { ContentHtml } from '../testroom/ContentHtml';
+import { DrillToolButtons, DrillToolPanels, useDrillTools } from '../testroom/DrillTools';
 
 const DIFFICULTY_LABEL = { E: 'Easy', M: 'Medium', H: 'Hard' } as const;
 
@@ -55,6 +58,16 @@ export function DrillPlay({
   const storeSession = useDrill((s) => s.session);
   const session = propSession !== undefined ? propSession : storeSession;
   const isExam = session?.mode === 'exam';
+  useDrillTools(session?.id ?? null, question.id);
+  const annotations = session?.progress?.[question.id]?.annotations ?? [];
+  const store = drillStore.getState();
+  const onFigureZoom = (percent: number) => store.toolEvent('figure_zoomed', { percent });
+  const questionText = (html: string, target: 'passage' | 'stem') =>
+    question.section === 'rw' ? (
+      <AnnotatedHtml html={html} target={target} annotations={annotations} onChange={(next) => store.setAnnotations(next)} onEvent={store.toolEvent} onFigureZoom={onFigureZoom} />
+    ) : (
+      <ContentHtml html={html} onFigureZoom={onFigureZoom} />
+    );
 
   const elapsedActiveMs = propElapsedActiveMs ?? session?.totalActiveMs ?? 0;
   const finishedCount = propFinishedCount ?? index;
@@ -150,18 +163,19 @@ export function DrillPlay({
           >
             {flagged ? 'Flagged' : 'Flag for review'}
           </button>
+          <DrillToolButtons section={question.section} questionId={question.id} />
           <span className="ml-auto">#{question.displayId}</span>
         </header>
 
         <div className={question.stimulusHtml ? 'grid gap-0 md:grid-cols-2' : ''}>
           {question.stimulusHtml && (
             <section className="border-b border-[#27272A] p-5 md:border-b-0 md:border-r">
-              <QuestionHtml html={question.stimulusHtml} />
+              {questionText(question.stimulusHtml, 'passage')}
             </section>
           )}
 
           <section className="space-y-4 p-5">
-            <QuestionHtml html={question.stemHtml} />
+            {questionText(question.stemHtml, 'stem')}
 
             {answer.kind === 'mcq' ? (
               <ol className="space-y-2">
@@ -286,6 +300,7 @@ export function DrillPlay({
           {nextLabel}
         </button>
       </footer>
+      <DrillToolPanels section={question.section} questionId={question.id} />
     </div>
   );
 }
