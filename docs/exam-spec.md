@@ -54,6 +54,8 @@ What the practice exam module copies from the real test, where each number comes
 13. **Student-produced response input:** only digits, `.`, `/` and `-` can be typed. `-` only as the first character. Up to 5 characters, or 6 when the first is `-`.
 14. **Keyboard:** the arrow keys Left and Right act as Back and Next when focus is not in a text field.
 
+Items 8 to 13 describe the Phase 3 screen. The Phase 9 test room replaced its layout (header tools, question menu, review page, split panes, docked reference, typed-answer box); see "Test room (Phase 9)" below. Item 14 (arrow keys) still applies.
+
 ## Full test and break (Phase 4)
 
 - **Sequence.** Reading and Writing Module 1, Module 2, a break, then Math Module 1 and Module 2. ASSUMED to match the real app; the module lengths are verified (above), the sequence and break are not read from a source in this repo.
