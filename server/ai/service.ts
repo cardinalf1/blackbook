@@ -78,7 +78,7 @@ export class AiService {
   // ---- settings and key ----
 
   async status(): Promise<AiStatus> {
-    return { hasKey: await this.d.keys.has(), settings: this.d.users.aiSettings(), model: this.model, policyLine: GROQ_POLICY_LINE };
+    return { hasKey: await this.d.keys.has(), keyProtection: await this.d.keys.protection(), settings: this.d.users.aiSettings(), model: this.model, policyLine: GROQ_POLICY_LINE };
   }
 
   async setKey(key: string): Promise<AiStatus> {

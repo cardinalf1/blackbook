@@ -29,6 +29,7 @@ describe('WeakDrillScreen', () => {
 
   const mockStatusWithoutPreview: AiStatus = {
     hasKey: true,
+    keyProtection: 'encrypted',
     model: 'llama-3.3-70b-versatile',
     policyLine: 'Groq retention policy',
     settings: {

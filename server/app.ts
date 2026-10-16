@@ -25,6 +25,9 @@ import type { ReportPeriod, WeakDrillRequest } from '../src/types/ai';
 import { RULES_NOTE_MAX } from '../src/types/ai';
 import { isObj, parseAiSettings, parseAttempt, parseEvent, parseSession, parseTag, type ValidatedUserData } from './validate';
 import { checkHostAndOrigin, checkRequest, sameSecret, sessionCookie, type SecurityConfig } from './security';
+import { withSecurityHeaders } from './staticFiles';
+import type { StartupReport } from './control';
+import type { AppInfo } from '../src/types/appInfo';
 
 export interface AppDeps {
   security: SecurityConfig;
@@ -45,6 +48,16 @@ export interface AppDeps {
   dataFolder: string;
   /** Called on every authorized request (idle shutdown). */
   onActivity?: () => void;
+  /** The built page, served in the desktop app. Absent in dev (Vite serves it) and in tests. */
+  staticFiles?: (path: string, method: string) => Promise<Response>;
+  /** What happened at start (unclean stop, database check). Shown once by the page. */
+  startup?: StartupReport;
+  /** App version, for About and diagnostics. */
+  version?: string;
+  /** True inside the desktop app. */
+  desktop?: boolean;
+  /** What /healthz reports. */
+  health?: { version: string; schemaVersion: number };
   /** Heartbeat interval for progress streams. */
   streamHeartbeatMs?: number;
 }
@@ -141,6 +154,11 @@ function progressStream(deps: AppDeps, req: Request): Response {
 }
 
 export function createHandler(deps: AppDeps): (req: Request) => Promise<Response> {
+  const inner = route(deps);
+  return async (req: Request): Promise<Response> => withSecurityHeaders(await inner(req));
+}
+
+function route(deps: AppDeps): (req: Request) => Promise<Response> {
   let importing = false;
 
   /**
@@ -160,7 +178,14 @@ export function createHandler(deps: AppDeps): (req: Request) => Promise<Response
   return async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
     const path = url.pathname;
-    if (!path.startsWith('/api/')) return problem(404, 'Not found.');
+    if (!path.startsWith('/api/')) {
+      const base = checkHostAndOrigin(req, deps.security);
+      if (!base.ok) return problem(base.status, base.message);
+      // Version numbers only: no data, no paths, so no token is needed.
+      if (path === '/healthz' && req.method === 'GET') return json(deps.health ?? { version: 'dev', schemaVersion: 0 });
+      if (deps.staticFiles) return deps.staticFiles(path, req.method);
+      return problem(404, 'Not found.');
+    }
     const m = req.method;
 
     // Token exchange: the app sends the token from its first-load URL and gets a session cookie.
@@ -170,7 +195,7 @@ export function createHandler(deps: AppDeps): (req: Request) => Promise<Response
       const body = await readJson(req);
       const token = isObj(body) && typeof body.token === 'string' ? body.token : '';
       if (!sameSecret(token, deps.security.token)) return problem(401, 'Wrong access key. Open Blackbook again from its launch link.');
-      return new Response(null, { status: 204, headers: { 'Set-Cookie': sessionCookie(deps.security.token), 'Cache-Control': 'no-store' } });
+      return new Response(null, { status: 204, headers: { 'Set-Cookie': sessionCookie(deps.security.token, deps.security.cookieName), 'Cache-Control': 'no-store' } });
     }
 
     const guard = checkRequest(req, deps.security);
@@ -180,7 +205,16 @@ export function createHandler(deps: AppDeps): (req: Request) => Promise<Response
     try {
       // ---- info ----
       if (path === '/api/health' && m === 'GET') return json({ ok: true });
-      if (path === '/api/info' && m === 'GET') return json({ dataFolder: deps.dataFolder, downloadEnabled: DOWNLOAD_ENABLED });
+      if (path === '/api/info' && m === 'GET') {
+        const info: AppInfo = {
+          dataFolder: deps.dataFolder,
+          downloadEnabled: DOWNLOAD_ENABLED,
+          version: deps.version ?? 'dev',
+          desktop: deps.desktop ?? false,
+          startup: deps.startup ?? null,
+        };
+        return json(info);
+      }
 
       // ---- question bank ----
       if (path === '/api/bank/meta' && m === 'GET') return json(await deps.bank.getMeta());

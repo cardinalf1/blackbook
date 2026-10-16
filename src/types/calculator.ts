@@ -2,8 +2,12 @@
 // client only ever learns whether one is saved. The calculator page itself is served by the local
 // server into a sandboxed frame (docs/calculator-spec.md).
 
+import type { KeyProtection } from './keys';
+
 export interface CalculatorKeyStatus {
   hasKey: boolean;
+  /** How the saved key is kept on disk; null when none is saved. */
+  keyProtection: KeyProtection | null;
 }
 
 /** Plain sentence; never contains the key. */

@@ -12,14 +12,14 @@ const KEY = 'cd34'.repeat(8);
 function fakeStore(): CalculatorKeyStore & { saved: string | null } {
   const s = {
     saved: null as string | null,
-    status: async () => ({ hasKey: s.saved !== null }),
+    status: async () => ({ hasKey: s.saved !== null, keyProtection: s.saved !== null ? ('encrypted' as const) : null }),
     setKey: async (k: string) => {
       s.saved = k;
-      return { hasKey: true };
+      return { hasKey: true, keyProtection: 'encrypted' as const };
     },
     removeKey: async () => {
       s.saved = null;
-      return { hasKey: false };
+      return { hasKey: false, keyProtection: null };
     },
     test: async () => ({ ok: true, message: 'Desmos recognizes this key.' }),
   };

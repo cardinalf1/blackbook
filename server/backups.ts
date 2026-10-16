@@ -12,9 +12,12 @@ import { parseUserData, type ValidatedUserData } from './validate';
 export const DAILY_KEEP = 7;
 /** Safety copies (before a restore or a delete) kept, newest first. */
 export const SAFETY_KEEP = 5;
+/** Snapshots written when the app closes, kept newest first. */
+export const EXIT_KEEP = 3;
 
 const DAILY = /^blackbook-(\d{4}-\d{2}-\d{2})\.json$/;
 const SAFETY = /^before-(restore|delete-all|delete-events)-(\d+)\.json$/;
+const EXIT = /^on-exit-(\d+)\.json$/;
 
 /** Actions that replace or remove user data; each gets a safety copy first. */
 export type DestructiveAction = 'restore' | 'delete-all' | 'delete-events';
@@ -63,7 +66,12 @@ export class BackupManager {
     const files = await this.names();
     const daily = files.filter((f) => DAILY.test(f)).sort();
     const safety = files.filter((f) => SAFETY.test(f)).sort((a, b) => Number(SAFETY.exec(a)?.[2]) - Number(SAFETY.exec(b)?.[2]));
-    const doomed = [...daily.slice(0, Math.max(0, daily.length - DAILY_KEEP)), ...safety.slice(0, Math.max(0, safety.length - SAFETY_KEEP))];
+    const exits = files.filter((f) => EXIT.test(f)).sort((a, b) => Number(EXIT.exec(a)?.[1]) - Number(EXIT.exec(b)?.[1]));
+    const doomed = [
+      ...daily.slice(0, Math.max(0, daily.length - DAILY_KEEP)),
+      ...safety.slice(0, Math.max(0, safety.length - SAFETY_KEEP)),
+      ...exits.slice(0, Math.max(0, exits.length - EXIT_KEEP)),
+    ];
     for (const f of doomed) await rm(join(this.dir, f), { force: true });
   }
 
@@ -76,14 +84,30 @@ export class BackupManager {
     return name;
   }
 
+  /**
+   * Written when the app closes normally, so the newest work is in a snapshot too. Like a safety
+   * copy, nothing is written when there is nothing to keep. Returns the name, or null.
+   */
+  async snapshotOnExit(): Promise<string | null> {
+    const data = await this.source.exportAll();
+    const empty = data.sessions.length + data.attempts.length + data.events.length + (data.mistakeTags?.length ?? 0) + (data.flags?.length ?? 0) === 0;
+    if (empty) return null;
+    const name = `on-exit-${this.now()}.json`;
+    await this.write(name, data);
+    await this.prune();
+    return name;
+  }
+
   async list(): Promise<BackupList> {
     const backups: BackupInfo[] = [];
     for (const name of await this.names()) {
       const safety = SAFETY.exec(name);
-      const kind = DAILY.test(name) ? 'daily' : safety ? (safety[1] === 'restore' ? 'before_restore' : 'before_delete') : null;
+      const exit = EXIT.exec(name);
+      const kind = DAILY.test(name) ? 'daily' : safety ? (safety[1] === 'restore' ? 'before_restore' : 'before_delete') : exit ? 'on_exit' : null;
       if (!kind) continue;
       const st = await stat(join(this.dir, name));
-      backups.push({ name, at: safety ? Number(safety[2]) : Math.round(st.mtimeMs), sizeBytes: st.size, kind });
+      const at = safety ? Number(safety[2]) : exit ? Number(exit[1]) : Math.round(st.mtimeMs);
+      backups.push({ name, at, sizeBytes: st.size, kind });
     }
     backups.sort((a, b) => b.at - a.at);
     return { backups, lastBackupAt: backups[0]?.at ?? null };
@@ -116,7 +140,7 @@ export class BackupManager {
   }
 
   async restoreSnapshot(name: string): Promise<RestoreResult> {
-    if (!DAILY.test(name) && !SAFETY.test(name)) throw new BackupError('That backup was not found.');
+    if (!DAILY.test(name) && !SAFETY.test(name) && !EXIT.test(name)) throw new BackupError('That backup was not found.');
     let text: string;
     try {
       text = await readFile(join(this.dir, name), 'utf8');

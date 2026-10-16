@@ -22,7 +22,7 @@ export class CalculatorService {
   constructor(private readonly d: CalculatorDeps) {}
 
   async status(): Promise<CalculatorKeyStatus> {
-    return { hasKey: await this.d.keys.has() };
+    return { hasKey: await this.d.keys.has(), keyProtection: await this.d.keys.protection() };
   }
 
   async setKey(key: string): Promise<CalculatorKeyStatus> {

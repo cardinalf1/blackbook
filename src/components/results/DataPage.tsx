@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { backupStore as defaultBackupStore } from '../../services/storage';
-import type { BackupList, BackupStore, RestoreResult } from '../../types/backup';
+import type { BackupInfo, BackupList, BackupStore, RestoreResult } from '../../types/backup';
 import type { DataPageProps as BaseDataPageProps } from '../../types/session';
 import { formatBytes } from '../../utils/formatBytes';
 
@@ -293,7 +293,7 @@ export function DataPage({
                           {backup.name}
                         </span>
                         <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300">
-                          {backup.kind === 'daily' ? 'Daily' : backup.kind === 'before_restore' ? 'Safety copy before a restore' : 'Safety copy before a delete'}
+                          {backupKindLabel(backup.kind)}
                         </span>
                       </div>
                       <div className="flex items-center gap-3 text-xs text-zinc-400">
@@ -636,4 +636,11 @@ export function DataPage({
       </section>
     </div>
   );
+}
+
+function backupKindLabel(kind: BackupInfo['kind']): string {
+  if (kind === 'daily') return 'Daily';
+  if (kind === 'before_restore') return 'Safety copy before a restore';
+  if (kind === 'before_delete') return 'Safety copy before a delete';
+  return 'Saved when the app closed';
 }

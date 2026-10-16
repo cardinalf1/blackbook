@@ -3,6 +3,7 @@
 // the model only chooses from what code offered and words what code supplied. The key lives on the
 // local server and never reaches the browser, an event, a log, an export or a backup.
 
+import type { KeyProtection } from './keys';
 import type { DrillConfig } from './drill';
 import type { Difficulty, Section } from './sat';
 
@@ -24,6 +25,8 @@ export const DEFAULT_AI_SETTINGS: AiSettings = { enabled: true, includeText: fal
 
 export interface AiStatus {
   hasKey: boolean;
+  /** How the saved key is kept on disk; null when none is saved. */
+  keyProtection: KeyProtection | null;
   settings: AiSettings;
   model: string;
   /** One line on Groq's retention policy for API traffic, shown beside the text toggle. */

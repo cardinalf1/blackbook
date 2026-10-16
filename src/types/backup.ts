@@ -7,8 +7,8 @@ export interface BackupInfo {
   /** When the snapshot was written, epoch ms. */
   at: number;
   sizeBytes: number;
-  /** Rolling daily snapshot, or a safety copy taken just before a restore or a delete. */
-  kind: 'daily' | 'before_restore' | 'before_delete';
+  /** Rolling daily snapshot, a safety copy taken just before a restore or a delete, or the one written when the app closed. */
+  kind: 'daily' | 'before_restore' | 'before_delete' | 'on_exit';
 }
 
 export interface BackupList {

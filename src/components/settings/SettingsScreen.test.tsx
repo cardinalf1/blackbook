@@ -19,6 +19,7 @@ interface FakeAiStore extends AiStore {
 
 function createFakeAiStore(overrides: Partial<AiStatus> = {}): FakeAiStore {
   let currentStatus: AiStatus = {
+    keyProtection: null,
     hasKey: false,
     settings: {
       enabled: true,

@@ -79,7 +79,7 @@ describe('Desmos key', () => {
     await expect(calc.setKey('short')).rejects.toThrow('Desmos key');
     await calc.setKey(KEY);
     expect(await readdir(join(dir, 'secrets'))).toEqual(['desmos-key']);
-    expect(await calc.removeKey()).toEqual({ hasKey: false });
+    expect(await calc.removeKey()).toEqual({ hasKey: false, keyProtection: null });
     expect(await readdir(join(dir, 'secrets'))).toEqual([]);
   });
 
@@ -122,11 +122,11 @@ describe('Desmos routes', () => {
 
   it('the key goes in and never comes out of status, export or a backup', async () => {
     const { users, call } = await setup();
-    expect(await (await call('/api/calculator/status')).json()).toEqual({ hasKey: false });
+    expect(await (await call('/api/calculator/status')).json()).toEqual({ hasKey: false, keyProtection: null });
     expect((await call('/api/calculator/frame?mode=graphing')).status).toBe(404);
     const put = await call('/api/calculator/key', { method: 'PUT', body: JSON.stringify({ key: KEY }) });
     expect(await put.text()).not.toContain(KEY);
-    expect(await (await call('/api/calculator/status')).json()).toEqual({ hasKey: true });
+    expect(await (await call('/api/calculator/status')).json()).toEqual({ hasKey: true, keyProtection: 'file' });
     const frame = await call('/api/calculator/frame?mode=graphing');
     expect(frame.status).toBe(200);
     expect(frame.headers.get('content-security-policy')).toContain("default-src 'none'");
@@ -137,7 +137,7 @@ describe('Desmos routes', () => {
     expect(await readFile(join(dir, 'backups', name), 'utf8')).not.toContain(KEY);
 
     expect((await call('/api/calculator/key', { method: 'PUT', body: JSON.stringify({ key: 'x' }) })).status).toBe(400);
-    expect(await (await call('/api/calculator/key', { method: 'DELETE' })).json()).toEqual({ hasKey: false });
+    expect(await (await call('/api/calculator/key', { method: 'DELETE' })).json()).toEqual({ hasKey: false, keyProtection: null });
   });
 
   it('needs the access token like every other route', async () => {

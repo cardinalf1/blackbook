@@ -9,8 +9,15 @@ import { timingSafeEqual } from 'node:crypto';
 export const TOKEN_HEADER = 'x-blackbook-token';
 export const SESSION_COOKIE = 'bb_session';
 
+/** The cookie name carries the port, so two Blackbook programs on one computer never mix sessions. */
+export function cookieNameForPort(port: number): string {
+  return `${SESSION_COOKIE}_${port}`;
+}
+
 export interface SecurityConfig {
   token: string;
+  /** Session cookie name; SESSION_COOKIE when absent. */
+  cookieName?: string;
   allowedHosts: ReadonlySet<string>;
   allowedOrigins: ReadonlySet<string>;
 }
@@ -44,15 +51,15 @@ export function checkHostAndOrigin(req: Request, cfg: SecurityConfig): GuardResu
 export function checkRequest(req: Request, cfg: SecurityConfig): GuardResult {
   const base = checkHostAndOrigin(req, cfg);
   if (!base.ok) return base;
-  const presented = req.headers.get(TOKEN_HEADER) ?? cookieValue(req.headers.get('cookie'), SESSION_COOKIE);
+  const presented = req.headers.get(TOKEN_HEADER) ?? cookieValue(req.headers.get('cookie'), cfg.cookieName ?? SESSION_COOKIE);
   if (presented === null || !sameSecret(presented, cfg.token)) {
     return { ok: false, status: 401, message: 'Missing or wrong access key. Open Blackbook again from its launch link.' };
   }
   return { ok: true };
 }
 
-export function sessionCookie(token: string): string {
+export function sessionCookie(token: string, name = SESSION_COOKIE): string {
   // HttpOnly: page scripts cannot read it. SameSite=Strict: never sent on requests from other sites.
   // No Max-Age: it ends when the browser closes, and a new launch has a new token anyway.
-  return `${SESSION_COOKIE}=${token}; Path=/api; HttpOnly; SameSite=Strict`;
+  return `${name}=${token}; Path=/api; HttpOnly; SameSite=Strict`;
 }
