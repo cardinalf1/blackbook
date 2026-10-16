@@ -22,6 +22,8 @@ export interface DashboardDeps {
   /** True when a key is set and AI is on. */
   aiAvailable?: () => Promise<boolean>;
   now?: () => number;
+  /** Random source for the pool simulation (tests pass a seeded one). */
+  poolRng?: () => number;
 }
 
 export class DashboardService {
@@ -68,7 +70,7 @@ export class DashboardService {
     const rows = buildRows(questions, status);
     let pool: DashboardParts['pool'] = null;
     try {
-      pool = poolHealth(rows, STRICT_POLICY);
+      pool = poolHealth(rows, STRICT_POLICY, this.d.poolRng ?? Math.random);
     } catch {
       pool = null;
     }

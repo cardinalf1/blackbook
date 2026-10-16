@@ -1,12 +1,12 @@
-# Session plan: Phase 7 (unattended, 2026-10-16)
+# Session plan: Phase 8 (unattended, 2026-10-16)
 
-Branch `claude/phase7-ai-modes` from `phase6-done`. Not pushed.
+Branch `claude/phase8-dashboard` from `phase7-done`. Not pushed. Screenshots (the "before") renamed to `handoff/screens/{home,browse,analytics,report}.png`, kept untracked.
 
-0. Gate green; no BUGS.md; Browse single end to end and consumed (test in drillStore.test.ts).
-1. Groq foundation (mine): docs read and cited in docs/ai-spec.md; key file on the server; client with strict JSON schema; payload builder with aliases, text toggle, caps; validators; cache; fallbacks; mocked-client tests.
-2. Weak-skill drill candidates, constraints and rule-based pick (mine); screen by Gemini.
-3. Insight menu, number check, rule-based report (mine); screen by Gemini.
-4. 800 presets and clean-set stats (mine); panel and card by Gemini.
-5. Pace targets and report pacing (mine); sections and live hint by Gemini; preset countdown in DrillPlay (mine).
-6. Rules notes storage (mine); box by Gemini.
-7. Wire App.tsx (Settings, AI report, weak drill), review and merge, gates, morning report, tag `phase7-done`.
+0. Gate green (88 files, 692 tests, sync exit 0). `handoff/BUGS.md` is empty: nothing to fix.
+1. Tokens (mine): `src/components/ui/tokens.ts` plus a few primitives (Card, Button, Label) the new screens share.
+2. Hide flag (mine): migration 7 `hidden_sessions`; store, export, backup and restore; API; analytics scope and the brute checker skip hidden sessions; eligibility, retry and pool health untouched. Tests for both halves.
+3. Insight fixes (mine): weakest skill only from 5+ first attempts ranked by the Study next lower bound; pool health out of insights; each insight carries an action; coach picks at most 3.
+4. Dashboard contract (mine): `src/types/dashboard.ts`, scope resolution, `buildDashboard` on the existing analytics methods, `GET /api/dashboard`, HTTP adapter, up-next picker, view redirects and a reachability graph with tests. Commit interfaces.
+5. Gemini, 3 writers in worktrees: (1) Home, test chooser, settings menu; (2) dashboard scope bar, coach, numbers, trends; (3) skills map, mistakes, habits, tests table, detail links. Meanwhile I wire App, Past drills hide controls and the cross-check.
+6. Review and merge one at a time, full tests after each. Cross-check script on synthetic and real data, endpoint timing.
+7. Screens in the browser section by section, morning report, ledger, tag `phase8-done`.
