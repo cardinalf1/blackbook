@@ -59,3 +59,8 @@ One line per idea, grouped by phase (AGENTS.md rule 8).
 - Check where student-produced items sit inside a Math module, and the other items in the "Check in real Bluebook" list in `docs/exam-spec.md`.
 - Real break: wait for a click to start the next section after the break ends, instead of continuing by itself.
 - Settings: the app stores none yet (only dev overrides), so backups hold none; add them to the export if a settings store appears.
+
+## Phase 7 (AI and modes)
+- Run the weak-skill drill once with question text on and once off (same day, same size) and record in docs/ai-spec.md what the text changed: groups, near-duplicates avoided, slip targeting.
+- Try openai/gpt-oss-20b against 120b for the same requests; the smaller one has the same rate limits and may be faster.
+- A clock-based pace hint (it updates only when the drill screen re-renders today).

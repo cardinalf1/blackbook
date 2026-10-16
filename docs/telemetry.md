@@ -125,6 +125,14 @@ Logged on the session the missed question belongs to, with that question's id. E
 | `mistake_tag_set` | `{reason, suggested}` | A miss is tagged for the first time; `suggested` is true when the user confirmed the app's suggestion unchanged |
 | `mistake_tag_changed` | `{from, to}` | A different reason replaces the tag in force. Editing only the note logs nothing |
 
+### AI calls (Phase 7)
+
+Logged by the local server, not the page, under the session id `ai` (mode `drill`, no question id). One per weak-skill drill, report or connection test. Never the request, the reply text, question ids, notes or the key.
+
+| Type | Payload | When |
+|---|---|---|
+| `ai_call` | `{feature, origin, candidates, cached, failure}` | `feature` is `weak_drill`, `report` or `test`; `origin` is `ai` or `rule`; `failure` is null or why the rule-based form ran |
+
 The timer never waits on the logger: the countdown is recomputed from the saved deadline, and logging only appends to memory.
 
 ## Delivery
