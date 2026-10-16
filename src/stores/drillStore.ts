@@ -113,7 +113,7 @@ export interface DrillActions {
   /** Exam screen events with no payload: reference sheet and navigator opened or closed. */
   note(type: 'reference_opened' | 'reference_closed' | 'navigator_opened' | 'navigator_closed'): void;
   /** A test-room tool event (Phase 9), logged against the question on screen. Ids, counts and times only. */
-  toolEvent<T extends ToolEventType>(type: T, payload: EventPayloads[T]): void;
+  toolEvent<T extends ToolEventType>(type: T, payload: EventPayloads[T], questionId?: string | null): void;
   /** Replaces the highlights and notes on the question on screen; saved with the session. */
   setAnnotations(annotations: readonly Annotation[]): void;
 }
@@ -749,9 +749,9 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
         if (s) log(type, currentQuestionId(s), {});
       },
 
-      toolEvent(type, payload) {
+      toolEvent(type, payload, questionId) {
         const s = get().session;
-        if (s) log(type, currentQuestionId(s), payload);
+        if (s) log(type, questionId === undefined ? currentQuestionId(s) : questionId, payload);
       },
 
       setAnnotations(annotations) {
