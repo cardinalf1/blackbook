@@ -78,7 +78,7 @@ export function DrillFlow({ onExit, startAt, onOpenExam, onOpenTest }: { onExit:
       return (
         <div className="space-y-3">
           {banner}
-          <DrillSetup taxonomy={buildTaxonomy(facets)} facets={facets} onStart={(c) => void start(c)} onCancel={onExit} />
+          <DrillSetup taxonomy={buildTaxonomy(facets)} facets={facets} onStart={(c) => void start(c)} onCancel={onExit} onStarted={() => drillStore.getState().session && setStep({ kind: 'play' })} />
         </div>
       );
     case 'skills':
