@@ -10,10 +10,14 @@ import type { UserDataExport } from '../src/types/session';
 import { parseUserData, type ValidatedUserData } from './validate';
 
 export const DAILY_KEEP = 7;
-export const SAFETY_KEEP = 3;
+/** Safety copies (before a restore or a delete) kept, newest first. */
+export const SAFETY_KEEP = 5;
 
 const DAILY = /^blackbook-(\d{4}-\d{2}-\d{2})\.json$/;
-const SAFETY = /^before-restore-(\d+)\.json$/;
+const SAFETY = /^before-(restore|delete-all|delete-events)-(\d+)\.json$/;
+
+/** Actions that replace or remove user data; each gets a safety copy first. */
+export type DestructiveAction = 'restore' | 'delete-all' | 'delete-events';
 
 export interface BackupSource {
   exportAll(): Promise<UserDataExport>;
@@ -58,7 +62,7 @@ export class BackupManager {
   private async prune(): Promise<void> {
     const files = await this.names();
     const daily = files.filter((f) => DAILY.test(f)).sort();
-    const safety = files.filter((f) => SAFETY.test(f)).sort((a, b) => Number(SAFETY.exec(a)?.[1]) - Number(SAFETY.exec(b)?.[1]));
+    const safety = files.filter((f) => SAFETY.test(f)).sort((a, b) => Number(SAFETY.exec(a)?.[2]) - Number(SAFETY.exec(b)?.[2]));
     const doomed = [...daily.slice(0, Math.max(0, daily.length - DAILY_KEEP)), ...safety.slice(0, Math.max(0, safety.length - SAFETY_KEEP))];
     for (const f of doomed) await rm(join(this.dir, f), { force: true });
   }
@@ -75,20 +79,37 @@ export class BackupManager {
   async list(): Promise<BackupList> {
     const backups: BackupInfo[] = [];
     for (const name of await this.names()) {
-      const kind = DAILY.test(name) ? 'daily' : SAFETY.test(name) ? 'before_restore' : null;
+      const safety = SAFETY.exec(name);
+      const kind = DAILY.test(name) ? 'daily' : safety ? (safety[1] === 'restore' ? 'before_restore' : 'before_delete') : null;
       if (!kind) continue;
       const st = await stat(join(this.dir, name));
-      backups.push({ name, at: kind === 'before_restore' ? Number(SAFETY.exec(name)?.[1]) : Math.round(st.mtimeMs), sizeBytes: st.size, kind });
+      backups.push({ name, at: safety ? Number(safety[2]) : Math.round(st.mtimeMs), sizeBytes: st.size, kind });
     }
     backups.sort((a, b) => b.at - a.at);
     return { backups, lastBackupAt: backups[0]?.at ?? null };
+  }
+
+  /**
+   * Saves the current data before `action` replaces or removes it. Throws when it cannot be written,
+   * so the caller does not go ahead. Writes nothing when there is nothing to lose (no sessions,
+   * attempts, events, tags or flags), so empty copies never push real ones out of the keep limit.
+   * Returns the file name, or null when nothing was written.
+   */
+  async safetyCopy(action: DestructiveAction): Promise<string | null> {
+    const data = await this.source.exportAll();
+    const empty = data.sessions.length + data.attempts.length + data.events.length + (data.mistakeTags?.length ?? 0) + (data.flags?.length ?? 0) === 0;
+    if (empty) return null;
+    const name = `before-${action}-${this.now()}.json`;
+    await this.write(name, data);
+    await this.prune();
+    return name;
   }
 
   /** Replaces current data with `raw` (a parsed export or snapshot) after saving a safety copy. */
   async restore(raw: unknown): Promise<RestoreResult> {
     const data = parseUserData(raw);
     if (typeof data === 'string') throw new BackupError(data);
-    await this.write(`before-restore-${this.now()}.json`, await this.source.exportAll());
+    await this.safetyCopy('restore');
     await this.source.replaceAll(data);
     await this.prune();
     return { sessions: data.sessions.length, attempts: data.attempts.length, events: data.events.length, mistakeTags: data.mistakeTags.length };

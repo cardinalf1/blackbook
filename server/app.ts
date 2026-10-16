@@ -18,7 +18,7 @@ import { DIFFICULTIES, SECTIONS, type Difficulty, type Section } from '../src/ty
 import type { DiskBankStore } from './bankStore';
 import type { DownloadManager } from './download';
 import { ClosedSessionError } from './userDb';
-import { BackupError, type BackupManager } from './backups';
+import { BackupError, type BackupManager, type DestructiveAction } from './backups';
 import { AiError, type AiService } from './ai/service';
 import type { CalculatorService } from './calculator';
 import type { ReportPeriod, WeakDrillRequest } from '../src/types/ai';
@@ -143,6 +143,20 @@ function progressStream(deps: AppDeps, req: Request): Response {
 export function createHandler(deps: AppDeps): (req: Request) => Promise<Response> {
   let importing = false;
 
+  /**
+   * A safety copy of all user data before a delete. Null when it was written (or there was nothing
+   * to save); otherwise the error response, and the delete does not happen.
+   */
+  const safetyFirst = async (action: DestructiveAction): Promise<Response | null> => {
+    if (!deps.backups) return null;
+    try {
+      await deps.backups.safetyCopy(action);
+      return null;
+    } catch {
+      return problem(500, 'Could not save a safety copy first, so nothing was deleted.');
+    }
+  };
+
   return async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
     const path = url.pathname;
@@ -246,6 +260,8 @@ export function createHandler(deps: AppDeps): (req: Request) => Promise<Response
       }
       if (path === '/api/events' && m === 'GET') return json(await deps.users.listEvents(url.searchParams.get('sessionId') ?? undefined));
       if (path === '/api/events' && m === 'DELETE') {
+        const stop = await safetyFirst('delete-events');
+        if (stop) return stop;
         await deps.users.clearEvents();
         return json({ ok: true });
       }
@@ -389,6 +405,8 @@ export function createHandler(deps: AppDeps): (req: Request) => Promise<Response
         }
       }
       if (path === '/api/user-data' && m === 'DELETE') {
+        const stop = await safetyFirst('delete-all');
+        if (stop) return stop;
         await deps.users.clearAll();
         return json({ ok: true });
       }

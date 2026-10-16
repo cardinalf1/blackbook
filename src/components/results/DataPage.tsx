@@ -284,7 +284,7 @@ export function DataPage({
                           {backup.name}
                         </span>
                         <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300">
-                          {backup.kind === 'daily' ? 'Daily' : 'Safety copy before a restore'}
+                          {backup.kind === 'daily' ? 'Daily' : backup.kind === 'before_restore' ? 'Safety copy before a restore' : 'Safety copy before a delete'}
                         </span>
                       </div>
                       <div className="flex items-center gap-3 text-xs text-zinc-400">

@@ -191,3 +191,67 @@ describe('backup and restore', () => {
     expect((parsed as { mistakeTags: unknown[] }).mistakeTags).toEqual([]);
   });
 });
+
+describe('safety copies before a delete', () => {
+  const TOKEN = 'test-token-0123456789';
+  const HOST = '127.0.0.1:47821';
+
+  async function app(store: SqliteUserStore, backupsDir = join(dir, 'backups')) {
+    const { createHandler } = await import('./app');
+    const { DiskBankStore } = await import('./bankStore');
+    const { createSanitizer } = await import('../src/services/normalize/sanitize');
+    const backups = new BackupManager(backupsDir, store);
+    const handler = createHandler({
+      security: { token: TOKEN, allowedHosts: new Set([HOST]), allowedOrigins: new Set() },
+      bank: new DiskBankStore(join(dir, 'bank.json')),
+      users: store,
+      backups,
+      downloads: {} as import('./download').DownloadManager,
+      sanitize: createSanitizer(window),
+      dataFolder: dir,
+    });
+    const del = (path: string) => handler(new Request(`http://${HOST}${path}`, { method: 'DELETE', headers: { host: HOST, 'x-blackbook-token': TOKEN } }));
+    return { backups, del };
+  }
+
+  it('Delete all progress saves everything first, and that copy restores it', async () => {
+    const store = open('d.db');
+    await fill(store);
+    const before = await store.listSessions();
+    const { backups, del } = await app(store);
+    expect((await del('/api/user-data')).status).toBe(200);
+    expect(await store.listSessions()).toEqual([]);
+    const copy = (await backups.list()).backups.find((b) => b.kind === 'before_delete');
+    expect(copy?.name).toMatch(/^before-delete-all-\d+\.json$/);
+    await backups.restoreSnapshot(copy?.name as string);
+    expect(await store.listSessions()).toEqual(before);
+  });
+
+  it('Delete telemetry saves a copy first too', async () => {
+    const store = open('e.db');
+    await fill(store);
+    const { backups, del } = await app(store);
+    expect((await del('/api/events')).status).toBe(200);
+    expect(await store.listEvents()).toEqual([]);
+    expect((await backups.list()).backups.map((b) => b.name)).toEqual([expect.stringMatching(/^before-delete-events-\d+\.json$/)]);
+  });
+
+  it('writes no copy when there is nothing to lose', async () => {
+    const store = open('f.db');
+    const { del } = await app(store);
+    expect((await del('/api/user-data')).status).toBe(200);
+    expect(await readdir(dir)).not.toContain('backups');
+  });
+
+  it('deletes nothing when the copy cannot be written', async () => {
+    const store = open('g.db');
+    await fill(store);
+    const blocked = join(dir, 'not-a-folder');
+    await writeFile(blocked, 'x', 'utf8');
+    const { del } = await app(store, blocked);
+    const res = await del('/api/user-data');
+    expect(res.status).toBe(500);
+    expect(((await res.json()) as { error: string }).error).toContain('nothing was deleted');
+    expect(await store.listSessions()).toHaveLength(3);
+  });
+});
