@@ -49,21 +49,7 @@ function MoreItemIcon({ id }: { id: MoreItemId }) {
           <path d="M4 6h1M7 6h1M10 6h2M4 9h2M7 9h5" />
         </svg>
       );
-    case 'unscheduled_break':
-      return (
-        <svg className="h-3.5 w-3.5 text-zinc-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-          <circle cx="8" cy="8" r="6" />
-          <path d="M6 5.5v5M10 5.5v5" />
-        </svg>
-      );
-    case 'contrast':
-      return (
-        <svg className="h-3.5 w-3.5 text-zinc-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-          <circle cx="8" cy="8" r="6" />
-          <path d="M8 2a6 6 0 010 12V2z" fill="currentColor" stroke="none" />
-        </svg>
-      );
-    case 'line_reader':
+    case 'lineReader':
       return (
         <svg className="h-3.5 w-3.5 text-zinc-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
           <line x1="2" y1="4" x2="14" y2="4" strokeDasharray="2 2" />
@@ -71,28 +57,24 @@ function MoreItemIcon({ id }: { id: MoreItemId }) {
           <line x1="2" y1="13" x2="14" y2="13" strokeDasharray="2 2" />
         </svg>
       );
-    case 'zoom_in':
+    case 'unscheduledBreak':
       return (
         <svg className="h-3.5 w-3.5 text-zinc-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-          <circle cx="7" cy="7" r="4.5" />
-          <line x1="10.5" y1="10.5" x2="14" y2="14" />
-          <line x1="7" y1="5" x2="7" y2="9" />
-          <line x1="5" y1="7" x2="9" y2="7" />
+          <circle cx="8" cy="8" r="6" />
+          <path d="M6 5.5v5M10 5.5v5" />
         </svg>
       );
-    case 'zoom_out':
+    case 'pause':
       return (
         <svg className="h-3.5 w-3.5 text-zinc-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-          <circle cx="7" cy="7" r="4.5" />
-          <line x1="10.5" y1="10.5" x2="14" y2="14" />
-          <line x1="5" y1="7" x2="9" y2="7" />
+          <rect x="4" y="3" width="3" height="10" rx="0.5" fill="currentColor" stroke="none" />
+          <rect x="9" y="3" width="3" height="10" rx="0.5" fill="currentColor" stroke="none" />
         </svg>
       );
-    case 'zoom_reset':
+    case 'exit':
       return (
         <svg className="h-3.5 w-3.5 text-zinc-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-          <circle cx="8" cy="8" r="5" />
-          <path d="M8 5v3l2 2" />
+          <path d="M6 3H3v10h3M10 5l3 3-3 3M6 8h7" />
         </svg>
       );
     default:

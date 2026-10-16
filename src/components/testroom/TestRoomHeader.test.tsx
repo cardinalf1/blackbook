@@ -41,7 +41,7 @@ describe('TestRoomHeader', () => {
     onToggleMore: vi.fn(),
     moreItems: [
       { id: 'shortcuts', label: 'Keyboard Shortcuts', active: false, onSelect: vi.fn() },
-      { id: 'contrast', label: 'High Contrast', active: true, onSelect: vi.fn() },
+      { id: 'lineReader', label: 'Line Reader', active: true, onSelect: vi.fn() },
     ],
     zoomPercent: 100,
   };
@@ -91,7 +91,7 @@ describe('TestRoomHeader', () => {
           onToggleMore={onToggleMore}
           moreItems={[
             { id: 'shortcuts', label: 'Keyboard Shortcuts', active: false, onSelect: onSelectShortcuts },
-            { id: 'contrast', label: 'High Contrast', active: true, onSelect: vi.fn() },
+            { id: 'lineReader', label: 'Line Reader', active: true, onSelect: vi.fn() },
           ]}
         />,
       );
@@ -100,8 +100,8 @@ describe('TestRoomHeader', () => {
     const menu = container.querySelector('[role="menu"]');
     expect(menu).not.toBeNull();
     expect(menu?.textContent).toContain('Keyboard Shortcuts');
-    expect(menu?.textContent).toContain('High Contrast');
-    expect(menu?.textContent).toContain('On'); // contrast is active
+    expect(menu?.textContent).toContain('Line Reader');
+    expect(menu?.textContent).toContain('On'); // lineReader is active
 
     // Select an item
     const shortcutBtn = Array.from(menu!.querySelectorAll('button')).find(
