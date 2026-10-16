@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { aiStore as defaultAiStore } from '../../services/storage';
 import type { AiStatus, AiStore } from '../../types/ai';
+import { DesmosKeySection } from './DesmosKeySection';
 
 export interface SettingsScreenProps {
   onBack: () => void;
@@ -275,6 +276,8 @@ export function SettingsScreen({
               </p>
             )}
           </section>
+
+          <DesmosKeySection />
 
           {/* Section 2 & 3: Settings and toggles */}
           <section className="space-y-5 rounded-lg border border-[#27272A] bg-[#121215] p-5">
