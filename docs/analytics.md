@@ -50,3 +50,16 @@ Estimate ranges are the Phase 4 ranges (`docs/scoring-spec.md`); there is no new
 - The estimate is an approximation, useful for comparing your own tests with each other.
 - Skill trends use the latest five sessions; with few sessions they are noisy.
 - Unseen counts use live questions only, matching the drill default.
+
+## Dashboard (Phase 8)
+
+One page, reached from Home > Progress > Dashboard, replaces the top-level Analytics, My skills, Study next and Study report entries. The old pages stay as drill-downs under "Detailed views" and are one click from the Dashboard.
+
+- **One request per scope.** `GET /api/dashboard` (`server/dashboard.ts`) calls the same SQL summaries as the old screens and passes them to the pure builder `src/services/dashboard/build.ts`. Nothing is computed twice. `bun scripts/analytics-check.ts` builds the page from SQL and from the brute-force summaries for six scopes and requires them to be equal; it also reports the build time (synthetic set: median 216 ms, max 265 ms on 2026-10-16; your data: about 30 ms).
+- **Scope.** Last test, 7 days, 30 days, All time (default 30 days, or All time with less than 30 days of data), a section toggle, and "More filters" with the old filter fields plus "Show hidden sessions". Changes against the previous period appear only when both periods have at least 10 answers.
+- **Coach.** At most 3 insights from the Phase 7 builder, each with one action. A "weakest skill" needs at least 5 first attempts and is picked by the Study next lower-bound ranking. Pool health is not an insight; it is on the Take a test card and the numbers row. With fewer than 3 finished sessions the coach says how many more drills unlock it. AI-assisted wording (`GET /api/ai/coach`) replaces the rule-based lines when a key is set and AI is on; the model never sees or chooses the actions.
+- **Mistakes** counts come from your own tags only. **Habits** and **Skills** show N beside every figure.
+
+## Hidden sessions (Phase 8)
+
+Past drills has "Hide from analytics" per session (reversible), "Hide all sessions before..." with a confirmation, and a "Show hidden sessions" toggle. Hidden sessions (and every module of a hidden test) leave the dashboard, the analytics summaries, the timing baselines, the insights and the weak-skill ranking. They still count as seen and done for the exam no-repeat rule, the retry queue, pool health and "questions done", because you did see those questions. The mark lives in its own table (migration 7) and is part of exports and backups. `server/hidden.test.ts` proves both halves.

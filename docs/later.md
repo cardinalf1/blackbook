@@ -67,3 +67,6 @@ One line per idea, grouped by phase (AGENTS.md rule 8).
 
 ## Phase 8 (home and dashboard)
 - Older screens (drill, exam, browse, settings, data, mistake log) can adopt the monochrome tokens in `src/components/ui/tokens.ts`.
+- The old analytics drill-down pages still carry their own six tabs and filter bar; they could become single pages with the dashboard scope passed in.
+- Coach AI wording is fetched after the page loads; caching it per scope on the server would make it instant on revisit.
+- Desmos, annotations and the reference sheet (after checking real Bluebook behavior).
