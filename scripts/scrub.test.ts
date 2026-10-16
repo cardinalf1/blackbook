@@ -34,6 +34,8 @@ describe('Repo Hygiene & Scrub Verification (Step 8)', () => {
 
     for (const file of trackedFiles) {
       if (file.endsWith('.png') || file.endsWith('.jpg') || file.endsWith('.woff2') || file.endsWith('.ico')) continue;
+      // Third-party open source licenses legitimately contain author emails in copyright notices
+      if (file === 'THIRD_PARTY_LICENSES.md') continue;
       const content = readFileSync(file, 'utf8');
       const match = content.match(emailRegex);
       if (match) {
