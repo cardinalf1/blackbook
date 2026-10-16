@@ -122,7 +122,7 @@ export function SplitPanes({
 
       {/* Docked side column (Reference sheet, etc.) */}
       {side !== null && (
-        <aside className="h-full w-[36rem] max-w-[50%] shrink-0 border-l border-[#27272A] bg-black overflow-y-auto">
+        <aside className="h-full shrink-0 border-l border-[#27272A] bg-black overflow-y-auto">
           {side}
         </aside>
       )}
