@@ -355,6 +355,19 @@ export interface PastDrillsProps {
   inProgressSlot?: ReactNode;
   onOpen: (sessionId: string) => void;
   onBack: () => void;
+  /** Hide from analytics (Phase 8). Absent: no hide controls. */
+  hiding?: PastHidingProps;
+}
+
+export interface PastHidingProps {
+  /** Ids of sessions hidden from analytics. */
+  hidden: ReadonlySet<string>;
+  showHidden: boolean;
+  onShowHidden: (show: boolean) => void;
+  /** Reversible per session. */
+  onSetHidden: (sessionId: string, hidden: boolean) => void;
+  /** Hides every finished session before local midnight of `day` (epoch ms). Called after the user confirms. */
+  onHideBefore: (before: number) => void;
 }
 
 /** A row in the In progress list. Labels are already worded for display. */

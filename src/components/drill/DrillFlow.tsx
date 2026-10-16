@@ -6,7 +6,7 @@ import { buildTaxonomy } from '../../services/drill/facets';
 import { computeSkillStats, countableAttempts } from '../../services/drill/stats';
 import { buildReport, pastSessionRows } from '../../services/session/report';
 import { currentQuestionId, finishCheck, progressOf } from '../../services/session/record';
-import { attemptStore, questionStore, telemetryStore } from '../../services/storage';
+import { attemptStore, hiddenSessionsStore, questionStore, telemetryStore } from '../../services/storage';
 import { telemetry } from '../../services/telemetry';
 import { drillStore, useDrill } from '../../stores/drillStore';
 import type { DrillConfig, QuestionFacet, SkillStatRow } from '../../types/drill';
@@ -302,16 +302,32 @@ function PastScreen(props: { facets: QuestionFacet[]; onOpen: (id: string) => vo
   const { facets, onOpen, onBack } = props;
   const [rows, setRows] = useState<PastSessionRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
+  const [showHidden, setShowHidden] = useState(false);
+  const loadHidden = useCallback(() => {
+    hiddenSessionsStore.listHidden().then(
+      (h) => setHidden(new Set(h.map((x) => x.sessionId))),
+      (e: unknown) => setError(msg(e)),
+    );
+  }, []);
   useEffect(() => {
     attemptStore.listSessions({ status: 'finished' }).then(
       (sessions) => setRows(pastSessionRows(sessions, facets)),
       (e: unknown) => setError(msg(e)),
     );
-  }, [facets]);
+    loadHidden();
+  }, [facets, loadHidden]);
   if (error) return <Notice error>Could not read your past drills: {error}</Notice>;
   if (!rows) return <Notice>Loading...</Notice>;
   const open = (id: string) => (rows.find((r) => r.id === id)?.isTest && props.onOpenTest ? props.onOpenTest(id) : onOpen(id));
-  return <PastDrills rows={rows} onOpen={open} onBack={onBack} inProgressSlot={<InProgressSection onResumed={props.onResumed} onOpenTest={props.onOpenTest} />} />;
+  const hiding = {
+    hidden,
+    showHidden,
+    onShowHidden: setShowHidden,
+    onSetHidden: (id: string, hide: boolean) => void hiddenSessionsStore.setHidden([id], hide).then(loadHidden, (e: unknown) => setError(msg(e))),
+    onHideBefore: (before: number) => void hiddenSessionsStore.hideBefore(before).then(loadHidden, (e: unknown) => setError(msg(e))),
+  };
+  return <PastDrills rows={rows} onOpen={open} onBack={onBack} hiding={hiding} inProgressSlot={<InProgressSection onResumed={props.onResumed} onOpenTest={props.onOpenTest} />} />;
 }
 
 function DataScreen({ onBack }: { onBack: () => void }) {

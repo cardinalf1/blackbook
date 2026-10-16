@@ -180,3 +180,58 @@ describe('PastDrills', () => {
     });
   });
 });
+
+describe('PastDrills hide from analytics', () => {
+  const rows: PastSessionRow[] = [
+    { id: 'a', finishedAt: 1700000000000, sectionLabel: 'Math', filtersLabel: 'All', kindLabel: 'Drill', correct: 1, total: 2, totalActiveMs: 1000 },
+    { id: 'b', finishedAt: 1700005000000, sectionLabel: 'Math', filtersLabel: 'All', kindLabel: 'Drill', correct: 2, total: 2, totalActiveMs: 1000 },
+  ];
+  const render = (over: Partial<{ hidden: Set<string>; showHidden: boolean }> = {}) => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const calls = { set: vi.fn(), before: vi.fn(), show: vi.fn() };
+    act(() => {
+      createRoot(container).render(
+        <PastDrills
+          rows={rows}
+          onOpen={vi.fn()}
+          onBack={vi.fn()}
+          hiding={{ hidden: over.hidden ?? new Set(['b']), showHidden: over.showHidden ?? false, onShowHidden: calls.show, onSetHidden: calls.set, onHideBefore: calls.before }}
+        />,
+      );
+    });
+    return { container, calls };
+  };
+  const button = (c: HTMLElement, text: string) => [...c.querySelectorAll('button')].find((b) => b.textContent === text) as HTMLButtonElement;
+
+  it('leaves hidden sessions out unless "show hidden" is on, and marks them', () => {
+    expect(render().container.querySelectorAll('tbody tr')).toHaveLength(1);
+    const { container } = render({ showHidden: true });
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
+    expect(container.textContent).toContain('Hidden');
+    expect(container.textContent).toContain('Show hidden sessions (1)');
+  });
+
+  it('hides and shows one session (reversible)', () => {
+    const { container, calls } = render({ showHidden: true });
+    act(() => button(container, 'Hide from analytics').click());
+    expect(calls.set).toHaveBeenCalledWith('a', true);
+    act(() => button(container, 'Show in analytics').click());
+    expect(calls.set).toHaveBeenCalledWith('b', false);
+  });
+
+  it('hides everything before a date only after confirmation', () => {
+    const { container, calls } = render();
+    act(() => button(container, 'Hide all sessions before...').click());
+    expect(button(container, 'Hide them').disabled).toBe(true);
+    const input = container.querySelector('input[type="date"]') as HTMLInputElement;
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      setter?.call(input, '2026-10-01');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(container.textContent).toContain('still count as seen');
+    act(() => button(container, 'Hide them').click());
+    expect(calls.before).toHaveBeenCalledWith(new Date('2026-10-01T00:00:00').getTime());
+  });
+});
