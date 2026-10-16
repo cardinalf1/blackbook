@@ -69,4 +69,12 @@ One line per idea, grouped by phase (AGENTS.md rule 8).
 - Older screens (drill, exam, browse, settings, data, mistake log) can adopt the monochrome tokens in `src/components/ui/tokens.ts`.
 - The old analytics drill-down pages still carry their own six tabs and filter bar; they could become single pages with the dashboard scope passed in.
 - Coach AI wording is fetched after the page loads; caching it per scope on the server would make it instant on revisit.
-- Desmos, annotations and the reference sheet (after checking real Bluebook behavior).
+- Desmos, annotations and the reference sheet (after checking real Bluebook behavior). Done in Phase 9 except the Desmos embed (see docs/calculator-spec.md).
+
+## Phase 9 (test room)
+- Screenshots to take in a real practice test: the review page; the Math More menu; Help, Shortcuts and Assistive Technology open; the Directions dropdown open; the line reader on screen; the unscheduled break screen; Exit confirmation; a typed answer in the Answer Preview (a fraction and a decimal); the calculator in Scientific mode; a figure in full screen and at a zoom other than 100%; the highlight note editor and the underline style dropdown; the timer hidden and the five-minute warning; whether the eliminator starts on.
+- Desmos: ask partnerships@desmos.com whether a free study app shared with classmates, each entering their own key, fits the Trial Tier; if yes, add the engine (steps in docs/calculator-spec.md).
+- Underline styles (the dropdown next to the underline control) and Assistive Technology are not built.
+- Drills keep their own SPR box (6 characters, any text); they could use the exam box with the typed limits and preview.
+- The line reader darkens the header and footer too; it could limit itself to the passage pane.
+- The reference panel shows one formula card per row; two columns would fit more without scrolling.
