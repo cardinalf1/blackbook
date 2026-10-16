@@ -11,7 +11,11 @@ const KEY_SHAPE = /^[A-Za-z0-9_-]{20,200}$/;
 export class KeyStore {
   private cached: string | null | undefined;
 
-  constructor(private readonly path: string) {}
+  /** `label` names the key in the one error message, e.g. "Groq key". */
+  constructor(
+    private readonly path: string,
+    private readonly label = 'Groq key',
+  ) {}
 
   /** Plain check of the shape only; the key is never echoed. */
   static isPlausible(key: string): boolean {
@@ -35,7 +39,7 @@ export class KeyStore {
 
   async set(key: string): Promise<void> {
     const k = key.trim();
-    if (!KeyStore.isPlausible(k)) throw new Error('That does not look like a Groq key.');
+    if (!KeyStore.isPlausible(k)) throw new Error(`That does not look like a ${this.label}.`);
     await mkdir(dirname(this.path), { recursive: true });
     await writeFile(this.path, k, { encoding: 'utf8', mode: 0o600 });
     try {

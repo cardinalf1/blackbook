@@ -15,6 +15,7 @@ import { DiskBankStore } from './bankStore';
 import { BackupManager } from './backups';
 import { AiService } from './ai/service';
 import { KeyStore } from './ai/keyStore';
+import { CalculatorService } from './calculator';
 import { DownloadManager } from './download';
 import { FsDetailCache } from './files';
 import { createIdleMonitor } from './idle';
@@ -105,6 +106,7 @@ async function main(): Promise<void> {
     users,
     backups,
     ai,
+    calculator: new CalculatorService({ keys: new KeyStore(join(dataFolder, 'secrets', 'desmos-key'), 'Desmos key'), fetch: (i, init) => fetch(i, init) }),
     analytics,
     dashboard: new DashboardService({
       analytics,

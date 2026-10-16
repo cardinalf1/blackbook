@@ -20,6 +20,7 @@ import type { DownloadManager } from './download';
 import { ClosedSessionError } from './userDb';
 import { BackupError, type BackupManager } from './backups';
 import { AiError, type AiService } from './ai/service';
+import type { CalculatorService } from './calculator';
 import type { ReportPeriod, WeakDrillRequest } from '../src/types/ai';
 import { RULES_NOTE_MAX } from '../src/types/ai';
 import { isObj, parseAiSettings, parseAttempt, parseEvent, parseSession, parseTag, type ValidatedUserData } from './validate';
@@ -31,6 +32,8 @@ export interface AppDeps {
   users: AttemptStore & TelemetryStore & MistakeStore & RulesNotesStore & HiddenSessionsStore & { replaceAll(data: ValidatedUserData): Promise<void> };
   /** The AI layer. Absent in tests that do not need it. */
   ai?: AiService;
+  /** The Desmos key and calculator page. Absent in tests that do not need it. */
+  calculator?: CalculatorService;
   /** Snapshots and restore. Absent in tests that do not need them. */
   backups?: BackupManager;
   /** Summaries computed in SQL. Absent in tests that do not need them. */
@@ -277,6 +280,33 @@ export function createHandler(deps: AppDeps): (req: Request) => Promise<Response
         if (!Array.isArray(ids) || ids.length === 0 || ids.length > 10_000 || !ids.every((x) => typeof x === 'string' && x.length > 0 && x.length < 200) || typeof body.hidden !== 'boolean')
           return problem(400, 'Malformed request.');
         return json({ changed: await deps.users.setHidden(ids as string[], body.hidden) });
+      }
+
+      // ---- Desmos calculator (the key goes in, never out, except inside the sandboxed calculator page) ----
+      if (path.startsWith('/api/calculator/')) {
+        const calc = deps.calculator;
+        if (!calc) return problem(404, 'Not found.');
+        const what = path.slice('/api/calculator/'.length);
+        try {
+          if (what === 'status' && m === 'GET') return json(await calc.status());
+          if (what === 'key' && m === 'PUT') {
+            const body = await readJson(req);
+            if (!isObj(body) || typeof body.key !== 'string') return problem(400, 'Paste a key.');
+            return json(await calc.setKey(body.key));
+          }
+          if (what === 'key' && m === 'DELETE') return json(await calc.removeKey());
+          if (what === 'test' && m === 'POST') return json(await calc.test());
+          if (what === 'frame' && m === 'GET') {
+            const mode = url.searchParams.get('mode') === 'scientific' ? 'scientific' : 'graphing';
+            const page = await calc.frame(mode);
+            if (!page) return problem(404, 'No Desmos key is saved.');
+            return new Response(page.html, { status: 200, headers: page.headers });
+          }
+          return problem(404, 'Not found.');
+        } catch (e) {
+          // Only KeyStore's shape message can arrive here; it never contains the key.
+          return problem(400, e instanceof Error ? e.message : 'Could not save the key.');
+        }
       }
 
       // ---- AI (the key goes in, never out) ----
