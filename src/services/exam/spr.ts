@@ -22,3 +22,22 @@ export function isAllowedSprInput(value: string): boolean {
 export function nextSprValue(previous: string, attempted: string): string {
   return isAllowedSprInput(attempted) ? attempted : previous;
 }
+
+/** What the answer preview shows: nothing, the text as typed, or a stacked fraction. */
+export type SprPreview =
+  | { kind: 'empty' }
+  | { kind: 'plain'; text: string }
+  | { kind: 'fraction'; negative: boolean; numerator: string; denominator: string };
+
+/**
+ * The preview of a typed answer. "a/b" (with or without a leading minus, either part possibly still
+ * empty while typing) is a stacked fraction; anything else is shown as typed. ASSUMED style: the
+ * screenshots show the preview label but never a typed value.
+ */
+export function sprPreview(value: string): SprPreview {
+  if (value === '') return { kind: 'empty' };
+  const slash = value.indexOf('/');
+  if (slash === -1) return { kind: 'plain', text: value };
+  const negative = value.startsWith('-');
+  return { kind: 'fraction', negative, numerator: value.slice(negative ? 1 : 0, slash), denominator: value.slice(slash + 1) };
+}

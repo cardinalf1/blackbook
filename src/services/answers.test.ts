@@ -36,7 +36,9 @@ describe('isSprCorrect: forms found in the bank', () => {
     expect(isSprCorrect('.1765', accepted)).toBe(true);
     expect(isSprCorrect('3/17', accepted)).toBe(true);
     expect(isSprCorrect('.1766', accepted)).toBe(false);
-    expect(isSprCorrect('.176', accepted)).toBe(false);
+    // Inferred decimal rule: three places, truncating 3/17 = .17647...
+    expect(isSprCorrect('.176', accepted)).toBe(true);
+    expect(isSprCorrect('.177', accepted)).toBe(false);
   });
 });
 
@@ -51,15 +53,17 @@ describe('isSprCorrect: equivalence rules', () => {
     expect(isSprCorrect('+7', ['7'])).toBe(true);
   });
 
-  it('never accepts an unlisted rounded or truncated decimal', () => {
+  it('rejects a rounded or truncated decimal with fewer than three places', () => {
     expect(isSprCorrect('0.33', ['1/3', '.3333'])).toBe(false);
     expect(isSprCorrect('0.3', ['1/3', '.3333', '0.3333'])).toBe(false);
-    expect(isSprCorrect('.6667', ['2/3'])).toBe(false);
+    // Three or more places that truncate or round the fraction are accepted (official examples).
+    expect(isSprCorrect('.6667', ['2/3'])).toBe(true);
+    expect(isSprCorrect('.6668', ['2/3'])).toBe(false);
   });
 
   it('compares exactly, not with a float tolerance', () => {
     expect(isSprCorrect('0.1000000000001', ['1/10'])).toBe(false);
-    expect(isSprCorrect('0.3333333333', ['1/3'])).toBe(false);
+    expect(isSprCorrect('0.3333333334', ['1/3'])).toBe(false);
   });
 
   it('ignores surrounding whitespace only', () => {

@@ -63,3 +63,14 @@ export const SCORE_STEP = 10;
  * Overview, official help text). Students cannot start or end it early (How do student breaks work).
  */
 export const BREAK_MS = 10 * 60_000;
+
+/**
+ * Student-produced responses: a decimal with at least this many places is accepted for a value
+ * whose exact decimal is longer, when it is that value truncated or rounded (half away from zero)
+ * at its own last place. INFERRED, not stated in words: the official directions' examples table
+ * (seen in a real practice test, 2026-10-16) accepts .6666, .6667, 0.666 and 0.667 for 2/3 and
+ * -.3333 and -0.333 for -1/3, but rejects 0.66, .66, 0.67, .67, -.33 and -0.33. This rule matches
+ * every example. It applies only against fraction forms in the answer key, whose value is exact
+ * (docs/exam-spec.md, "Student-produced responses").
+ */
+export const SPR_DECIMAL_MIN_PLACES = 3;
