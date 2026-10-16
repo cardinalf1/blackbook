@@ -228,13 +228,13 @@ export function ReferencePanel({ expanded, onToggleExpand, onClose }: ReferenceP
                   strokeLinejoin="round"
                   aria-hidden="true"
                 >
-                  <polygon points="25,68 85,68 25,28" />
+                  <polygon points="25,68 70,68 25,23" />
                   <path d="M25,60 h8 v8" strokeWidth="1" />
-                  <text x="70" y="64" fontSize="10" fill="currentColor" stroke="none">45°</text>
+                  <text x="50" y="64" fontSize="10" fill="currentColor" stroke="none">45°</text>
                   <text x="31" y="40" fontSize="10" fill="currentColor" stroke="none">45°</text>
                   <text x="16" y="50" fontStyle="italic" fontSize="11" fill="currentColor" stroke="none" textAnchor="middle">s</text>
-                  <text x="55" y="80" fontStyle="italic" fontSize="11" fill="currentColor" stroke="none" textAnchor="middle">s</text>
-                  <text x="62" y="44" fontStyle="italic" fontSize="11" fill="currentColor" stroke="none" textAnchor="middle">s√2</text>
+                  <text x="47" y="80" fontStyle="italic" fontSize="11" fill="currentColor" stroke="none" textAnchor="middle">s</text>
+                  <text x="58" y="42" fontStyle="italic" fontSize="11" fill="currentColor" stroke="none" textAnchor="middle">s√2</text>
                 </svg>
                 <div className="mt-1 text-xs text-zinc-300">
                   <FormulaKatex tex="s, \; s, \; s\sqrt{2}" />

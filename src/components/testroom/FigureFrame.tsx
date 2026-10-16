@@ -153,11 +153,7 @@ export function FigureFrame({ html, onZoom }: FigureFrameProps) {
       {/* Content box */}
       <div className="w-full overflow-auto p-4">
         <div
-          style={{
-            transform: `scale(${scale})`,
-            transformOrigin: 'top left',
-            width: `${Math.max(100, percent)}%`,
-          }}
+          style={{ zoom: scale }}
         >
           <QuestionHtml html={html} />
         </div>
@@ -202,11 +198,7 @@ export function FigureFrame({ html, onZoom }: FigureFrameProps) {
 
             <div className="flex-1 overflow-auto p-6">
               <div
-                style={{
-                  transform: `scale(${scale})`,
-                  transformOrigin: 'top left',
-                  width: `${Math.max(100, percent)}%`,
-                }}
+                style={{ zoom: scale }}
               >
                 <QuestionHtml html={html} />
               </div>
