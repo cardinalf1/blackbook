@@ -5,6 +5,10 @@
 //   bun scripts/analytics-check.ts --synthetic          a generated dataset (default 5,000 answers and 200,000 events), with timings
 //   bun scripts/analytics-check.ts --synthetic --attempts 800 --events 20000
 //
+// Phase 8: it also builds the Dashboard page (GET /api/dashboard) from SQL summaries and from brute-force
+// summaries for several scopes and requires them to be equal, checks that hidden sessions leave the
+// page but not question status (no-repeat) or the retry queue, and reports the page build time.
+//
 // It recomputes every summary by brute force from the raw sessions, attempts and events
 // (src/services/analytics/brute.ts, no shared code with the SQL) and compares with the SQL result
 // for a spread of filters. Exits 1 on any difference.
@@ -20,6 +24,11 @@ import { SqliteUserStore } from '../server/userDb';
 import { bruteBehavior, bruteMisses, bruteOverview, bruteSkillDetail, bruteSkills, bruteTests, bruteTiming, type RawData } from '../src/services/analytics/brute';
 import { synthData } from '../src/services/analytics/synth';
 import { ANALYTICS_KINDS, DEFAULT_ANALYTICS_FILTER, type AnalyticsFilter } from '../src/types/analytics';
+import { BruteAnalytics } from '../src/services/analytics/brute';
+import { deriveRetryQueue } from '../src/services/retry/queue';
+import { DEFAULT_DASHBOARD_SCOPE, type DashboardData, type DashboardScope } from '../src/types/dashboard';
+import type { Question } from '../src/types/sat';
+import { DashboardService } from '../server/dashboard';
 
 const args = process.argv.slice(2);
 const flag = (name: string) => args.includes(name);
@@ -59,6 +68,7 @@ function filtersFor(raw: RawData): { name: string; f: AnalyticsFilter }[] {
     { name: 'excludeSingle', f: { ...base, excludeSingle: true } },
     { name: 'from=median', f: { ...base, from: mid } },
     { name: 'to=median, no paused, no single', f: { ...base, to: mid, excludePaused: true, excludeSingle: true } },
+    { name: 'includeHidden', f: { ...base, includeHidden: true } },
   ];
 }
 
@@ -69,19 +79,23 @@ async function main(): Promise<void> {
   let raw: RawData;
   let analytics: SqlAnalytics;
   let source: string;
+  let store: SqliteUserStore;
+  let questions: Question[];
   const closers: (() => void)[] = [];
   try {
     if (flag('--synthetic')) {
       const attempts = Number(value('--attempts', '5000'));
       const events = Number(value('--events', '200000'));
-      raw = synthData({ seed: 11, attempts, events, orphanQuestions: 5 });
+      raw = synthData({ seed: 11, attempts, events, orphanQuestions: 5, hideEvery: 7 });
       const db = openSqlite(join(tmp, 'user.db'));
       closers.push(() => db.close());
-      const store = new SqliteUserStore(db);
+      store = new SqliteUserStore(db);
       const byInput = new Map<string, typeof raw.attempts>();
       for (const a of raw.attempts) byInput.set(a.sessionId, [...(byInput.get(a.sessionId) ?? []), a]);
       for (const s of raw.sessions) await store.saveSession(s, byInput.get(s.id) ?? []);
       for (let i = 0; i < raw.events.length; i += 5000) await store.appendEvents(raw.events.slice(i, i + 5000));
+      await store.setHidden(raw.hidden ?? [], true);
+      questions = [...raw.questions];
       const rows = raw.questions.map(toMetaRow);
       analytics = new SqlAnalytics(db, { load: async () => ({ signature: 'synthetic', rows }) });
       source = `synthetic (${raw.attempts.length} answers, ${raw.events.length} events, ${raw.sessions.length} sessions)`;
@@ -92,9 +106,10 @@ async function main(): Promise<void> {
       for (const name of ['user.db', 'user.db-wal', 'user.db-shm']) if (existsSync(join(folder, name))) copyFileSync(join(folder, name), join(tmp, name));
       const db = openSqlite(join(tmp, 'user.db'));
       closers.push(() => db.close());
-      const store = new SqliteUserStore(db);
+      store = new SqliteUserStore(db);
       const bank = new DiskBankStore(join(folder, 'bank.json'));
-      raw = { sessions: await store.listSessions(), attempts: await store.listAttempts(), events: await store.listEvents(), questions: await bank.query({}) };
+      questions = await bank.query({});
+      raw = { sessions: await store.listSessions(), attempts: await store.listAttempts(), events: await store.listEvents(), questions, hidden: (await store.listHidden()).map((h) => h.sessionId) };
       analytics = new SqlAnalytics(db, { load: () => bank.analyticsMeta() });
       source = `your data in ${folder} (${raw.attempts.length} answers, ${raw.events.length} events, ${raw.sessions.length} sessions, ${raw.questions.length} bank questions)`;
     }
@@ -154,6 +169,57 @@ async function main(): Promise<void> {
     }
     console.log(`  bank: ${o.bank.seen} of ${o.bank.total} questions seen (${o.bank.seenLive} of ${o.bank.live} live); ${o.unattributed} answers on questions no longer in the bank`);
     console.log(`  timing groups usable: ${t.baselines.filter((x) => x.usable).length} of ${t.baselines.length}`);
+
+    // ---- Dashboard page (Phase 8) ----
+    const rngFrom = (seed: number) => () => {
+      seed = (seed * 1103515245 + 12345) % 2 ** 31;
+      return seed / 2 ** 31;
+    };
+    const now = Math.max(0, ...raw.sessions.map((s) => s.finishedAt ?? s.lastActivityAt)) + 3_600_000;
+    const bankQ = { query: async () => [...questions] };
+    const sqlDash = new DashboardService({ analytics, users: store, bank: bankQ, now: () => now, poolRng: rngFrom(5) });
+    const bruteDash = new DashboardService({ analytics: new BruteAnalytics(() => raw), users: store, bank: bankQ, now: () => now, poolRng: rngFrom(5) });
+    const scopes: { name: string; s: DashboardScope }[] = [
+      { name: 'default (auto)', s: DEFAULT_DASHBOARD_SCOPE },
+      { name: 'last test', s: { ...DEFAULT_DASHBOARD_SCOPE, preset: 'last_test' } },
+      { name: '7 days', s: { ...DEFAULT_DASHBOARD_SCOPE, preset: '7d' } },
+      { name: '30 days, Math', s: { ...DEFAULT_DASHBOARD_SCOPE, preset: '30d', section: 'math' } },
+      { name: 'all time, Reading and Writing', s: { ...DEFAULT_DASHBOARD_SCOPE, preset: 'all', section: 'rw' } },
+      { name: 'all time, hidden shown', s: { ...DEFAULT_DASHBOARD_SCOPE, preset: 'all', includeHidden: true } },
+    ];
+    console.log('\nDashboard page (SQL summaries vs brute-force summaries)');
+    const buildMs: number[] = [];
+    await sqlDash.load(DEFAULT_DASHBOARD_SCOPE); // warm: copies question facts once
+    const strip = ({ buildMs: _ms, ...rest }: DashboardData) => rest;
+    for (const { name, s } of scopes) {
+      const a = await sqlDash.load(s);
+      buildMs.push(a.buildMs);
+      const d = firstDifference(strip(a), strip(await bruteDash.load(s)));
+      failures += d ? 1 : 0;
+      console.log(`${d ? 'FAIL' : 'ok  '} scope ${name}: ${a.numbers.firstAttempt.correct} of ${a.numbers.firstAttempt.attempts} first attempts, ${a.tests.length} tests, ${a.coach.lines.length} coach lines, built in ${a.buildMs} ms${d ? `\n       ${d}` : ''}`);
+    }
+    const sortedMs = [...buildMs].sort((x, y) => x - y);
+    console.log(`  page build time: median ${sortedMs[Math.floor(sortedMs.length / 2)]} ms, max ${sortedMs[sortedMs.length - 1]} ms (budget 300 ms)`);
+    if (flag('--synthetic') && (sortedMs[sortedMs.length - 1] ?? 0) > 300) failures++;
+
+    // Hidden sessions: out of the page, still counted for no-repeat (question status) and the retry queue.
+    const hiddenIds = raw.hidden ?? [];
+    if (hiddenIds.length > 0) {
+      const withHidden = { status: await store.questionStatus(), queue: deriveRetryQueue(await store.listAttempts(), await store.listSessions(), now) };
+      const pageHidden = await sqlDash.load({ ...DEFAULT_DASHBOARD_SCOPE, preset: 'all' });
+      await store.setHidden(hiddenIds, false);
+      const without = { status: await store.questionStatus(), queue: deriveRetryQueue(await store.listAttempts(), await store.listSessions(), now) };
+      const pageShown = await sqlDash.load({ ...DEFAULT_DASHBOARD_SCOPE, preset: 'all' });
+      await store.setHidden(hiddenIds, true);
+      const sameRules = firstDifference(withHidden, without);
+      const pageMoved = pageHidden.numbers.firstAttempt.attempts !== pageShown.numbers.firstAttempt.attempts || pageHidden.tests.length !== pageShown.tests.length;
+      failures += sameRules ? 1 : 0;
+      failures += pageMoved ? 0 : 1;
+      console.log(`${sameRules ? 'FAIL' : 'ok  '} hiding ${hiddenIds.length} sessions leaves question status and the retry queue unchanged${sameRules ? `\n       ${sameRules}` : ''}`);
+      console.log(`${pageMoved ? 'ok  ' : 'FAIL'} hiding them changes the page: ${pageShown.numbers.firstAttempt.attempts} -> ${pageHidden.numbers.firstAttempt.attempts} first attempts, ${pageShown.tests.length} -> ${pageHidden.tests.length} tests`);
+    } else {
+      console.log('  no hidden sessions in this data, so the hidden checks did not run');
+    }
 
     if (flag('--synthetic')) {
       console.log('\nTimings (SQL only, ms; first call of each includes copying question facts into the temp table)');
