@@ -82,7 +82,7 @@ export const HOME_GROUPS: readonly HomeGroup[] = [
 
 /** The small menu behind the header's settings button. */
 export const SETTINGS_MENU: readonly NavLink[] = [
-  { to: 'settings', label: 'Settings', hint: 'Groq key and AI' },
+  { to: 'settings', label: 'Settings', hint: 'Groq key, AI and the Desmos calculator key' },
   { to: 'data', label: 'Your data', hint: 'Backup, export, restore' },
   { to: 'bank', label: 'Question bank', hint: 'Refresh, import from file' },
 ];

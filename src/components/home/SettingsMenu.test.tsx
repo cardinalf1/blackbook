@@ -61,7 +61,7 @@ describe('SettingsMenu', () => {
     expect(items.length).toBe(3);
 
     expect(items[0]?.textContent).toContain('Settings');
-    expect(items[0]?.textContent).toContain('Groq key and AI');
+    expect(items[0]?.textContent).toContain('Groq key, AI and the Desmos calculator key');
     expect(items[1]?.textContent).toContain('Your data');
     expect(items[1]?.textContent).toContain('Backup, export, restore');
     expect(items[2]?.textContent).toContain('Question bank');
