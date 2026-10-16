@@ -1,3 +1,38 @@
+# Phase 9 follow-up: Desmos with your own key, and delete safeguards (2026-10-16)
+
+Branch `claude/phase9-test-room`, after the `phase9-done` tag. Not pushed. Typecheck clean, 128 test files and 910 tests passing, `bun run sync` exit 0, no key-shaped string in any committed or handoff file.
+
+- **Desmos calculator.** Settings now has a "Desmos calculator" section with Save key, Test and Remove key.
+  - The key is stored like the Groq key: `secrets/desmos-key` in the user-data folder, never in the database, exports, backups, replies or logs.
+  - With a key, the calculator panel loads Desmos (Graphing and Scientific) from its official script inside a sandboxed frame served by the local program. Desmos's script never gets the app's origin, token or data, and the app's own code never handles the key.
+  - With no key, or when the script cannot load, the panel shows a plain message, and the test carries on.
+  - Drag, resize, mode switch, keeping state per module and resetting it between modules, and counts-only telemetry are unchanged.
+  - Details and labels: `docs/calculator-spec.md`.
+- **Key leak test:** `src/services/secrets.test.ts` fails on a Desmos-shaped or Groq-shaped key in any committed file, any handoff file or an export. I checked that it fails by planting one temporarily.
+- **Safety copy** before Delete all progress and Delete telemetry, like the one before a restore. If the copy cannot be written, nothing is deleted. Nothing is written when there is nothing to lose. Five safety copies are kept.
+- **Delete all progress** needs the word DELETE typed before its button works.
+
+**Checked in the browser** (on a copy of the data folder, deleted afterwards):
+- The Settings section saves a key without ever showing it.
+- Test against the real Desmos server says a made-up key is not recognized.
+- With that key, the drill calculator created the sandboxed frame, the frame page came back 200 with its CSP, and the panel fell back to "could not load".
+- After Remove, the panel shows the "no calculator is set up" message pointing to Settings.
+- Delete all progress stayed disabled until DELETE was typed, and wrote `before-delete-all-*.json` first.
+
+**Could not verify:**
+- **A working calculator.** I have no real Desmos key, so I never saw Desmos draw. Still unknown:
+  - whether a real key loads under the frame's CSP (eval, workers, other Desmos hosts);
+  - whether Graphing opens at -10 to 10;
+  - whether state survives question changes in practice;
+  - what Scientific does on a key without it enabled.
+- **Whether keys are limited to some websites, and whether localhost is accepted.** The docs don't say, and the key page needs a login. Settings > Test can't detect it. If Test passes but the panel says "could not load", that is the likely cause.
+- **Why the made-up key failed in the frame.** The browser's console inside the frame couldn't be read, because the preview's snapshot timed out. I couldn't tell the 403 apart from a CSP block. The server-side request did get the 403.
+- **The panel in an exam module.** It shares the same component and engine and is covered by tests, but I only clicked through it in a drill.
+
+**To test with your key:** `bun run dev`, settings menu, Settings, "Desmos calculator", paste your key, Save key, Test. Then start a Math drill or module, open Calculator, switch modes, go to another question and back, and close and reopen it.
+
+---
+
 # Morning report: Phase 9 (test-room tools and layout; 2026-10-16, unattended)
 
 ## Read this first: your local data is empty
