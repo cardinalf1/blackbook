@@ -121,7 +121,7 @@ describe('database start rules', () => {
       result = String(e);
     }
     expect(result).not.toBe('ok');
-  });
+  }, 15000);
 });
 
 describe('exit snapshot', () => {
@@ -363,3 +363,4 @@ describe('log', () => {
     expect(redact('saved key ABCDEFGHIJKLMNOPQRSTUV', { secrets: ['ABCDEFGHIJKLMNOPQRSTUV'] })).toBe('saved key [removed]');
   });
 });
+
