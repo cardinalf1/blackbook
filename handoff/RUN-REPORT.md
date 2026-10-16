@@ -1,3 +1,134 @@
+# Phase 10: Desktop App, Backup Zip, Docs and Public Release (2026-10-16)
+
+**Branch:** `claude/phase10-release`  
+**Status:** ALL 10 STEPS COMPLETED. Pre-push audit 100% green. Gate hold before git push (gh CLI not installed).
+
+---
+
+## 1. Executive Summary & Verification Gates
+
+Phase 10 transforms Blackbook into a self-contained, fully offline desktop application with native Electron packaging, an external question bank backup utility, first-run onboarding, comprehensive user guides, and legal compliance.
+
+### Pre-Push Release Audit Results (`bun scripts/prepush-audit.ts`):
+- **Gate 1: Sensitive File Check:** PASSED. No local data (`.sqlite`, `.db`), archives (`.zip`), or private folders tracked by git.
+- **Gate 2: Hygiene & Secret Scrubbing:** PASSED. No developer username, local user profile paths, personal emails, or live API keys in tracked files.
+- **Gate 3: Zero Source Content:** PASSED. No official question text, passages, or proprietary figures tracked anywhere in the repository.
+- **Gate 4: TypeScript Compiler:** PASSED (`tsc --noEmit` exited 0 with no errors).
+- **Gate 5: Vitest Test Suite:** PASSED. **139 test files, 992 tests executed, ALL 992 PASSED** in ~55s.
+- **Gate 6: Release Packaging & Checksum:** PASSED. Standalone installer verified against SHA-256 manifest.
+
+---
+
+## 2. Release Artifacts & External Backups
+
+1. **Windows Desktop Installer:**
+   - **File:** `release/Blackbook-Setup-1.0.0.exe` (158 MB)
+   - **Checksum (SHA-256):** `b3c1a093869a47f40c682425749183432095a52b093fd6e34d63798dcbdac89a`
+   - **Checksum Manifest:** `release/SHA256SUMS.txt`
+   - **Features:** Self-contained NSIS installer bundling the Electron shell, React frontend, and pre-compiled Bun sidecar binary. Fully offline runtime with automatic local port negotiation and clean process teardown.
+
+2. **External Question Bank Backup Zip:**
+   - **File:** `%USERPROFILE%\Documents\Blackbook Backups\Blackbook-QuestionBank-2026-10-16.zip` (104.9 MB)
+   - **Contents:** 4,374 questions, full figure assets, and schema manifest (`schema_version: 1`).
+   - **Safety:** Created completely outside the repository tree; verified with round-trip CLI (`bun scripts/bank-zip.ts verify`) and automated unit tests.
+
+---
+
+## 3. What Was Built (Steps 1–10)
+
+- **Step 1: Desktop Shell & Sidecar Integration**
+  - Robust child-process lifecycle manager (`electron/core/sidecar.ts`, `server/control.ts`) with `/healthz` polling, cookie token handshake, and stdin close exit triggers.
+  - Two-stage bank download architecture allowing students to start drills immediately while background ingestion completes.
+  - Headless command-line zip verification and backup tooling (`scripts/bank-zip.ts`).
+- **Step 2: Preference Persistence & Save-on-Exit**
+  - Atomic JSON preferences store (`server/preferences.ts`, `src/types/preferences.ts`, `/api/preferences`) preserving drill setups, browse filters, and test room zoom/tool states across restarts.
+  - Flush hooks on window unload and SIGINT/SIGTERM preventing loss of in-flight session data.
+- **Step 3: Network Lockdown, Licenses & Crash Boundaries**
+  - Network egress audit document (`docs/network.md`) and automated regression test (`server/network.test.ts`) guaranteeing zero unauthorized outbound requests.
+  - `THIRD_PARTY_LICENSES.md` inventorying all dependencies and licenses.
+  - React Error Boundary UI (`src/components/common/ErrorBoundary.tsx`) providing one-click diagnostic log copy without leaking sensitive data.
+- **Step 4, 5 & 6: Release UI Screens & User Guides**
+  - `WelcomeScreen`: First-run landing experience with 3 clean setup pathways.
+  - `WhileYouWaitPanel`: Real-time download progress showing staged readiness.
+  - `BankBackupPanel`: Import/export question bank zip utility wired into `BankScreen`.
+  - `HelpScreen` & `AboutScreen`: System diagnostics, storage paths, and in-app open-source license viewer.
+  - User documentation in `docs/guides/`: `INSTALL-WINDOWS.md`, `INSTALL-MAC.md`, `GET-A-GROQ-KEY.md`, `GET-A-DESMOS-KEY.md`, `TROUBLESHOOTING.md`, and `FRIEND-CHECKLIST.md`.
+  - Comprehensive `README.md` reflecting 1.0.0 offline capabilities.
+- **Step 7: Packaging Orchestration**
+  - End-to-end release pipeline script (`scripts/build-release.ts`) compiling the Bun sidecar binary, building the Vite production bundle, and packaging the NSIS installer via electron-builder.
+- **Step 8 & 9: Legal, Hygiene & CI Workflows**
+  - MIT `LICENSE`, trademark disclaimer `NOTICE`, security disclosure `SECURITY.md`, and fair use legal notes `docs/legal-notes.md`.
+  - GitHub Actions CI workflows for test suite execution (`.github/workflows/test.yml`) and automated release asset publishing (`.github/workflows/release.yml`).
+  - Automated hygiene tests (`scripts/gitignore.test.ts`, `scripts/scrub.test.ts`).
+- **Step 10: Pre-Push Audit & Gate Verification**
+  - Pre-push automated audit script (`scripts/prepush-audit.ts`) enforcing all 6 compliance and test gates before release publication.
+
+---
+
+## 4. Phase 10 Commit Log
+
+```
+f2496e4 chore(hygiene): sanitize emails and genericize ledger paths
+b57309f chore(gitignore): ignore local phaseexec prompt files
+d2d47e0 feat(release): prepush audit script and release audit gates (Step 10)
+82e2a11 chore: hygiene, legal docs, gitignore tests, and CI workflows (Steps 8 & 9)
+ca81a54 feat(build): release packaging script for sidecar and electron installer (Step 7)
+123f9ab feat(ui): first-run welcome, backup panel, help, about, and guides (Steps 5 & 6)
+541e6c1 feat(hardening): network egress audit, license inventory, and crash boundary (Step 3)
+df513d7 feat(desktop): persisted preferences and exit flush coordination (Step 2)
+2ebd73c feat(types): contracts for the Phase 10 screens (welcome, while you wait, bank backup, help, about)
+1cbb7f3 feat(scripts): bank-zip export and round-trip verify from the command line (refuses the repo)
+263991f feat(desktop): Electron shell with sidecar, two-stage download and bank backup zip
+4eee587 feat(server): desktop-ready local program (control line, static page, start and exit rules)
+```
+
+---
+
+## 5. Manual Push & GitHub Release Instructions
+
+> **Note on Gate Hold:**
+> Under Step 10 rules, the agent checks for GitHub CLI availability (`gh --version`). Because `gh` is not installed on this machine, execution stopped cleanly at the release gate without pushing to `origin`.
+> 
+> Run the following commands in your shell to push the release and publish it:
+
+### Step A: Push to GitHub
+```bash
+# Verify you are on the release branch and working tree is clean
+git status
+
+# Push the release branch to remote
+git push origin claude/phase10-release
+
+# Fast-forward main to the release branch
+git checkout main
+git merge claude/phase10-release --ff-only
+git push origin main
+
+# Create and push the release tag
+git tag -a v1.0.0 -m "Blackbook v1.0.0 public release"
+git push origin v1.0.0
+```
+
+### Step B: Publish the GitHub Release
+**Option 1: Via GitHub Web Interface (Recommended)**
+1. Navigate to: `https://github.com/cardinalf1/blackbook/releases/new`
+2. **Choose a tag:** Select `v1.0.0`.
+3. **Release title:** `Blackbook 1.0.0`
+4. **Description:** Copy and paste the contents of [CHANGELOG.md](file:///C:/Users/Raghav/.t3/projects/blackbook/CHANGELOG.md).
+5. **Attach binaries:** Drag and drop the following files into the release assets dropzone:
+   - `release/Blackbook-Setup-1.0.0.exe`
+   - `release/SHA256SUMS.txt`
+6. Click **Publish release**.
+
+**Option 2: Via GitHub CLI (if installed later)**
+```bash
+gh release create v1.0.0 release/Blackbook-Setup-1.0.0.exe release/SHA256SUMS.txt \
+  --title "Blackbook 1.0.0" \
+  --notes-file CHANGELOG.md
+```
+
+---
+
 # Phase 9 follow-up: Question picture sizing and figure zoom controls (2026-10-16)
 
 Branch `claude/phase9-test-room`. Not pushed. Typecheck clean, 129 test files and 914 tests passing, `bun run sync --limit 1` exit 0.
