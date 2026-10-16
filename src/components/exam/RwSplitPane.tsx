@@ -68,6 +68,7 @@ export function RwSplitPane({
           onSelect={onSelect}
           struck={struck}
           onStrike={onStrike}
+          eliminatorOn={true}
         />
       )}
     </div>

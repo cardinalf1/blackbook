@@ -7,6 +7,7 @@ export interface ChoiceListProps {
   onSelect: (letter: string) => void;
   struck: readonly ChoiceLetter[];
   onStrike: (letter: ChoiceLetter) => void;
+  eliminatorOn: boolean;
 }
 
 export function ChoiceList({
@@ -15,6 +16,7 @@ export function ChoiceList({
   onSelect,
   struck,
   onStrike,
+  eliminatorOn,
 }: ChoiceListProps) {
   return (
     <ol className="space-y-2">
@@ -59,19 +61,21 @@ export function ChoiceList({
                 className={`min-w-0 flex-1 ${isStruck ? 'line-through text-zinc-500' : ''}`}
               />
             </button>
-            <button
-              type="button"
-              onClick={() => onStrike(letter)}
-              aria-pressed={isStruck}
-              aria-label={isStruck ? `Restore choice ${letter}` : `Strike out choice ${letter}`}
-              className={`mt-1 flex h-8 w-8 min-h-[32px] min-w-[32px] shrink-0 items-center justify-center rounded-full border font-mono text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
-                isStruck
-                  ? 'border-zinc-500 bg-zinc-800 text-zinc-100 shadow-inner'
-                  : 'border-[#27272A] bg-[#0A0A0C] text-zinc-400 hover:border-zinc-500 hover:text-zinc-100'
-              }`}
-            >
-              {isStruck ? '\u21ba' : 'x'}
-            </button>
+            {eliminatorOn && (
+              <button
+                type="button"
+                onClick={() => onStrike(letter)}
+                aria-pressed={isStruck}
+                aria-label={isStruck ? `Restore choice ${letter}` : `Strike out choice ${letter}`}
+                className={`mt-1 flex h-8 w-8 min-h-[32px] min-w-[32px] shrink-0 items-center justify-center rounded-full border font-mono text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+                  isStruck
+                    ? 'border-zinc-500 bg-zinc-800 text-zinc-100 shadow-inner'
+                    : 'border-[#27272A] bg-[#0A0A0C] text-zinc-400 hover:border-zinc-500 hover:text-zinc-100'
+                }`}
+              >
+                <span className="line-through">{letter}</span>
+              </button>
+            )}
           </li>
         );
       })}

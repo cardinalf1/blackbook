@@ -71,6 +71,7 @@ export function MathPane({
             onSelect={onSelect}
             struck={struck}
             onStrike={onStrike}
+            eliminatorOn={true}
           />
         )}
       </div>
