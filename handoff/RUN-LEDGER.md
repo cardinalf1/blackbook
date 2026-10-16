@@ -19,6 +19,8 @@ Read this and `git log` first when resuming. Do not restart a phase.
     - `82e2a11`: chore: hygiene, legal docs, gitignore tests, and CI workflows (Steps 8 & 9)
     - `d2d47e0`: feat(release): prepush audit script and release audit gates (Step 10)
     - `b57309f`: chore(gitignore): ignore local phaseexec prompt files
+    - `f2496e4`: chore(hygiene): sanitize emails and genericize ledger paths
+    - `3171de1`: docs(handoff): complete Phase 10 run report and manual release instructions
   - **Artifacts**:
     - Windows Installer built: `release/Blackbook-Setup-1.0.0.exe` (158 MB)
     - Checksum: `release/SHA256SUMS.txt` (`b3c1a093869a47f40c682425749183432095a52b093fd6e34d63798dcbdac89a`)
