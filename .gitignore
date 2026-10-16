@@ -16,3 +16,7 @@ docs/research/
 
 # Owner screenshots, local only
 handoff/screens/
+
+# Build output (desktop)
+out/
+release/

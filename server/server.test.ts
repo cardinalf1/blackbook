@@ -446,3 +446,98 @@ describe('idle shutdown', () => {
     idle.stop();
   });
 });
+
+describe('two-stage first download', () => {
+  it('swaps the live set in first, then the rest as a second swap', async () => {
+    const { downloads, bank } = await setup(fakeSource());
+    const counts: number[] = [];
+    downloads.subscribe((p) => {
+      if (p.twoStage?.current === 2 && counts.length === 0) void bank.count().then((n) => counts.push(n));
+    });
+    expect(downloads.start({ sections: ['rw', 'math'], liveOnly: false, twoStage: true })).toBe(true);
+    await downloads.settled();
+    const p = downloads.snapshot();
+    expect(p.status).toBe('succeeded');
+    expect(p.twoStage).toMatchObject({ current: 2, stageOneDone: true, stageOneQuestions: 4 });
+    expect(counts[0]).toBe(4);
+    expect(await bank.count()).toBe(8);
+    // Stage two reused stage one's downloads from the cache.
+    expect(p.cached).toBe(4);
+  });
+
+  it('keeps the stage-one bank usable when stage two fails', async () => {
+    // The first four detail requests (the live set) work; everything after is refused.
+    const { downloads, bank } = await setup(fakeSource({ count: 10, liveEvery: 5, detail: (n) => (n <= 4 ? new Response(JSON.stringify(fx.rawDigitalMcq)) : new Response('{}', { status: 403 })) }));
+    downloads.start({ sections: ['rw', 'math'], liveOnly: false, twoStage: true });
+    await downloads.settled();
+    const p = downloads.snapshot();
+    expect(p.status).toBe('failed');
+    expect(p.twoStage).toMatchObject({ current: 2, stageOneDone: true, stageOneQuestions: 4 });
+    expect(await bank.count()).toBe(4);
+    expect((await bank.query({})).every((x) => x.active)).toBe(true);
+  });
+
+  it('keeps the stage-one bank when stage two is cancelled', async () => {
+    const { downloads, bank } = await setup(fakeSource({ detail: (n) => (n <= 4 ? new Response(JSON.stringify(fx.rawDigitalMcq)) : 'hang') }));
+    downloads.start({ sections: ['rw', 'math'], liveOnly: false, twoStage: true });
+    for (let i = 0; i < 200 && downloads.snapshot().twoStage?.current !== 2; i++) await new Promise((r) => setTimeout(r, 5));
+    await new Promise((r) => setTimeout(r, 20));
+    downloads.cancel();
+    await downloads.settled();
+    expect(downloads.snapshot().status).toBe('cancelled');
+    expect(downloads.snapshot().twoStage?.stageOneDone).toBe(true);
+    expect(await bank.count()).toBe(4);
+  });
+
+  it('a stage-one failure changes nothing and never starts stage two', async () => {
+    const { downloads, bank } = await setup(fakeSource({ count: 10, detail: () => new Response('{}', { status: 403 }) }));
+    downloads.start({ sections: ['rw'], liveOnly: false, twoStage: true });
+    await downloads.settled();
+    expect(downloads.snapshot()).toMatchObject({ status: 'failed', twoStage: { current: 1, stageOneDone: false } });
+    expect(await bank.count()).toBe(0);
+  });
+
+  it('the start route accepts twoStage', async () => {
+    const { call, downloads } = await setup(fakeSource());
+    const res = await call('/api/download/start', { method: 'POST', body: JSON.stringify({ sections: ['rw'], liveOnly: true, twoStage: true }) });
+    expect(res.status).toBe(202);
+    expect(((await res.json()) as DownloadProgress).twoStage?.current).toBe(1);
+    await downloads.settled();
+  });
+});
+
+describe('question bank zip', () => {
+  it('exports a zip that imports back with the same counts', async () => {
+    const a = await setup(fakeSource());
+    a.downloads.start({ sections: ['rw', 'math'], liveOnly: false });
+    await a.downloads.settled();
+    const res = await a.call('/api/bank/export');
+    expect(res.headers.get('content-type')).toBe('application/zip');
+    expect(res.headers.get('content-disposition')).toMatch(/Blackbook-QuestionBank-\d{4}-\d{2}-\d{2}\.zip/);
+    const zip = new Uint8Array(await res.arrayBuffer());
+    await a.bank.clear();
+    expect(await a.bank.count()).toBe(0);
+    const back = (await (await a.call('/api/bank/import', { method: 'POST', body: Buffer.from(zip) })).json()) as { ok: boolean; imported: number };
+    expect(back).toMatchObject({ ok: true, imported: 8 });
+    expect(await a.bank.count()).toBe(8);
+  });
+
+  it('refuses a damaged zip and keeps the current bank', async () => {
+    const a = await setup(fakeSource());
+    a.downloads.start({ sections: ['rw'], liveOnly: false });
+    await a.downloads.settled();
+    const zip = new Uint8Array(await (await a.call('/api/bank/export')).arrayBuffer());
+    const broken = zip.slice();
+    const mid = Math.floor(broken.length / 2);
+    broken[mid] = (broken[mid] as number) ^ 0xff;
+    const r = (await (await a.call('/api/bank/import', { method: 'POST', body: Buffer.from(broken) })).json()) as { ok: boolean; error: string };
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/damaged|checksum/);
+    expect(await a.bank.count()).toBe(4);
+  });
+
+  it('says so when there is nothing to export', async () => {
+    const a = await setup(fakeSource());
+    expect((await a.call('/api/bank/export')).status).toBe(404);
+  });
+});

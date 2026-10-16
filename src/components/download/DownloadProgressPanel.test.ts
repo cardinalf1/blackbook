@@ -32,6 +32,7 @@ describe('DownloadProgressPanel', () => {
     summary: null,
     cache: { bytes: 1048576, files: 45 },
     dataFolder: 'data/question_bank.json',
+    twoStage: null,
   };
 
   const baseProps: DownloadProgressPanelProps = {

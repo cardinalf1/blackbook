@@ -26,6 +26,8 @@ import { RULES_NOTE_MAX } from '../src/types/ai';
 import { isObj, parseAiSettings, parseAttempt, parseEvent, parseSession, parseTag, type ValidatedUserData } from './validate';
 import { checkHostAndOrigin, checkRequest, sameSecret, sessionCookie, type SecurityConfig } from './security';
 import { withSecurityHeaders } from './staticFiles';
+import { buildBankZip, readBankZip } from './bankZip';
+import { looksLikeZip } from './zip';
 import type { StartupReport } from './control';
 import type { AppInfo } from '../src/types/appInfo';
 
@@ -88,7 +90,7 @@ function parseScope(v: unknown): DownloadScopeChoice | null {
   if (!isObj(v) || !Array.isArray(v.sections) || typeof v.liveOnly !== 'boolean') return null;
   const sections = [...new Set(v.sections)].filter((s): s is Section => SECTIONS.includes(s as Section));
   if (sections.length === 0 || sections.length !== v.sections.length) return null;
-  return { sections, liveOnly: v.liveOnly };
+  return v.twoStage === true ? { sections, liveOnly: false, twoStage: true } : { sections, liveOnly: v.liveOnly };
 }
 
 function parseQuery(url: URL): QuestionQuery {
@@ -235,11 +237,31 @@ function route(deps: AppDeps): (req: Request) => Promise<Response> {
         if (length > MAX_IMPORT_BYTES) return problem(413, 'That file is too large to be a question bank.');
         importing = true;
         try {
-          const text = await req.text();
+          const bytes = new Uint8Array(await req.arrayBuffer());
+          let text: string;
+          if (looksLikeZip(bytes)) {
+            const opened = readBankZip(bytes);
+            if (!opened.ok) return json({ ok: false, error: opened.error, invalid: [] });
+            text = opened.text;
+          } else {
+            text = new TextDecoder().decode(bytes);
+          }
           return json(await importBankText(text, { store: deps.bank, sanitize: deps.sanitize, signal: req.signal }));
         } finally {
           importing = false;
         }
+      }
+      if (path === '/api/bank/export' && m === 'GET') {
+        const meta = await deps.bank.getMeta();
+        if (!meta) return problem(404, 'There is no question bank to export yet.');
+        const zip = buildBankZip({ questions: await deps.bank.query({}), skipped: await deps.bank.getSkipped(), fetchedAt: meta.fetchedAt }, deps.version ?? 'dev');
+        return new Response(zip.bytes.slice().buffer, {
+          headers: {
+            'Content-Type': 'application/zip',
+            'Content-Disposition': `attachment; filename="${zip.name}"`,
+            'Cache-Control': 'no-store',
+          },
+        });
       }
 
       // ---- user data ----

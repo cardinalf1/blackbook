@@ -7,6 +7,8 @@ import type { Section } from './sat';
 export interface DownloadScopeChoice {
   sections: Section[];
   liveOnly: boolean;
+  /** Live set first, then everything else (first download). Implies liveOnly false for the whole run. */
+  twoStage?: boolean;
 }
 
 export const DEFAULT_SCOPE: DownloadScopeChoice = { sections: ['rw', 'math'], liveOnly: true };
@@ -63,6 +65,21 @@ export interface DownloadProgress {
   cache: { bytes: number; files: number };
   /** Folder where this computer keeps the bank and progress. */
   dataFolder: string;
+  /** Set for a two-stage first download (live set first, then the rest); null for a single run. */
+  twoStage: TwoStageProgress | null;
+}
+
+/**
+ * First download in two stages: the live set is downloaded, checked and swapped in first, so the
+ * app is usable after about 9 minutes; the remaining questions follow in the background with the
+ * same polite limits and are swapped in as a second step. If stage two fails or is cancelled, the
+ * stage-one bank stays and `stageOneDone` tells the page what is missing.
+ */
+export interface TwoStageProgress {
+  current: 1 | 2;
+  stageOneDone: boolean;
+  /** Questions in the bank after stage one. */
+  stageOneQuestions: number | null;
 }
 
 // ---- Props contracts. Screens stay thin: all logic arrives through these props. ----

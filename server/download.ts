@@ -73,6 +73,7 @@ export class DownloadManager {
       summary: null,
       cache: { bytes: 0, files: 0 },
       dataFolder: this.deps.dataFolder,
+      twoStage: null,
     };
   }
 
@@ -115,11 +116,52 @@ export class DownloadManager {
   start(scope: DownloadScopeChoice): boolean {
     if (this.isRunning()) return false;
     if (scope.sections.length === 0) return false;
+    if (scope.twoStage) return this.startTwoStage(scope.sections);
     this.ctl = new AbortController();
     this.detailsStartedAt = null;
     this.progress = { ...this.blank('running'), scope, startedAt: this.now(), cache: this.progress.cache };
     this.update({ stage: 'lists' });
-    this.running = this.run(scope, this.ctl.signal).finally(() => {
+    this.running = this.run(scope, this.ctl.signal, true)
+      .then(() => undefined)
+      .finally(() => {
+        this.running = null;
+        this.ctl = null;
+      });
+    return true;
+  }
+
+  /**
+   * Live set first (validated and swapped in on its own), then the rest in the background as a
+   * second atomic swap. Questions from stage one are in the download cache, so stage two fetches
+   * only the questions that are not live.
+   */
+  private startTwoStage(sections: DownloadScopeChoice['sections']): boolean {
+    const signal = (this.ctl = new AbortController()).signal;
+    this.detailsStartedAt = null;
+    const first: DownloadScopeChoice = { sections, liveOnly: true };
+    this.progress = {
+      ...this.blank('running'),
+      scope: first,
+      startedAt: this.now(),
+      cache: this.progress.cache,
+      twoStage: { current: 1, stageOneDone: false, stageOneQuestions: null },
+    };
+    this.update({ stage: 'lists' });
+    this.running = (async () => {
+      if (!(await this.run(first, signal, false)) || signal.aborted) return;
+      const count = await this.deps.bank.count();
+      this.detailsStartedAt = null;
+      this.update({
+        ...this.blank('running'),
+        scope: { sections, liveOnly: false },
+        stage: 'lists',
+        startedAt: this.now(),
+        cache: this.progress.cache,
+        summary: this.progress.summary,
+        twoStage: { current: 2, stageOneDone: true, stageOneQuestions: count },
+      });
+      await this.run({ sections, liveOnly: false }, signal, true);
+    })().finally(() => {
       this.running = null;
       this.ctl = null;
     });
@@ -162,7 +204,8 @@ export class DownloadManager {
     }
   };
 
-  private async run(scope: DownloadScopeChoice, signal: AbortSignal): Promise<void> {
+  /** One pipeline run and swap. `final`: mark the download succeeded at the end. True when the bank was replaced. */
+  private async run(scope: DownloadScopeChoice, signal: AbortSignal, final: boolean): Promise<boolean> {
     try {
       const result = await runPipeline(
         { sections: scope.sections, liveOnly: scope.liveOnly },
@@ -183,7 +226,7 @@ export class DownloadManager {
       const bySection: Partial<Record<Section, number>> = {};
       for (const q of result.bank.questions) bySection[q.section] = (bySection[q.section] ?? 0) + 1;
       this.update({
-        status: 'succeeded',
+        status: final ? 'succeeded' : 'running',
         stage: null,
         summary: {
           questions: result.bank.questions.length,
@@ -193,6 +236,7 @@ export class DownloadManager {
           durationMs: this.now() - (this.progress.startedAt ?? this.now()),
         },
       });
+      return true;
     } catch (e) {
       if (e instanceof DownloadStopped && e.reason === 'cancelled') {
         this.update({ status: 'cancelled', stage: null });
@@ -207,5 +251,6 @@ export class DownloadManager {
     } finally {
       await this.refreshCacheSize().catch(() => undefined);
     }
+    return false;
   }
 }
