@@ -3,6 +3,7 @@ import { capCount, matchingCount } from '../../services/drill/facets';
 import type { DrillConfig, DrillSetupProps } from '../../types/drill';
 import type { Difficulty, Section } from '../../types/sat';
 import { PresetPanel } from '../modes/PresetPanel';
+import { RulesNoteBox } from '../notes/RulesNoteBox';
 
 const SECTION_OPTIONS: readonly { value: Section; label: string }[] = [
   { value: 'rw', label: 'Reading and Writing' },
@@ -240,6 +241,12 @@ export function DrillSetup({
                 );
               })}
             </div>
+          )}
+          {skillCodes.length === 1 && (
+            <RulesNoteBox
+              skillCode={skillCodes[0] as string}
+              skill={availableSkills.find((x) => x.skillCode === skillCodes[0])?.skill ?? (skillCodes[0] as string)}
+            />
           )}
         </div>
 

@@ -5,6 +5,9 @@ import type { DrillConfig } from './types/drill';
 import { DownloadController } from './components/download/DownloadController';
 import { DrillFlow, ReportScreen, type DrillStart } from './components/drill/DrillFlow';
 import { MistakeLogScreen } from './components/mistakes/MistakeLogScreen';
+import { SettingsScreen } from './components/settings/SettingsScreen';
+import { WeakDrillScreen } from './components/ai/WeakDrillScreen';
+import { AiReportScreen } from './components/ai/AiReportScreen';
 import { ImportPanel } from './components/ImportPanel';
 import { BrowseScreen } from './components/browse/BrowseScreen';
 import { InProgressSection } from './components/drill/InProgressSection';
@@ -30,6 +33,9 @@ type View =
   | { kind: 'browse' }
   | { kind: 'analytics' }
   | { kind: 'mistakes' }
+  | { kind: 'settings' }
+  | { kind: 'weakDrill' }
+  | { kind: 'aiReport' }
   | { kind: 'mistakeReport'; sessionId: string }
   | { kind: 'drill'; startAt: DrillStart }
   | { kind: 'exam'; startAt: 'setup' | 'play' }
@@ -227,6 +233,27 @@ export default function App() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setView({ kind: 'weakDrill' })}
+                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
+                >
+                  Weak-skill drill
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setView({ kind: 'aiReport' })}
+                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
+                >
+                  Study report
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setView({ kind: 'settings' })}
+                  className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
+                >
+                  Settings
+                </button>
+                <button
+                  type="button"
                   onClick={() => setView({ kind: 'mistakes' })}
                   className="rounded-md border border-[#27272A] px-4 py-1.5 text-sm font-medium text-zinc-100 hover:border-zinc-500"
                 >
@@ -327,6 +354,14 @@ export default function App() {
       )}
 
       {view.kind === 'analytics' && <AnalyticsFlow onExit={() => void loadHome()} onLaunch={(config) => void launchDrill(config)} />}
+
+      {view.kind === 'settings' && <SettingsScreen onBack={() => void loadHome()} />}
+
+      {view.kind === 'weakDrill' && (
+        <WeakDrillScreen onBack={() => void loadHome()} onStarted={() => drillStore.getState().session && setView({ kind: 'drill', startAt: 'play' })} />
+      )}
+
+      {view.kind === 'aiReport' && <AiReportScreen onBack={() => void loadHome()} />}
 
       {view.kind === 'mistakes' && (
         <MistakeLogScreen onBack={() => void loadHome()} onOpenReport={(sessionId) => setView({ kind: 'mistakeReport', sessionId })} />

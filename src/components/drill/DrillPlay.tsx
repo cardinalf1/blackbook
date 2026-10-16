@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { presetTimeLeftMs } from '../../services/modes/presets';
 import { liveHint } from '../../services/pacing/pacing';
+import { formatCountdown } from '../../utils/formatCountdown';
 import { useDrill } from '../../stores/drillStore';
 import { CHOICE_LETTERS, type ChoiceLetter } from '../../types/sat';
 import type { Confidence, DrillPlayProps, SessionRecord } from '../../types/session';
@@ -98,6 +100,13 @@ export function DrillPlay({
                 </span>
               )}
             </div>
+          )}
+          {session && !isExam && session.config?.timeLimitMs !== undefined && (
+            <span className="font-mono text-xs text-zinc-300" title="A soft limit at the real pace. Nothing is submitted for you.">
+              {(presetTimeLeftMs(session.config, elapsedActiveMs) ?? 0) > 0
+                ? `Set time left: ${formatCountdown(presetTimeLeftMs(session.config, elapsedActiveMs) ?? 0)}`
+                : 'Set time is up. Finish when ready.'}
+            </span>
           )}
           <span className="font-mono text-xs text-zinc-400">
             Question {index + 1} of {total}
