@@ -120,4 +120,37 @@ describe('tool inventory on screen', () => {
     await act(async () => calc?.click());
     expect(container.textContent).toContain('No calculator is set up');
   });
+
+  it('highlights a passage selection and stores it with the session', async () => {
+    await open('rw', ['r1']);
+    const passage = container.querySelector('[data-annotatable="passage"]') as HTMLElement;
+    const text = passage.querySelector('.bb-content p')?.firstChild as Text;
+    const range = document.createRange();
+    range.setStart(text, 2);
+    range.setEnd(text, 11);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    await act(async () => passage.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })));
+    const blue = container.ownerDocument.querySelector<HTMLButtonElement>('[aria-label="Blue highlight"]');
+    expect(blue).not.toBeNull();
+    await act(async () => blue?.click());
+    const s = drillStore.getState().session;
+    const saved = s?.progress.r1?.annotations ?? [];
+    expect(saved.map((a) => [a.target, a.start, a.end, a.style])).toEqual([['passage', 2, 11, 'blue']]);
+    expect(passage.querySelector('mark[data-style="blue"]')?.textContent).toBe('synthetic');
+  });
+
+  it('a typed answer is limited as typed and previewed as a stacked fraction', async () => {
+    await open('math', ['m2']);
+    const input = container.querySelector<HTMLInputElement>('input[type="text"]') as HTMLInputElement;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    for (const v of ['-', '-1', '-1/', '-1/3', '-1/3%']) {
+      await act(async () => {
+        setter?.call(input, v);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
+    expect(drillStore.getState().session?.progress.m2?.response).toBe('-1/3');
+    expect(container.textContent).toContain('Answer Preview');
+  });
 });

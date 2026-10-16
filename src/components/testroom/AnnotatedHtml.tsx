@@ -74,7 +74,8 @@ export function AnnotatedHtml({ html, target, annotations, onChange, onEvent, on
     if (!el) return;
     const range = selectionOffsets(el, window.getSelection());
     if (range) {
-      const rect = window.getSelection()?.getRangeAt(0).getBoundingClientRect();
+      const r = window.getSelection()?.getRangeAt(0);
+      const rect = r && typeof r.getBoundingClientRect === 'function' ? r.getBoundingClientRect() : undefined;
       setEditing({ kind: 'new', ...range, anchor: { x: rect ? rect.left + rect.width / 2 : e.clientX, y: rect ? rect.top : e.clientY } });
       return;
     }
