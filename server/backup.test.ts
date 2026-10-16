@@ -50,6 +50,7 @@ async function fill(store: SqliteUserStore): Promise<void> {
   await store.setFlag('q1', true);
   await store.addTag(tag('t1', 's1', 'q2', 'careless', 70));
   await store.addTag(tag('t2', 's1', 'q2', 'misread', 80, 'read the units wrong'));
+  await store.setNote('S1', 'Check units before the last step.');
 }
 
 describe('mistake tags', () => {
@@ -122,6 +123,8 @@ describe('backup and restore', () => {
     expect(await b.listEvents()).toEqual(await a.listEvents());
     expect(await b.listTags()).toEqual(await a.listTags());
     expect(await b.listFlags()).toEqual(await a.listFlags());
+    expect(await b.listNotes()).toEqual(await a.listNotes());
+    expect(b.aiSettings()).toEqual(a.aiSettings());
     expect(await b.questionStatus()).toEqual(await a.questionStatus());
     expect(await b.stats()).toEqual(await a.stats());
   });
