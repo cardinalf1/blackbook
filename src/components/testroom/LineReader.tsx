@@ -17,7 +17,7 @@ export function LineReader({ lines, onClose }: LineReaderProps) {
     const vh = typeof window !== 'undefined' ? window.innerHeight : 768;
     const initial = Math.round(vh * 0.4);
     const maxTop = Math.max(0, vh - lines * LINE_HEIGHT_PX);
-    return clamp(initial, 0, maxTop);
+    return clamp(initial, LINE_HEIGHT_PX, maxTop);
   });
 
   const cleanupDragRef = useRef<(() => void) | null>(null);
@@ -36,7 +36,7 @@ export function LineReader({ lines, onClose }: LineReaderProps) {
     const handleResize = () => {
       const vh = window.innerHeight;
       const maxTop = Math.max(0, vh - windowHeight);
-      setTop((prev) => clamp(prev, 0, maxTop));
+      setTop((prev) => clamp(prev, LINE_HEIGHT_PX, maxTop));
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -52,10 +52,10 @@ export function LineReader({ lines, onClose }: LineReaderProps) {
     const maxTop = Math.max(0, window.innerHeight - windowHeight);
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setTop((prev) => clamp(prev + LINE_HEIGHT_PX, 0, maxTop));
+      setTop((prev) => clamp(prev + LINE_HEIGHT_PX, LINE_HEIGHT_PX, maxTop));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setTop((prev) => clamp(prev - LINE_HEIGHT_PX, 0, maxTop));
+      setTop((prev) => clamp(prev - LINE_HEIGHT_PX, LINE_HEIGHT_PX, maxTop));
     }
   };
 
@@ -70,7 +70,7 @@ export function LineReader({ lines, onClose }: LineReaderProps) {
     const onPointerMove = (ev: PointerEvent) => {
       const delta = ev.clientY - startY;
       const maxTop = Math.max(0, window.innerHeight - windowHeight);
-      setTop(clamp(startTop + delta, 0, maxTop));
+      setTop(clamp(startTop + delta, LINE_HEIGHT_PX, maxTop));
     };
 
     const onPointerUp = () => {
@@ -110,7 +110,7 @@ export function LineReader({ lines, onClose }: LineReaderProps) {
           onKeyDown={handleKeyDown}
           onPointerDown={handlePointerDown}
           className={clsx(
-            'pointer-events-auto absolute top-0 inset-x-0 flex h-7 items-center justify-between border-b border-[#27272A] bg-black/90 px-3 cursor-ns-resize',
+            'pointer-events-auto absolute -top-7 inset-x-0 flex h-7 items-center justify-between border-b border-[#27272A] bg-black/90 px-3 cursor-ns-resize',
             T.focus,
           )}
         >

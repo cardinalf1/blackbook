@@ -72,3 +72,11 @@
 .bb-content .katex {
   font-size: 1.05em;
 }
+
+/* Highlights and notes in the test room (Phase 9). Blackbook's own tints, readable on the dark canvas. */
+mark[data-annotation] { color: inherit; border-radius: 1px; cursor: pointer; }
+mark[data-style='yellow'] { background: rgba(250, 204, 21, 0.32); }
+mark[data-style='blue'] { background: rgba(56, 189, 248, 0.3); }
+mark[data-style='pink'] { background: rgba(244, 114, 182, 0.3); }
+mark[data-style='underline'] { background: transparent; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+mark[data-note='true'] { box-shadow: inset 0 -2px 0 rgba(255, 255, 255, 0.7); }
