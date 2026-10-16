@@ -124,7 +124,7 @@ export function FigureFrame({ html, onZoom }: FigureFrameProps) {
   );
 
   return (
-    <div className="flex flex-col rounded-[2px] border border-[#27272A] bg-black text-white">
+    <div data-bb-figure-frame="" className="flex flex-col rounded-[2px] border border-[#27272A] bg-black text-white">
       {/* Top toolbar */}
       <div className="flex items-center justify-between border-b border-[#27272A] bg-[#121215] px-3 py-2">
         {renderZoomControls()}

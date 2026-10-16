@@ -31,3 +31,31 @@ export function splitFigures(html: string): ContentSegment[] {
   flush();
   return out;
 }
+
+/** Marks where a nested picture was taken out; ContentHtml renders a figure frame in its place. */
+export const FIGURE_SLOT_ATTR = 'data-bb-figure';
+
+/**
+ * Pictures that are not in a top-level figure (older questions nest a chart's <img> inside the
+ * passage's own markup): each non-math <img> is replaced by an empty slot element, and its markup
+ * is returned so a figure frame (zoom, Reset, full screen) can be rendered into the slot.
+ * Math rendered as images (`math-img`, `bb-math-img`) stays inline.
+ */
+export function extractInlineImages(html: string): { html: string; images: string[] } {
+  if (!/<img\b/i.test(html)) return { html, images: [] };
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  const images: string[] = [];
+  for (const img of [...template.content.querySelectorAll('img')]) {
+    if (img.classList.contains('math-img') || img.classList.contains('bb-math-img')) continue;
+    const slot = document.createElement('span');
+    slot.setAttribute(FIGURE_SLOT_ATTR, String(images.length));
+    slot.className = 'bb-figure-slot';
+    images.push(img.outerHTML);
+    img.replaceWith(slot);
+  }
+  if (images.length === 0) return { html, images };
+  const out = document.createElement('div');
+  out.append(template.content.cloneNode(true));
+  return { html: out.innerHTML, images };
+}

@@ -80,3 +80,9 @@ mark[data-style='blue'] { background: rgba(56, 189, 248, 0.3); }
 mark[data-style='pink'] { background: rgba(244, 114, 182, 0.3); }
 mark[data-style='underline'] { background: transparent; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
 mark[data-note='true'] { box-shadow: inset 0 -2px 0 rgba(255, 255, 255, 0.7); }
+
+/* Figures in the test room (Phase 9): a nested picture's frame sits on its own line, and pictures
+   show at a readable width (their files are often small) instead of their natural size. */
+.bb-figure-slot { display: block; margin: 0.75rem 0; }
+[data-bb-figure-frame] img:not(.math-img):not(.bb-math-img) { display: block; width: 100%; max-width: 34rem; height: auto; }
+[role="dialog"][aria-label="Figure, full screen"] img:not(.math-img):not(.bb-math-img) { max-width: 100%; }

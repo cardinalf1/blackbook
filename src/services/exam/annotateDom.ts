@@ -7,7 +7,11 @@ const MARK_ATTR = 'data-annotation';
 function countable(node: Text, root: Element): boolean {
   const el = node.parentElement;
   if (!el || !root.contains(el)) return false;
-  if (!el.closest('.bb-content')) return false;
+  const content = el.closest('.bb-content');
+  if (!content) return false;
+  // Inside a figure frame only the figure's own text counts, never its zoom toolbar (its "100%" changes).
+  const frame = el.closest('[data-bb-figure-frame]');
+  if (frame && !frame.contains(content)) return false;
   return el.closest('.katex, [role="dialog"], button') === null;
 }
 

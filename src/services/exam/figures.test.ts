@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { splitFigures } from './figures';
+import { extractInlineImages, FIGURE_SLOT_ATTR, splitFigures } from './figures';
 
 describe('splitFigures', () => {
   it('leaves HTML without figures whole', () => {
@@ -25,5 +25,23 @@ describe('splitFigures', () => {
     const out = splitFigures('<figure><img alt="graph" src="data:image/png;base64,AAAA"></figure>');
     expect(out).toHaveLength(1);
     expect(out[0]?.kind).toBe('figure');
+  });
+});
+
+describe('extractInlineImages', () => {
+  it('takes nested pictures out into numbered slots and leaves math images inline', () => {
+    const html =
+      '<div class="passage"><p>Text</p><div class="standalone_image"><img alt="chart" src="data:image/png;base64,AAAA"></div>' +
+      '<p>x <img class="math-img bb-math-img" alt="x" src="data:image/png;base64,BBBB"></p></div>';
+    const { html: out, images } = extractInlineImages(html);
+    expect(images).toHaveLength(1);
+    expect(images[0]).toContain('alt="chart"');
+    expect(out).toContain(`<span ${FIGURE_SLOT_ATTR}="0" class="bb-figure-slot"></span>`);
+    expect(out).toContain('math-img');
+    expect(out).not.toContain('alt="chart"');
+  });
+
+  it('leaves HTML without pictures alone', () => {
+    expect(extractInlineImages('<p>none</p>')).toEqual({ html: '<p>none</p>', images: [] });
   });
 });
