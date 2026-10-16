@@ -1,3 +1,10 @@
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { WelcomeScreen } from './components/release/WelcomeScreen';
+import { HelpScreen } from './components/release/HelpScreen';
+import { AboutScreen } from './components/release/AboutScreen';
+import { LicensesScreen } from './components/release/LicensesScreen';
+import { installDesktopHooks } from './services/desktop';
+import { APP_VERSION } from './version';
 import { useCallback, useEffect, useState } from 'react';
 import { AnalyticsFlow } from './components/analytics/AnalyticsFlow';
 import { loadFacets } from './services/drill/facetCache';
@@ -39,6 +46,11 @@ const HEARTBEAT_MS = 60_000;
 
 type View =
   | { kind: 'loading' }
+  | { kind: 'help' }
+  | { kind: 'about' }
+  | { kind: 'licenses' }
+  | { kind: 'welcome' }
+
   | { kind: 'home'; count: number; home: HomeState | null }
   | { kind: 'practice'; questions: Question[]; index: number }
   | { kind: 'browse'; random?: boolean }
@@ -131,6 +143,14 @@ export default function App() {
   const [view, setView] = useState<View>({ kind: 'loading' });
   const [error, setError] = useState<string | null>(null);
   const [bankCount, setBankCount] = useState(0);
+  const [lookedAround, setLookedAround] = useState(false);
+
+  useEffect(() => {
+    installDesktopHooks((page) => {
+      if (page === 'help') setView({ kind: 'help' });
+      else if (page === 'about') setView({ kind: 'about' });
+    });
+  }, []);
 
   const loadHome = useCallback(async () => {
     setError(null);
@@ -236,10 +256,21 @@ export default function App() {
   const isHome = view.kind === 'home' && view.count > 0;
 
   return (
+    <ErrorBoundary>
     <main className="mx-auto max-w-6xl space-y-6 p-6">
       {!isHome && (
         <header className="flex items-baseline justify-between">
-          <h1 className="font-mono text-lg">Blackbook</h1>
+          <div className="flex items-baseline gap-4">
+            <h1 className="font-mono text-lg">Blackbook</h1>
+            <nav className="flex items-center gap-3 text-xs">
+              <button type="button" onClick={() => setView({ kind: 'help' })} className="text-zinc-400 hover:text-zinc-200">
+                Help
+              </button>
+              <button type="button" onClick={() => setView({ kind: 'about' })} className="text-zinc-400 hover:text-zinc-200">
+                About
+              </button>
+            </nav>
+          </div>
           <p className="text-xs text-zinc-500">Independent practice tool. Not affiliated with any testing organization.</p>
         </header>
       )}
@@ -267,8 +298,17 @@ export default function App() {
         )
       )}
 
-      {/* With no bank, the empty-bank screen is the whole home, with Download as the one action. */}
-      {view.kind === 'home' && view.count === 0 &&
+      {/* With no bank, show Welcome screen on first run, or download controller after. */}
+      {view.kind === 'home' && view.count === 0 && !lookedAround && (
+        <WelcomeScreen
+          downloadEnabled={DOWNLOAD_ENABLED}
+          onDownload={() => setLookedAround(true)}
+          onImport={() => setView({ kind: 'bank' })}
+          onLookAround={() => setLookedAround(true)}
+        />
+      )}
+
+      {view.kind === 'home' && view.count === 0 && lookedAround &&
         (DOWNLOAD_ENABLED ? (
           <DownloadController hasBank={false} questionCount={0} importSlot={<ImportPanel onImported={reloadHome} />} onBankChanged={reloadHome} />
         ) : (
@@ -368,6 +408,38 @@ export default function App() {
       )}
 
       {view.kind === 'browse' && <BrowseScreen onBack={() => void loadHome()} onMySkills={mySkills} startRandom={view.random === true} />}
+      {view.kind === 'help' && (
+        <HelpScreen
+          desktop={typeof window !== 'undefined' && !!window.blackbookDesktop}
+          dataFolder={null}
+          onOpenDataFolder={() => window.blackbookDesktop?.openDataFolder()}
+          onCopyDiagnostics={async () => {
+            try {
+              await navigator.clipboard.writeText(`Blackbook v${APP_VERSION}\nPlatform: ${navigator.userAgent}`);
+              return true;
+            } catch {
+              return false;
+            }
+          }}
+          onOpenSettings={() => setView({ kind: 'settings' })}
+          onBack={() => void loadHome()}
+        />
+      )}
+
+      {view.kind === 'about' && (
+        <AboutScreen
+          version={APP_VERSION}
+          electron={null}
+          platform={typeof navigator !== 'undefined' ? navigator.platform : null}
+          onOpenLicenses={() => setView({ kind: 'licenses' })}
+          onBack={() => void loadHome()}
+        />
+      )}
+
+      {view.kind === 'licenses' && (
+        <LicensesScreen onBack={() => setView({ kind: 'about' })} />
+      )}
     </main>
+    </ErrorBoundary>
   );
 }

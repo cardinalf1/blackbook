@@ -11,7 +11,14 @@ vi.mock('../../services/storage', async () => {
   const { MemoryAttemptStore } = await import('../../services/storage/attemptsMemory');
   const { MemoryQuestionStore } = await import('../../services/storage/memory');
   const attempts = new MemoryAttemptStore();
-  return { attemptStore: attempts, telemetryStore: attempts, mistakeStore: attempts, questionStore: new MemoryQuestionStore() };
+  const fakePrefs = { get: async () => ({}), set: async () => ({}) };
+  return {
+    attemptStore: attempts,
+    telemetryStore: attempts,
+    mistakeStore: attempts,
+    questionStore: new MemoryQuestionStore(),
+    preferencesStore: fakePrefs,
+  };
 });
 
 const { questionStore } = await import('../../services/storage');
