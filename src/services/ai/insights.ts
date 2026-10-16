@@ -81,7 +81,7 @@ export function buildInsights(i: InsightInputs): Insight[] {
     add({
       id: 'last_five_minutes',
       title: 'Last five minutes',
-      headline: `${i.lastFive.answeredInLastFive} questions answered in the last five minutes over ${i.lastFive.reached} modules`,
+      headline: `${i.lastFive.answeredInLastFive} ${i.lastFive.answeredInLastFive === 1 ? 'question' : 'questions'} answered in the last five minutes over ${i.lastFive.reached} ${i.lastFive.reached === 1 ? 'module' : 'modules'}`,
       facts: { answeredInLastFive: i.lastFive.answeredInLastFive, modulesReached: i.lastFive.reached, modules: i.lastFive.modules },
       sampleSize: i.lastFive.modules,
       priority: 60 + i.lastFive.answeredInLastFive,

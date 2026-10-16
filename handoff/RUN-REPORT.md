@@ -1,3 +1,63 @@
+# Morning report: Phase 7 (AI layer, 800 modes, pacing, rules notes; 2026-10-16, unattended)
+
+## Status
+
+**Phase 7 is done** on branch `claude/phase7-ai-modes`, tag `phase7-done`. Nothing is pushed. Final gates: typecheck clean, 88 test files and 692 tests passing, `bun run sync` exit 0, nothing from `data/`, `fixtures/`, `docs/research/` or any key file tracked. There was no `handoff/BUGS.md`.
+
+The Groq client, key handling, payload builder, validators, candidates, insight menu, fallbacks, the 800 presets' logic, pacing calculations and all their tests are mine. Three Gemini 3.8 Flash workers built the Settings screen, the weak-skill drill, report and 800 panel screens, and the pacing sections, live hint and rules-note box. I reviewed and merged each one separately, running the full tests after each merge, then did the App wiring, the preset countdown and the rules note on drill setup myself.
+
+**There was no Groq key during the run**, so no real AI call was made. Everything AI-side is proven with a mocked Groq. On your real data I ran the rule-based weak drill and report through the local server, and the "what will be sent" preview in the browser.
+
+## Definition of done
+
+| Item | Status |
+|---|---|
+| typecheck, tests, sync, nothing tracked, nothing pushed, tag | Met |
+| With no key, every feature works rule-based | Met. Seen on your data: weak drill and report both returned `origin: rule, fallbackReason: no_key`; the screen says "Needs a Groq key in Settings" |
+| With a key, weak drill and report work and are labeled AI-assisted | Met with a mocked Groq only (`server/ai.test.ts`). **Not verified against the real Groq API** (no key) |
+| No question text leaves with the toggle off; only candidate questions with it on | Met (tests: no stem, passage, choice, rationale, real id, note or key in the payload with text off; with text on, only candidates' text, never rationales or notes) |
+| `docs/ai-spec.md` with verified Groq details, payload rules, limits | Met |
+| Key in Settings, removable, not in exports, backups, logs or events | Met in tests (events, export, snapshot and status reply checked for the key). The Settings screen itself was tested in jsdom, not with a real key |
+| 800 modes, pacing sections, rules notes | Met in tests; the weak-drill screen and preview seen in the browser |
+| Difficulty signal for hard-only modes | Difficulty label **H**, which in your live bank is exactly scoreBand 6 and 7 (Math: 115 + 154 live, Reading and Writing: 164 + 159) |
+| Step 0: Browse single end to end and consumed | Met (`drillStore.test.ts`: a finished Browse single comes out `consumed`) |
+
+## Decisions I made
+
+- **Model:** `openai/gpt-oss-120b`, the documented model with strict JSON-schema output; `gpt-oss-20b` is the fallback in config. Temperature 0.2, 20 s timeout, one retry on 429.
+- **Payload size:** 60 candidates at most. Text is cut to 600 characters per field. Requests are kept under about 6,000 tokens because the gpt-oss models allow 8,000 tokens per minute; lower-ranked candidates lose their text first.
+- **Key file:** `<data folder>/secrets/groq-key`, with mode 600 where supported. On Windows it relies on your profile folder's permissions.
+- **Settings and rules notes** are in a new `settings` table and a `rules_notes` table (migration 6). Both are included in exports and backups, never the key. Migration 6 also drops the `source` CHECK so new sources need no rebuild; the server still validates sources.
+- **AI cache** stores replies only, keyed by a SHA-256 of the request. "Delete all progress" also empties it.
+- **Weak skills** need 3 first-attempt answers and are ranked by the Wilson lower bound (exams count, retries do not). The drill takes the 4 weakest skills, caps one skill at 50% and one difficulty at 70%, and drops an AI proposal entirely if less than half of it survives the rules.
+- **Report target:** the "below target" line uses an 80% practice target, which is a choice, not a score claim. Thin data means fewer than 20 answers.
+- **800 timing:** a soft countdown at the real pace (about 95 s or 71 s per question). Nothing is auto-submitted, so drills stay drills. It and the live pace hint update when the drill screen re-renders, not every second (noted in `later.md`).
+- **Pacing checkpoints and the last five minutes** are worked out from per-question active time in question order. This is exact for drills and labeled as an approximation for exam modules.
+- **Weak-skill sessions** count as first attempts, like any drill.
+
+## What I could not verify
+
+- Any real Groq call: the reply quality, real rate-limit behavior, and the side-by-side of text on vs off (`docs/ai-spec.md` says so, and `later.md` lists the comparison to run).
+- Whether Groq trains on API data: its docs page does not say. The app states that.
+- Visuals: screenshots came back downscaled, so screens were checked through their text, apart from the jsdom tests. Not opened in the browser: Settings, the report screen, the 800 panel, pacing sections, the notes box.
+
+## Quota or tool problems
+
+None from Gemini; all three tasks finished. Two background test-server processes ended with "exit 127" when I stopped them; that was the stop, not a failure.
+
+## Exact steps to test it yourself
+
+1. `bun run dev`. Home has Weak-skill drill, Study report and Settings.
+2. Without a key: Weak-skill drill, then Build drill. It shows the preview first, then a "rule-based" drill. Start it, finish it, and the report shows a Pacing section.
+3. Settings: paste your Groq key, Save, Test connection. The key is never shown again.
+4. Weak-skill drill again: the label should say "AI-assisted". Turn on "Include question text" (accept the confirmation), use "Show exactly what will be sent" to see the text, then build again.
+5. Study report: Last 7 days or All time, then Regenerate. Lines say "thin data" where samples are small.
+6. Start a drill, open the Practice modes panel, and start Math 800: a soft countdown appears. Finish a Conventions set with no misses and its card shows a streak of 1.
+7. Pick one skill on the drill setup and write a rules note. It also shows on the Mistake log (filter by that skill) and under missed questions in reports.
+8. Export your data and search the file for your key: it is not there. Remove key in Settings, and the features go back to rule-based.
+
+---
+
 # Morning report: Phase 6 (foundations, 2026-10-16, unattended)
 
 ## Status
