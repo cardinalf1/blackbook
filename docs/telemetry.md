@@ -8,6 +8,7 @@ Everything stays on your computer in the `events` table of `user.db`. The **Data
 
 - Question text, passages, choices or explanations. Events name questions by id only.
 - Mouse movement or pointer position.
+- What you type in the calculator, the text of your notes, or which words you highlight (Phase 9 tools log counts and times only).
 - Anything that cannot be explained in one sentence.
 
 ## Event row
@@ -100,6 +101,34 @@ Exam events have `mode: exam`. All the question, choice, flag and navigation eve
 | `navigator_opened` / `navigator_closed` | `{}` | The question navigator opens or closes. A jump from it (or from the review page) is `nav_jump {from, to}` |
 | `finish_clicked` | `{unanswered, flagged}` | Submit pressed on the review page |
 | `session_finished` | `{correct, total, totalActiveMs}` | The module is submitted, by you or by the timer (the session record says which) |
+
+### Test-room tools (Phase 9)
+
+Ids, counts, states and times only. Never what is typed in the calculator, the text of a note, the highlighted text, or any expression. Logged in exam modules and in drills (drills have Calculator, Reference, figure zoom and highlights).
+
+| Type | Payload | When |
+|---|---|---|
+| `directions_opened` | `{}` | The Directions dropdown opens (the clock keeps running) |
+| `calculator_opened` | `{mode}` | The calculator panel opens; `mode` is `graphing` or `scientific` |
+| `calculator_closed` | `{}` | The calculator panel closes |
+| `calculator_mode_switched` | `{mode}` | Graphing and Scientific switched |
+| `calculator_time` | `{openMs}` | Time the calculator was open while one question was on screen; logged against that question when the question changes or the calculator closes |
+| `reference_opened` / `reference_closed` | `{}` | As in Phase 3; now the docked panel |
+| `reference_expanded` | `{expanded}` | The reference panel is widened or narrowed |
+| `navigator_opened` / `navigator_closed` | `{}` | As in Phase 3; now the question menu above the footer |
+| `eliminator_toggled` | `{on}` | The cross-out toggle in the question bar. Each cross-out is still `choice_struck` / `strike_removed` |
+| `figure_zoomed` | `{percent}` | A figure's zoom changes (count them for "figure zoomed") |
+| `zoom_changed` | `{percent}` | The test-room zoom changes (Ctrl plus, Ctrl minus, Ctrl 0) |
+| `more_opened` | `{}` | The More menu opens |
+| `help_opened` / `shortcuts_opened` | `{}` | Help or Shortcuts opened from More |
+| `line_reader_toggled` | `{on}` | The line reader is turned on or off (Reading and Writing only) |
+| `highlight_added` | `{style, target}` | A highlight or underline is made; `target` is `passage` or `stem` |
+| `highlight_changed` | `{style}` | An existing highlight's color or underline changes |
+| `highlight_removed` | `{}` | A highlight is deleted |
+| `note_saved` | `{hasNote}` | A note is saved on a highlight; only whether it is empty, never its text |
+| `unscheduled_break_started` / `unscheduled_break_ended` | `{}` / `{breakMs}` | An unscheduled break from More; the module clock keeps running |
+| `review_screen_reached` | `{unanswered, flagged}` | The review screen opens (from the last Next or the question menu); logged on the session, no question |
+| `review_screen_submitted` | `{unanswered, flagged}` | Submit confirmed on the review screen, just before `finish_clicked` |
 
 ### Full tests and section runs (Phase 4)
 
