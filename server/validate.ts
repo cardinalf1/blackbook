@@ -4,6 +4,7 @@
 import type { FlagRecord } from '../src/types/drill';
 import { DEFAULT_AI_SETTINGS, RULES_NOTE_MAX, type AiFeature, type AiSettings, type RulesNote } from '../src/types/ai';
 import { MISTAKE_NOTE_MAX, MISTAKE_REASONS, type MistakeReason, type MistakeTag } from '../src/types/mistakes';
+import { ANNOTATION_NOTE_MAX, ANNOTATIONS_MAX } from '../src/config/testRoomConfig';
 import { CHOICE_LETTERS, type ChoiceLetter } from '../src/types/sat';
 import {
   CONFIDENCE_LEVELS,
@@ -66,6 +67,27 @@ export const EVENT_TYPES: Record<EventType, true> = {
   reference_closed: true,
   navigator_opened: true,
   navigator_closed: true,
+  directions_opened: true,
+  calculator_opened: true,
+  calculator_closed: true,
+  calculator_mode_switched: true,
+  calculator_time: true,
+  reference_expanded: true,
+  eliminator_toggled: true,
+  figure_zoomed: true,
+  zoom_changed: true,
+  more_opened: true,
+  help_opened: true,
+  shortcuts_opened: true,
+  line_reader_toggled: true,
+  highlight_added: true,
+  highlight_changed: true,
+  highlight_removed: true,
+  note_saved: true,
+  unscheduled_break_started: true,
+  unscheduled_break_ended: true,
+  review_screen_reached: true,
+  review_screen_submitted: true,
   test_started: true,
   test_module_started: true,
   test_module_submitted: true,
@@ -140,6 +162,19 @@ function isTest(t: unknown): boolean {
   return typeof t.includeSeen === 'boolean' && typeof t.paused === 'boolean' && isNum(t.configVersion) && isEstimate(t.estimate);
 }
 
+const HIGHLIGHT_STYLES = ['yellow', 'blue', 'pink', 'underline'];
+
+/** Highlights on one question: bounded offsets, a known style, a bounded note. */
+function isAnnotations(v: unknown): boolean {
+  if (!Array.isArray(v) || v.length > ANNOTATIONS_MAX) return false;
+  return v.every(
+    (a) =>
+      isObj(a) && isStr(a.id) && (a.target === 'passage' || a.target === 'stem') &&
+      isMs(a.start) && isMs(a.end) && Number.isInteger(a.start) && Number.isInteger(a.end) && a.start < a.end && a.end <= 100_000 &&
+      HIGHLIGHT_STYLES.includes(a.style as string) && typeof a.note === 'string' && a.note.length <= ANNOTATION_NOTE_MAX,
+  );
+}
+
 export function parseSession(v: unknown): SessionRecord | null {
   if (!isObj(v) || v.version !== SESSION_RECORD_VERSION || !isStr(v.id) || !isMode(v.mode)) return null;
   if (!['drill', 'browse', 'exam', 'retry', 'weak-skill'].includes(v.source as string)) return null;
@@ -159,6 +194,7 @@ export function parseSession(v: unknown): SessionRecord | null {
     if (!(p.response === null || isResponse(p.response)) || !isMs(p.changes) || !isMs(p.activeMs) || !isMs(p.visits)) return null;
     if (!(p.firstVisitMs === null || isMs(p.firstVisitMs)) || typeof p.flagged !== 'boolean' || !isConfidence(p.confidence)) return null;
     if (!Array.isArray(p.struck) || !p.struck.every((l) => CHOICE_LETTERS.includes(l as ChoiceLetter))) return null;
+    if (p.annotations !== undefined && !isAnnotations(p.annotations)) return null;
   }
   return v as unknown as SessionRecord;
 }

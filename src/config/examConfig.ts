@@ -81,3 +81,14 @@ export const PAUSE_REASONS: readonly string[] = ['Emergency', 'Technical problem
 export const DEV_DURATION_OVERRIDE_KEY = 'blackbook.dev.examSeconds';
 /** Dev only: shorten the break between sections for testing. Never applied in a production build. */
 export const DEV_BREAK_OVERRIDE_KEY = 'blackbook.dev.breakSeconds';
+
+/**
+ * The official examples table for student-produced responses (VERIFIED: seen in a real practice
+ * test, 2026-10-16). The values are facts; the table in the directions pane is built from this.
+ * `key` is how the answer is written in an answer key, for grading tests.
+ */
+export const SPR_EXAMPLES: readonly { answer: string; key: readonly string[]; accepted: readonly string[]; rejected: readonly string[] }[] = [
+  { answer: '3.5', key: ['3.5', '7/2'], accepted: ['3.5', '3.50', '7/2'], rejected: ['31/2', '3 1/2'] },
+  { answer: '2/3', key: ['2/3'], accepted: ['2/3', '.6666', '.6667', '0.666', '0.667'], rejected: ['0.66', '.66', '0.67', '.67'] },
+  { answer: '-1/3', key: ['-1/3'], accepted: ['-1/3', '-.3333', '-0.333'], rejected: ['-.33', '-0.33'] },
+];

@@ -8,6 +8,7 @@ import type { MistakeReason, MistakeTag } from './mistakes';
 import type { AiSettings, RulesNote } from './ai';
 import type { ExamState } from './exam';
 import type { TestState } from './test';
+import type { CalculatorMode, HighlightStyle } from './testRoom';
 import type { ChoiceLetter, Difficulty, Question, Section } from './sat';
 
 export type SessionMode = 'drill' | 'exam';
@@ -34,6 +35,23 @@ export interface QuestionProgress {
   flagged: boolean;
   /** Only when the session asks for confidence. Reset when the answer changes. */
   confidence: Confidence | null;
+  /** Highlights, underlines and notes on this question (Phase 9). Absent in older records. Never logged. */
+  annotations?: Annotation[];
+}
+
+/** Which text a highlight sits in: the passage (left pane) or the question stem. */
+export type AnnotationTarget = 'passage' | 'stem';
+
+/** One highlight or underline, as character offsets into the target's rendered text. */
+export interface Annotation {
+  id: string;
+  target: AnnotationTarget;
+  /** Offsets into the target's text content; start < end. */
+  start: number;
+  end: number;
+  style: HighlightStyle;
+  /** '' when there is no note. Stored with the attempt only, never sent anywhere else. */
+  note: string;
 }
 
 export interface SessionScore {
@@ -145,6 +163,30 @@ export interface EventPayloads {
   reference_closed: Record<string, never>;
   navigator_opened: Record<string, never>;
   navigator_closed: Record<string, never>;
+  // Test-room tools (Phase 9). Ids, counts and times only: never what was typed in the calculator or a note.
+  directions_opened: Record<string, never>;
+  calculator_opened: { mode: CalculatorMode };
+  calculator_closed: Record<string, never>;
+  calculator_mode_switched: { mode: CalculatorMode };
+  /** Time the calculator was open while this question was on screen; logged when the question or the calculator closes. */
+  calculator_time: { openMs: number };
+  reference_expanded: { expanded: boolean };
+  eliminator_toggled: { on: boolean };
+  figure_zoomed: { percent: number };
+  zoom_changed: { percent: number };
+  more_opened: Record<string, never>;
+  help_opened: Record<string, never>;
+  shortcuts_opened: Record<string, never>;
+  line_reader_toggled: { on: boolean };
+  highlight_added: { style: HighlightStyle; target: AnnotationTarget };
+  highlight_changed: { style: HighlightStyle };
+  highlight_removed: Record<string, never>;
+  /** Whether the highlight now has a note. The text itself is never logged. */
+  note_saved: { hasNote: boolean };
+  unscheduled_break_started: Record<string, never>;
+  unscheduled_break_ended: { breakMs: number };
+  review_screen_reached: { unanswered: number; flagged: number };
+  review_screen_submitted: { unanswered: number; flagged: number };
   // Full tests and section runs (Phase 4). Logged on the container session, never during a module's clock.
   test_started: { kind: string; includeSeen: boolean; allowRepeats?: boolean };
   test_module_started: { key: string; tier: string };
@@ -407,3 +449,31 @@ export interface DataPageProps {
   onDeleteAll: () => Promise<void>;
   onBack: () => void;
 }
+
+/** Test-room tool events (Phase 9), logged through drillStore.toolEvent. */
+export type ToolEventType =
+  | 'directions_opened'
+  | 'calculator_opened'
+  | 'calculator_closed'
+  | 'calculator_mode_switched'
+  | 'calculator_time'
+  | 'reference_opened'
+  | 'reference_closed'
+  | 'reference_expanded'
+  | 'navigator_opened'
+  | 'navigator_closed'
+  | 'eliminator_toggled'
+  | 'figure_zoomed'
+  | 'zoom_changed'
+  | 'more_opened'
+  | 'help_opened'
+  | 'shortcuts_opened'
+  | 'line_reader_toggled'
+  | 'highlight_added'
+  | 'highlight_changed'
+  | 'highlight_removed'
+  | 'note_saved'
+  | 'unscheduled_break_started'
+  | 'unscheduled_break_ended'
+  | 'review_screen_reached'
+  | 'review_screen_submitted';

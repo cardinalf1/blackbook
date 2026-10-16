@@ -6,6 +6,7 @@ import type { DrillConfig } from '../../types/drill';
 import type { ChoiceLetter } from '../../types/sat';
 import {
   SESSION_RECORD_VERSION,
+  type Annotation,
   type Confidence,
   type QuestionProgress,
   type SessionMode,
@@ -119,6 +120,13 @@ export function setFlagged(s: SessionRecord, questionId: string, flagged: boolea
   const p = progressOf(s, questionId);
   if (p.flagged === flagged) return s;
   return withProgress(s, questionId, { ...p, flagged }, now);
+}
+
+/** Replaces the highlights on one question. Allowed while the session is open, answered or not. */
+export function setAnnotations(s: SessionRecord, questionId: string, annotations: readonly Annotation[], now: number): SessionRecord {
+  if (!open(s, questionId)) return s;
+  const p = progressOf(s, questionId);
+  return withProgress(s, questionId, { ...p, annotations: [...annotations] }, now);
 }
 
 /** Only for an answered question in a session that asks for confidence. */

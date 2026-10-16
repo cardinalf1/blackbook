@@ -2,6 +2,7 @@
 // box lets you type, and how the typed value is graded. See docs/exam-spec.md for the labels.
 
 import { describe, expect, it } from 'vitest';
+import { SPR_EXAMPLES as EXAMPLES } from '../../config/examConfig';
 import { isSprCorrect } from '../answers';
 import { isAllowedSprInput, nextSprValue, sprPreview } from './spr';
 
@@ -12,22 +13,17 @@ function typeKeys(text: string): string {
   return v;
 }
 
-const EXAMPLES: { key: string[]; accepted: string[]; rejected: string[] }[] = [
-  { key: ['3.5', '7/2'], accepted: ['3.5', '3.50', '7/2'], rejected: ['31/2', '3 1/2'] },
-  { key: ['2/3'], accepted: ['2/3', '.6666', '.6667', '0.666', '0.667'], rejected: ['0.66', '.66', '0.67', '.67'] },
-  { key: ['-1/3'], accepted: ['-1/3', '-.3333', '-0.333'], rejected: ['-.33', '-0.33'] },
-];
 
 describe('official examples table', () => {
   for (const ex of EXAMPLES) {
     for (const a of ex.accepted) {
-      it(`accepts ${a} for ${ex.key[0]}, and it can be typed`, () => {
+      it(`accepts ${a} for ${ex.answer}, and it can be typed`, () => {
         expect(typeKeys(a)).toBe(a);
         expect(isSprCorrect(a, ex.key)).toBe(true);
       });
     }
     for (const r of ex.rejected) {
-      it(`rejects ${r} for ${ex.key[0]}`, () => {
+      it(`rejects ${r} for ${ex.answer}`, () => {
         expect(isSprCorrect(r, ex.key)).toBe(false);
       });
     }

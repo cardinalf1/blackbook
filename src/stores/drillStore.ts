@@ -26,6 +26,7 @@ import {
   progressOf,
   rate,
   recordActive,
+  setAnnotations,
   setFlagged,
   setResponse,
   toggleStrike,
@@ -39,7 +40,7 @@ import type { EventLogger } from '../services/telemetry/logger';
 import type { DrillConfig, QuestionFacet } from '../types/drill';
 import type { ExamModuleSpec, ExamState } from '../types/exam';
 import type { ChoiceLetter, Question } from '../types/sat';
-import type { Confidence, EventPayloads, EventType, HideReason, InteractionKind, SessionRecord, StoredAttempt } from '../types/session';
+import type { Annotation, Confidence, EventPayloads, EventType, HideReason, InteractionKind, SessionRecord, StoredAttempt, ToolEventType } from '../types/session';
 
 export interface DrillState {
   session: SessionRecord | null;
@@ -111,6 +112,10 @@ export interface DrillActions {
   fiveMinuteAlertShown(): void;
   /** Exam screen events with no payload: reference sheet and navigator opened or closed. */
   note(type: 'reference_opened' | 'reference_closed' | 'navigator_opened' | 'navigator_closed'): void;
+  /** A test-room tool event (Phase 9), logged against the question on screen. Ids, counts and times only. */
+  toolEvent<T extends ToolEventType>(type: T, payload: EventPayloads[T]): void;
+  /** Replaces the highlights and notes on the question on screen; saved with the session. */
+  setAnnotations(annotations: readonly Annotation[]): void;
 }
 
 export type DrillStore = DrillState & DrillActions;
@@ -742,6 +747,19 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
       note(type) {
         const s = get().session;
         if (s) log(type, currentQuestionId(s), {});
+      },
+
+      toolEvent(type, payload) {
+        const s = get().session;
+        if (s) log(type, currentQuestionId(s), payload);
+      },
+
+      setAnnotations(annotations) {
+        const s = get().session;
+        const id = s ? currentQuestionId(s) : null;
+        if (!s || id === null || s.status !== 'in_progress') return;
+        const after = setAnnotations(s, id, annotations, now());
+        if (after !== s) commit(after);
       },
     };
   });
