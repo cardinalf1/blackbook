@@ -1,5 +1,5 @@
 import type { ChangeEvent } from 'react';
-import { nextSprValue } from '../../services/exam/spr';
+import { nextSprValue, sprPreview } from '../../services/exam/spr';
 import type { SprInputProps } from '../../types/exam';
 
 export function SprInput({ value, onChange, questionNumber }: SprInputProps) {
@@ -12,12 +12,12 @@ export function SprInput({ value, onChange, questionNumber }: SprInputProps) {
     }
   };
 
+  const preview = sprPreview(value);
+
   return (
-    <div className="space-y-2">
-      <label htmlFor={`spr-input-${questionNumber}`} className="block space-y-1">
-        <span className="text-xs font-mono text-zinc-400">
-          Answer for question {questionNumber}
-        </span>
+    <div className="space-y-3">
+      <div className="w-28 rounded border border-[#27272A] bg-black p-2 flex flex-col items-center">
+        <span className="sr-only">Answer for question {questionNumber}</span>
         <input
           id={`spr-input-${questionNumber}`}
           type="text"
@@ -25,15 +25,40 @@ export function SprInput({ value, onChange, questionNumber }: SprInputProps) {
           onChange={handleChange}
           inputMode="decimal"
           autoComplete="off"
-          className="block w-40 rounded-md border border-[#27272A] bg-[#0A0A0C] px-3 py-2 font-mono text-sm text-[#FAFAFA] transition-colors focus:border-zinc-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+          aria-label={`Answer for question ${questionNumber}`}
+          className="w-full bg-transparent text-center font-mono text-base text-white focus:outline-none"
         />
-      </label>
-      <div className="font-mono text-xs text-zinc-400">
-        Answer preview: {value}
+        <div className="w-full border-b border-zinc-600 mt-1" aria-hidden="true" />
       </div>
-      <p className="text-xs text-zinc-500">
-        Up to 5 characters, or 6 with a minus sign. Use digits, . / and -.
-      </p>
+
+      <div className="flex items-center gap-2 font-mono text-xs text-zinc-400 min-h-[1.75rem]">
+        <span>Answer Preview:</span>
+        {preview.kind === 'plain' && (
+          <span className="font-mono text-sm text-white">{preview.text}</span>
+        )}
+        {preview.kind === 'fraction' && (
+          <span
+            data-testid="spr-fraction"
+            className="inline-flex items-center gap-1 font-mono text-sm text-white"
+          >
+            {preview.negative && <span data-slot="sign">-</span>}
+            <span className="inline-flex flex-col items-center leading-none">
+              <span
+                data-slot="numerator"
+                className="min-w-[1ch] text-center border-b border-current pb-0.5"
+              >
+                {preview.numerator || '\u00A0'}
+              </span>
+              <span
+                data-slot="denominator"
+                className="min-w-[1ch] text-center pt-0.5"
+              >
+                {preview.denominator || '\u00A0'}
+              </span>
+            </span>
+          </span>
+        )}
+      </div>
     </div>
   );
 }
