@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { DrillReportProps } from '../../types/session';
 import { formatDuration } from '../../utils/formatDuration';
 import { MistakeReviewPanel } from '../mistakes/MistakeReviewPanel';
+import { RulesNoteBox } from '../notes/RulesNoteBox';
+import { PacingSection } from '../pacing/PacingSection';
 import { QuestionHtml } from '../QuestionHtml';
 
 const DIFFICULTY_LABELS: Record<string, string> = {
@@ -222,6 +224,13 @@ export function DrillReport({
       {/* Mistake review panel */}
       <MistakeReviewPanel report={report} source={report.mode === 'exam' ? 'exam' : 'drill'} />
 
+      {/* Pacing section */}
+      <PacingSection
+        report={report}
+        section={report.items[0]?.section ?? 'rw'}
+        timeLimitMs={null}
+      />
+
       {/* Filter buttons and Questions list */}
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -352,8 +361,7 @@ export function DrillReport({
                     <div className="mt-4 border-t border-[#27272A] pt-4">
                       {item.question === null ? (
                         <p className="text-zinc-400">
-                          This question is no longer in your question bank.
-                        </p>
+                          This question is no longer in your question bank.\n                        </p>
                       ) : (
                         <div className="space-y-4">
                           {item.question.stimulusHtml && (
@@ -426,6 +434,15 @@ export function DrillReport({
                               className="text-zinc-300"
                             />
                           </div>
+
+                          {!item.correct && item.question?.skillCode && (
+                            <div className="border-t border-[#27272A] pt-3">
+                              <RulesNoteBox
+                                skillCode={item.question.skillCode}
+                                skill={item.skill}
+                              />
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

@@ -6,6 +6,7 @@ import {
   type MistakeLogRow,
   type MistakeReason,
 } from '../../types/mistakes';
+import { RulesNoteBox } from '../notes/RulesNoteBox';
 
 export interface MistakeLogScreenProps {
   onBack: () => void;
@@ -81,6 +82,9 @@ export function MistakeLogScreen({ onBack, onOpenReport }: MistakeLogScreenProps
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [rows]);
 
+  const selectedSkillOption = skillOptions.find(([code]) => code === skillFilter);
+  const selectedSkillName = selectedSkillOption ? selectedSkillOption[1] : skillFilter;
+
   const filteredRows = useMemo(() => {
     const fromMs = parseDateInput(fromDate, false);
     const toMs = parseDateInput(toDate, true);
@@ -153,10 +157,10 @@ export function MistakeLogScreen({ onBack, onOpenReport }: MistakeLogScreenProps
                 key={reason}
                 type="button"
                 onClick={() => setReasonFilter(isSelected ? 'all' : reason)}
-                className={`flex flex-col justify-between rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+                className={`flex flex-col rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
                   isSelected
-                    ? 'border-zinc-400 bg-zinc-800'
-                    : 'border-[#27272A] bg-[#0A0A0C] hover:border-zinc-600'
+                    ? 'border-zinc-300 bg-zinc-800'
+                    : 'border-[#27272A] bg-[#0A0A0C] hover:border-zinc-500'
                 }`}
               >
                 <span className="text-xs text-zinc-400">{MISTAKE_REASON_LABEL[reason]}</span>
@@ -250,6 +254,13 @@ export function MistakeLogScreen({ onBack, onOpenReport }: MistakeLogScreenProps
           </button>
         )}
       </section>
+
+      {/* Rules note box for selected skill */}
+      {skillFilter !== 'all' && (
+        <section>
+          <RulesNoteBox skillCode={skillFilter} skill={selectedSkillName} />
+        </section>
+      )}
 
       {/* Tagged mistakes list */}
       <section className="space-y-3">

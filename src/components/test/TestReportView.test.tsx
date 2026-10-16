@@ -741,4 +741,26 @@ describe('TestReportView', () => {
       root.unmount();
     });
   });
+
+  it('renders PacingSection in module reports', async () => {
+    const report = buildSyntheticFullReport();
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <TestReportView
+          report={report}
+          onItemToggle={vi.fn()}
+          onBack={vi.fn()}
+          onMySkills={vi.fn()}
+        />,
+      );
+    });
+
+    expect(container.textContent).toContain('Pacing');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
 });

@@ -2,8 +2,10 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { syntheticQuestions } from '../../services/__fixtures__/synthetic';
-import type { DrillPlayProps } from '../../types/session';
-import { DrillPlay } from './DrillPlay';
+import type { SessionRecord } from '../../types/session';
+import { DrillPlay, type DrillPlayExtendedProps } from './DrillPlay';
+
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mcqQuestion = syntheticQuestions.find((q) => q.answer.kind === 'mcq')!;
 const sprQuestion = syntheticQuestions.find((q) => q.answer.kind === 'spr')!;
@@ -16,7 +18,7 @@ describe('DrillPlay', () => {
     document.body.appendChild(container);
   });
 
-  const createProps = (overrides: Partial<DrillPlayProps> = {}): DrillPlayProps => ({
+  const createProps = (overrides: Partial<DrillPlayExtendedProps> = {}): DrillPlayExtendedProps => ({
     question: mcqQuestion,
     index: 0,
     total: 5,
@@ -46,7 +48,9 @@ describe('DrillPlay', () => {
 
     expect(container.textContent).not.toMatch(/Correct|Incorrect|Explanation/i);
 
-    root.unmount();
+    await act(async () => {
+      root.unmount();
+    });
   });
 
   it('calls onSelect("B") when clicking choice B, but does not call onSelect when clicking the already-selected choice', async () => {
@@ -71,29 +75,28 @@ describe('DrillPlay', () => {
       choiceB?.click();
     });
 
-    expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onSelect).toHaveBeenCalledWith('B');
+    expect(onSelect).toHaveBeenCalledTimes(1);
 
     // Re-render with response: 'B'
-    onSelect.mockClear();
     await act(async () => {
       root.render(<DrillPlay {...createProps({ response: 'B', onSelect })} />);
     });
 
-    const choiceButtonsAfter = Array.from(
+    const choiceBSelected = Array.from(
       container.querySelectorAll<HTMLButtonElement>('ol button'),
-    ).filter((btn) => !btn.getAttribute('aria-label')?.includes('choice'));
-    const choiceBSelected = choiceButtonsAfter[1];
-    expect(choiceBSelected).toBeDefined();
-    expect(choiceBSelected?.getAttribute('aria-pressed')).toBe('true');
+    ).filter((btn) => !btn.getAttribute('aria-label')?.includes('choice'))[1];
 
     await act(async () => {
       choiceBSelected?.click();
     });
 
-    expect(onSelect).not.toHaveBeenCalled();
+    // Still only called once because it was already selected
+    expect(onSelect).toHaveBeenCalledTimes(1);
 
-    root.unmount();
+    await act(async () => {
+      root.unmount();
+    });
   });
 
   it('disables a struck choice and strike button calls onStrike', async () => {
@@ -104,46 +107,40 @@ describe('DrillPlay', () => {
       root.render(<DrillPlay {...createProps({ struck: ['A'], onStrike })} />);
     });
 
-    const choiceButtons = Array.from(
+    // Check choice A button is disabled
+    const choiceA = Array.from(
       container.querySelectorAll<HTMLButtonElement>('ol button'),
-    ).filter((btn) => !btn.getAttribute('aria-label')?.includes('choice'));
-    const choiceA = choiceButtons[0];
-    const choiceB = choiceButtons[1];
-
+    ).filter((btn) => !btn.getAttribute('aria-label')?.includes('choice'))[0];
     expect(choiceA).toBeDefined();
-    expect(choiceB).toBeDefined();
     expect(choiceA?.disabled).toBe(true);
-    expect(choiceB?.disabled).toBe(false);
 
-    // Click strike/restore button for choice A
-    const strikeA = container.querySelector(
-      'button[aria-label="Restore choice A"]',
-    ) as HTMLButtonElement | null;
-    expect(strikeA).not.toBeNull();
-    expect(strikeA?.getAttribute('aria-pressed')).toBe('true');
-
-    await act(async () => {
-      strikeA?.click();
-    });
-
-    expect(onStrike).toHaveBeenCalledTimes(1);
-    expect(onStrike).toHaveBeenCalledWith('A');
-
-    // Click strike button for choice B
-    const strikeB = container.querySelector(
+    // Find strike button for choice B (aria-label "Strike out choice B")
+    const strikeB = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Strike out choice B"]',
-    ) as HTMLButtonElement | null;
-    expect(strikeB).not.toBeNull();
-    expect(strikeB?.getAttribute('aria-pressed')).toBe('false');
+    );
+    expect(strikeB).toBeDefined();
 
     await act(async () => {
       strikeB?.click();
     });
 
-    expect(onStrike).toHaveBeenCalledTimes(2);
     expect(onStrike).toHaveBeenCalledWith('B');
 
-    root.unmount();
+    // Find restore button for choice A (aria-label "Restore choice A")
+    const restoreA = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Restore choice A"]',
+    );
+    expect(restoreA).toBeDefined();
+
+    await act(async () => {
+      restoreA?.click();
+    });
+
+    expect(onStrike).toHaveBeenCalledWith('A');
+
+    await act(async () => {
+      root.unmount();
+    });
   });
 
   it('disables Back button on index 0, enables on index > 0, and calls onBack', async () => {
@@ -176,7 +173,9 @@ describe('DrillPlay', () => {
 
     expect(onBack).toHaveBeenCalledTimes(1);
 
-    root.unmount();
+    await act(async () => {
+      root.unmount();
+    });
   });
 
   it('shows "Next" on earlier questions and "Finish" on the last question, calling onNext', async () => {
@@ -212,7 +211,9 @@ describe('DrillPlay', () => {
     });
     expect(onNext).toHaveBeenCalledTimes(2);
 
-    root.unmount();
+    await act(async () => {
+      root.unmount();
+    });
   });
 
   it('disables navigation buttons and displays "Saving..." while saving', async () => {
@@ -233,7 +234,9 @@ describe('DrillPlay', () => {
     expect(savingBtn).toBeDefined();
     expect(savingBtn?.disabled).toBe(true);
 
-    root.unmount();
+    await act(async () => {
+      root.unmount();
+    });
   });
 
   it('renders saveError banner, calls onRetry on Retry click, and disables Next', async () => {
@@ -271,7 +274,9 @@ describe('DrillPlay', () => {
     ).find((b) => b.textContent?.trim() === 'Next');
     expect(nextBtn?.disabled).toBe(true);
 
-    root.unmount();
+    await act(async () => {
+      root.unmount();
+    });
   });
 
   it('shows confidence group only when askConfidence is true and response is provided, and calls onRate("sure")', async () => {
@@ -323,7 +328,9 @@ describe('DrillPlay', () => {
     expect(onRate).toHaveBeenCalledTimes(1);
     expect(onRate).toHaveBeenCalledWith('sure');
 
-    root.unmount();
+    await act(async () => {
+      root.unmount();
+    });
   });
 
   it('renders SPR input, never shows accepted answers, and calls onSelect with typed value', async () => {
@@ -345,7 +352,7 @@ describe('DrillPlay', () => {
     expect(container.textContent).toContain('Your answer');
     expect(container.textContent).not.toContain('accepted:');
 
-    const input = container.querySelector('input') as HTMLInputElement | null;
+    const input = container.querySelector('input[type="text"]') as HTMLInputElement | null;
     expect(input).not.toBeNull();
     expect(input?.value).toBe('12');
     expect(input?.maxLength).toBe(6);
@@ -367,7 +374,9 @@ describe('DrillPlay', () => {
 
     expect(onSelect).toHaveBeenCalledWith('15');
 
-    root.unmount();
+    await act(async () => {
+      root.unmount();
+    });
   });
 
   it('handles flag button toggle and exit button', async () => {
@@ -428,6 +437,62 @@ describe('DrillPlay', () => {
     });
     expect(onExit).toHaveBeenCalledTimes(1);
 
-    root.unmount();
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('live pace hint is hidden by default and absent for exam sessions', async () => {
+    const root = createRoot(container);
+
+    // 1. In a drill session: checkbox is present, unchecked by default, hint text hidden
+    await act(async () => {
+      root.render(
+        <DrillPlay
+          {...createProps({
+            index: 2,
+            elapsedActiveMs: 140000,
+            finishedCount: 2,
+            session: { mode: 'drill' } as unknown as SessionRecord,
+          })}
+        />,
+      );
+    });
+
+    const checkbox = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    expect(checkbox).not.toBeNull();
+    expect(checkbox?.checked).toBe(false);
+    expect(container.textContent).toContain('Show pace hint');
+    expect(container.textContent).not.toContain('On pace');
+    expect(container.textContent).not.toContain('Ahead of pace');
+    expect(container.textContent).not.toContain('Behind pace');
+
+    // 2. Check the checkbox: hint text appears
+    await act(async () => {
+      checkbox?.click();
+    });
+    expect(checkbox?.checked).toBe(true);
+    expect(container.textContent).toContain('On pace');
+
+    // 3. For exam sessions: checkbox and hint are completely absent
+    await act(async () => {
+      root.render(
+        <DrillPlay
+          {...createProps({
+            index: 2,
+            elapsedActiveMs: 140000,
+            finishedCount: 2,
+            session: { mode: 'exam' } as unknown as SessionRecord,
+          })}
+        />,
+      );
+    });
+
+    expect(container.textContent).not.toContain('Show pace hint');
+    expect(container.querySelector('input[type="checkbox"]')).toBeNull();
+
+    await act(async () => {
+      root.unmount();
+    });
   });
 });

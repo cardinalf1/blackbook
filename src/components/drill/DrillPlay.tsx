@@ -1,5 +1,8 @@
+import { useState } from 'react';
+import { liveHint } from '../../services/pacing/pacing';
+import { useDrill } from '../../stores/drillStore';
 import { CHOICE_LETTERS, type ChoiceLetter } from '../../types/sat';
-import type { Confidence, DrillPlayProps } from '../../types/session';
+import type { Confidence, DrillPlayProps, SessionRecord } from '../../types/session';
 import { QuestionHtml } from '../QuestionHtml';
 
 const DIFFICULTY_LABEL = { E: 'Easy', M: 'Medium', H: 'Hard' } as const;
@@ -9,6 +12,12 @@ const CONFIDENCE_LEVELS: readonly { value: Confidence; label: string }[] = [
   { value: 'unsure', label: 'Unsure' },
   { value: 'sure', label: 'Sure' },
 ];
+
+export interface DrillPlayExtendedProps extends DrillPlayProps {
+  session?: SessionRecord | null;
+  elapsedActiveMs?: number;
+  finishedCount?: number;
+}
 
 export function DrillPlay({
   question,
@@ -30,12 +39,35 @@ export function DrillPlay({
   onRetry,
   onExit,
   finishLabel = 'Finish',
-}: DrillPlayProps) {
+  session: propSession,
+  elapsedActiveMs: propElapsedActiveMs,
+  finishedCount: propFinishedCount,
+}: DrillPlayExtendedProps) {
   const { answer } = question;
   const navDisabled = saving || saveError !== null;
   const isLast = index === total - 1;
   const nextLabel = saving ? 'Saving...' : isLast ? finishLabel : 'Next';
   const showConfidence = askConfidence && response !== null && response !== '';
+
+  const [showPaceHint, setShowPaceHint] = useState(false);
+  const storeSession = useDrill((s) => s.session);
+  const session = propSession !== undefined ? propSession : storeSession;
+  const isExam = session?.mode === 'exam';
+
+  const elapsedActiveMs = propElapsedActiveMs ?? session?.totalActiveMs ?? 0;
+  const finishedCount = propFinishedCount ?? index;
+
+  let hintText = '';
+  if (showPaceHint && !isExam) {
+    const hint = liveHint(question.section, elapsedActiveMs, finishedCount);
+    if (hint.status === 'on_pace') {
+      hintText = 'On pace';
+    } else if (hint.status === 'ahead') {
+      hintText = 'Ahead of pace';
+    } else {
+      hintText = `Behind pace by ${Math.round(hint.behindMs / 1000)} s`;
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -48,9 +80,29 @@ export function DrillPlay({
         >
           Save and exit
         </button>
-        <span className="font-mono text-xs text-zinc-400">
-          Question {index + 1} of {total}
-        </span>
+        <div className="flex flex-wrap items-center gap-4">
+          {!isExam && (
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1.5 text-xs text-zinc-400 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showPaceHint}
+                  onChange={(e) => setShowPaceHint(e.target.checked)}
+                  className="rounded border-[#27272A] bg-[#0A0A0C] text-zinc-200 focus:ring-0 focus:ring-offset-0"
+                />
+                <span>Show pace hint</span>
+              </label>
+              {showPaceHint && (
+                <span className="font-mono text-xs text-zinc-300">
+                  {hintText}
+                </span>
+              )}
+            </div>
+          )}
+          <span className="font-mono text-xs text-zinc-400">
+            Question {index + 1} of {total}
+          </span>
+        </div>
       </nav>
 
       {/* Save error banner */}

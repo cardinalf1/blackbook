@@ -391,4 +391,45 @@ describe('DrillReport', () => {
       root.unmount();
     });
   });
+
+  it('renders pacing section and renders RulesNoteBox under missed questions with skillCode', async () => {
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <DrillReport
+          report={mockReport}
+          onItemToggle={vi.fn()}
+          onBack={vi.fn()}
+          backLabel="Done"
+          onMySkills={vi.fn()}
+        />,
+      );
+    });
+
+    // Pacing section is rendered
+    expect(container.textContent).toContain('Pacing');
+
+    // Expand q1 (correct question)
+    const toggleButtons = Array.from(container.querySelectorAll('button')).filter((b) =>
+      b.textContent?.includes('Show explanation'),
+    );
+    await act(async () => {
+      toggleButtons[0]?.click();
+    });
+
+    // Rules note reminder should NOT appear under correct question
+    expect(container.textContent).not.toContain('Write the rule in your own words.');
+
+    // Expand q2 (missed question with question.skillCode)
+    await act(async () => {
+      toggleButtons[1]?.click();
+    });
+
+    // Rules note reminder line should appear under missed question
+    expect(container.textContent).toContain('Write the rule in your own words. Do not paste question text. These notes stay on this computer and are never sent to AI.');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
 });
