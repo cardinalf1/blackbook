@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useAttentionTelemetry } from '../../hooks/useAttentionTelemetry';
+import { BEFORE_EXIT_EVENT } from '../../services/desktop/events';
 import { useFocusTimer } from '../../hooks/useFocusTimer';
 import { loadFacets } from '../../services/drill/facetCache';
 import { buildTaxonomy } from '../../services/drill/facets';
@@ -162,7 +163,11 @@ function PlayQuestion({ session, question, onExit }: { session: SessionRecord; q
     drillStore.getState().shown();
     const onHide = () => drillStore.getState().unloading(readTime());
     window.addEventListener('pagehide', onHide);
-    return () => window.removeEventListener('pagehide', onHide);
+    window.addEventListener(BEFORE_EXIT_EVENT, onHide);
+    return () => {
+      window.removeEventListener('pagehide', onHide);
+      window.removeEventListener(BEFORE_EXIT_EVENT, onHide);
+    };
   }, [readTime]);
 
   const nav = async (fn: () => Promise<boolean>) => {

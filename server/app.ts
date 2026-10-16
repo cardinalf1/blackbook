@@ -30,6 +30,7 @@ import { buildBankZip, readBankZip } from './bankZip';
 import { looksLikeZip } from './zip';
 import type { StartupReport } from './control';
 import type { AppInfo } from '../src/types/appInfo';
+import { PreferencesService } from './preferences';
 
 export interface AppDeps {
   security: SecurityConfig;
@@ -48,6 +49,7 @@ export interface AppDeps {
   downloads: DownloadManager;
   sanitize: Sanitizer;
   dataFolder: string;
+  preferences?: PreferencesService;
   /** Called on every authorized request (idle shutdown). */
   onActivity?: () => void;
   /** The built page, served in the desktop app. Absent in dev (Vite serves it) and in tests. */
@@ -352,6 +354,18 @@ function route(deps: AppDeps): (req: Request) => Promise<Response> {
         if (!Array.isArray(ids) || ids.length === 0 || ids.length > 10_000 || !ids.every((x) => typeof x === 'string' && x.length > 0 && x.length < 200) || typeof body.hidden !== 'boolean')
           return problem(400, 'Malformed request.');
         return json({ changed: await deps.users.setHidden(ids as string[], body.hidden) });
+      }
+
+      // ---- persisted preferences ----
+      if (path === '/api/preferences') {
+        const prefs = deps.preferences ?? new PreferencesService(deps.dataFolder);
+        if (m === 'GET') return json(await prefs.get());
+        if (m === 'PUT') {
+          const body = await readJson(req);
+          const patch = isObj(body) && 'preferences' in body ? body.preferences : body;
+          return json(await prefs.update(patch));
+        }
+        return problem(405, 'Method not allowed.');
       }
 
       // ---- Desmos calculator (the key goes in, never out, except inside the sandboxed calculator page) ----

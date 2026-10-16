@@ -1,3 +1,4 @@
+import { preferencesStore } from '../../services/storage';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { capCount, matchingCount } from '../../services/drill/facets';
 import type { DrillConfig, DrillSetupProps } from '../../types/drill';
@@ -48,6 +49,22 @@ export function DrillSetup({
   const [countInput, setCountInput] = useState<string>('10');
   const [liveOnly, setLiveOnly] = useState<boolean>(true);
   const [askConfidence, setAskConfidence] = useState<boolean>(false);
+
+  useEffect(() => {
+    let mounted = true;
+    preferencesStore.get().then((prefs) => {
+      if (!mounted || !prefs.drillSetup) return;
+      const ds = prefs.drillSetup;
+      if (ds.section && taxonomy.some((t) => t.section === ds.section)) setSection(ds.section);
+      if (ds.domainCode !== undefined) setDomainCode(ds.domainCode);
+      if (ds.skillCodes) setSkillCodes(ds.skillCodes);
+      if (ds.difficulties) setDifficulties(ds.difficulties);
+      if (ds.countInput) setCountInput(ds.countInput);
+      if (ds.liveOnly !== undefined) setLiveOnly(ds.liveOnly);
+      if (ds.askConfidence !== undefined) setAskConfidence(ds.askConfidence);
+    }).catch(() => undefined);
+    return () => { mounted = false; };
+  }, [taxonomy]);
 
   // Domains & skills for the selected section
   const currentSectionTaxonomy = useMemo(() => {
@@ -119,6 +136,17 @@ export function DrillSetup({
   const handleStart = () => {
     if (matchCount === 0) return;
     const capped = capCount(facets, currentConfig);
+    void preferencesStore.update({
+      drillSetup: {
+        section,
+        domainCode,
+        skillCodes,
+        difficulties,
+        countInput,
+        liveOnly,
+        askConfidence,
+      },
+    }).catch(() => undefined);
     onStart(capped);
   };
 

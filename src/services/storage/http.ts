@@ -15,6 +15,7 @@ import type { DashboardData, DashboardScope, DashboardStore } from '../../types/
 import { ApiError, type ApiClient } from '../api/client';
 import type { AttemptStore, SessionFilter, TelemetryStore } from './attemptTypes';
 import type { BankMeta, QuestionQuery, QuestionStore } from './types';
+import type { AppPreferences, PreferencesStore } from '../../types/preferences';
 
 const enc = encodeURIComponent;
 
@@ -254,5 +255,20 @@ export class HttpAnalyticsStore implements AnalyticsStore {
   }
   tests(f: AnalyticsFilter) {
     return this.get<TestHistory>('tests', f);
+  }
+}
+
+export class HttpPreferencesStore implements PreferencesStore {
+  constructor(private readonly api: ApiClient) {}
+
+  get(): Promise<AppPreferences> {
+    return this.api.request<AppPreferences>('/api/preferences');
+  }
+
+  update(patch: Partial<AppPreferences>): Promise<AppPreferences> {
+    return this.api.request<AppPreferences>('/api/preferences', {
+      method: 'PUT',
+      body: JSON.stringify({ preferences: patch }),
+    });
   }
 }

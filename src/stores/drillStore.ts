@@ -93,6 +93,8 @@ export interface DrillActions {
   exit(activeMs: number): Promise<boolean>;
   /** The page is closing: logs the hide and pushes the last state. */
   unloading(activeMs: number): void;
+  /** Waits until every queued save is on disk. True when nothing is left unsaved. */
+  whenSaved(): Promise<boolean>;
   /** Leaves a finished session's screen. */
   closeFinished(): void;
 
@@ -634,6 +636,10 @@ export function createDrillStore(deps: DrillDeps): StoreApi<DrillStore> {
         resetMemory();
         set({ session: null, questions: {}, saveError: null, saving: false });
         return true;
+      },
+
+      whenSaved() {
+        return settle();
       },
 
       unloading(activeMs) {

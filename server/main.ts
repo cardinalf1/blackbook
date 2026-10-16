@@ -32,6 +32,7 @@ import { createLogger, logFile } from './log';
 import { cookieNameForPort } from './security';
 import type { SqlDb } from './sql';
 import { openSqlite } from './sqlBun';
+import { PreferencesService } from './preferences';
 import { createStaticHandler } from './staticFiles';
 import { SCHEMA_VERSION, SqliteUserStore } from './userDb';
 import { SqlAnalytics } from './analytics';
@@ -233,6 +234,7 @@ async function main(): Promise<void> {
     downloads,
     sanitize: createSanitizer(window as unknown as Parameters<typeof createSanitizer>[0]),
     dataFolder,
+    preferences: new PreferencesService(dataFolder),
     startup,
     version: APP_VERSION,
     desktop: args.control,

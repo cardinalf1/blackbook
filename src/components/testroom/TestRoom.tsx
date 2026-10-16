@@ -7,6 +7,7 @@
 // store's existing exam actions, plus `setAnnotations` and `toolEvent`.
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { BEFORE_EXIT_EVENT } from '../../services/desktop/events';
 import { PAUSE_REASONS } from '../../config/examConfig';
 import { LINE_READER_LINES, toolsFor } from '../../config/testRoomConfig';
 import { useAttentionTelemetry } from '../../hooks/useAttentionTelemetry';
@@ -387,7 +388,11 @@ function TestRoomQuestion(props: {
     drillStore.getState().shown();
     const onHide = () => drillStore.getState().unloading(readTime());
     window.addEventListener('pagehide', onHide);
-    return () => window.removeEventListener('pagehide', onHide);
+    window.addEventListener(BEFORE_EXIT_EVENT, onHide);
+    return () => {
+      window.removeEventListener('pagehide', onHide);
+      window.removeEventListener(BEFORE_EXIT_EVENT, onHide);
+    };
   }, [readTime]);
 
   // The calculator's open time is counted per question.

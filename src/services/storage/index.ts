@@ -4,14 +4,16 @@ import type { AnalyticsStore } from '../../types/analytics';
 import type { BackupStore } from '../../types/backup';
 import type { MistakeStore } from '../../types/mistakes';
 import type { AiStore, RulesNotesStore } from '../../types/ai';
-import { HttpAiStore, HttpCalculatorKeyStore, HttpAnalyticsStore, HttpAttemptStore, HttpBackupStore, HttpDashboardStore, HttpHiddenSessionsStore, HttpQuestionStore, HttpRulesNotesStore } from './http';
+import { HttpAiStore, HttpCalculatorKeyStore, HttpAnalyticsStore, HttpAttemptStore, HttpBackupStore, HttpDashboardStore, HttpHiddenSessionsStore, HttpPreferencesStore, HttpQuestionStore, HttpRulesNotesStore } from './http';
 import type { QuestionStore } from './types';
 import type { HiddenSessionsStore } from '../../types/session';
 import type { DashboardStore } from '../../types/dashboard';
 import type { CalculatorKeyStore } from '../../types/calculator';
+import type { PreferencesStore } from '../../types/preferences';
 
 export type { AttemptStore, SessionFilter, TelemetryStore } from './attemptTypes';
 export type { BankMeta, ProgressFn, QuestionQuery, QuestionStore } from './types';
+export type { PreferencesStore } from '../../types/preferences';
 
 /** App-wide question store, served by the local Blackbook program. UI code uses this only. */
 export const questionStore: QuestionStore = new HttpQuestionStore(api);
@@ -47,3 +49,6 @@ export const dashboardStore: DashboardStore = new HttpDashboardStore(api);
 
 /** The Desmos key for the calculator. Goes in, never comes back; only whether one is saved. */
 export const calculatorKeyStore: CalculatorKeyStore = new HttpCalculatorKeyStore(api);
+
+/** App-wide preferences store, persisted on disk in prefs.json by the local program. */
+export const preferencesStore: PreferencesStore = new HttpPreferencesStore(api);

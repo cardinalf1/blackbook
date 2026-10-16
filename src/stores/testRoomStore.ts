@@ -1,3 +1,4 @@
+import { preferencesStore } from '../services/storage';
 // Test-room tool state (Phase 9): which panels are open, the calculator's place, mode and saved
 // state, the eliminator, the line reader, the split and the zoom. UI state only: nothing here is
 // stored with the session except through drillStore. Every change that matters for telemetry goes
@@ -207,7 +208,9 @@ export function createTestRoomStore(deps: { emit: Emit; mono?: () => number }): 
       },
 
       setSplit(fraction) {
-        set({ splitFraction: Math.min(SPLIT_MAX_FRACTION, Math.max(SPLIT_MIN_FRACTION, fraction)) });
+        const next = Math.min(SPLIT_MAX_FRACTION, Math.max(SPLIT_MIN_FRACTION, fraction));
+        set({ splitFraction: next });
+        void preferencesStore.update({ toolPreferences: { splitFraction: next } }).catch(() => undefined);
       },
 
       zoom(step) {
@@ -216,6 +219,7 @@ export function createTestRoomStore(deps: { emit: Emit; mono?: () => number }): 
         if (next === cur) return;
         emit('zoom_changed', { percent: ZOOM_LEVELS[next] as number });
         set({ zoomIndex: next });
+        void preferencesStore.update({ toolPreferences: { zoomIndex: next } }).catch(() => undefined);
       },
 
       startBreak() {
@@ -244,4 +248,17 @@ export const testRoomStore = createTestRoomStore({ emit: (type, payload, questio
 
 export function useTestRoom<T>(selector: (s: TestRoomStore) => T): T {
   return useStore(testRoomStore, selector);
+}
+
+if (typeof window !== 'undefined') {
+  void preferencesStore.get().then((prefs) => {
+    const tp = prefs.toolPreferences;
+    if (!tp) return;
+    testRoomStore.setState((s) => ({
+      ...s,
+      zoomIndex: tp.zoomIndex ?? s.zoomIndex,
+      calculatorMode: tp.calculatorMode ?? s.calculatorMode,
+      splitFraction: tp.splitFraction ?? s.splitFraction,
+    }));
+  }).catch(() => undefined);
 }

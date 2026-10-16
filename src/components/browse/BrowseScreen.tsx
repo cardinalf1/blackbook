@@ -1,3 +1,4 @@
+import { preferencesStore } from '../../services/storage';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { applyFilters, pickRandom } from '../../services/browse/filter';
 import { loadRows } from '../../services/browse/rows';
@@ -30,6 +31,17 @@ export function BrowseScreen({ onBack, onMySkills, startRandom = false }: { onBa
   const storeError = useDrill((s) => s.error);
   const restoreScroll = useRef(true);
 
+  useEffect(() => {
+    let mounted = true;
+    preferencesStore.get().then((prefs) => {
+      if (!mounted || !prefs.browseFilters) return;
+      const next: BrowseViewState = { filters: { ...DEFAULT_BROWSE_FILTERS, ...prefs.browseFilters }, page: 0 };
+      savedState = next;
+      setState(next);
+    }).catch(() => undefined);
+    return () => { mounted = false; };
+  }, []);
+
   const refresh = useCallback(() => {
     loadRows().then(
       (r) => {
@@ -52,6 +64,7 @@ export function BrowseScreen({ onBack, onMySkills, startRandom = false }: { onBa
   const changeState = (next: BrowseViewState) => {
     savedState = next;
     setState(next);
+    void preferencesStore.update({ browseFilters: next.filters }).catch(() => undefined);
   };
 
   const open = async (questionId: string) => {
